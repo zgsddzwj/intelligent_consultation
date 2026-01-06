@@ -1,15 +1,24 @@
-"""混合检索（向量检索 + 关键词匹配）"""
-from typing import List, Dict, Any
+"""混合检索（向量检索 + 关键词匹配）- 增强版，支持多路召回"""
+from typing import List, Dict, Any, Optional
 from app.knowledge.rag.retriever import Retriever
+from app.knowledge.rag.multi_retrieval import MultiRetrieval
 from app.utils.logger import app_logger
 import re
 
 
 class HybridSearch:
-    """混合检索器"""
+    """混合检索器 - 支持多路召回和传统混合检索"""
     
-    def __init__(self):
+    def __init__(self, use_advanced: bool = True):
+        """
+        初始化混合检索器
+        
+        Args:
+            use_advanced: 是否使用高级多路召回（默认True）
+        """
+        self.use_advanced = use_advanced
         self.retriever = Retriever()
+        self.multi_retrieval = MultiRetrieval() if use_advanced else None
     
     def extract_keywords(self, query: str) -> List[str]:
         """提取关键词"""
@@ -27,7 +36,17 @@ class HybridSearch:
         return matches / len(keywords) if keywords else 0.0
     
     def hybrid_search(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
-        """混合检索"""
+        """混合检索 - 优先使用多路召回"""
+        # 如果启用高级模式，使用多路召回
+        if self.use_advanced and self.multi_retrieval:
+            try:
+                results = self.multi_retrieval.retrieve(query, top_k=top_k)
+                app_logger.info(f"多路召回完成，返回 {len(results)} 条结果")
+                return results
+            except Exception as e:
+                app_logger.warning(f"多路召回失败，降级到传统混合检索: {e}")
+        
+        # 传统混合检索（向后兼容）
         # 向量检索
         vector_results = self.retriever.retrieve(query, top_k=top_k * 2)
         

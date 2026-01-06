@@ -30,6 +30,20 @@ pdfplumber==0.10.3
 # Embeddings
 sentence-transformers==2.2.2
 
+# RAG & Retrieval
+rank-bm25==0.2.2  # BM25算法
+jieba==0.42.1  # 中文分词
+FlagEmbedding==1.2.0  # BGE-Reranker
+transformers==4.35.0  # 模型加载
+
+# Machine Learning
+scikit-learn==1.3.2  # SVM、决策树
+numpy==1.24.3  # 数值计算
+
+# OCR & Image Processing
+paddleocr==2.7.0.3  # OCR识别
+Pillow==10.1.0  # 图片处理
+
 # Data Validation
 pydantic==2.5.0
 pydantic-settings==2.1.0

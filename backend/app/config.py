@@ -58,6 +58,39 @@ class Settings(BaseSettings):
     MCP_SERVER_HOST: str = "localhost"
     MCP_SERVER_PORT: int = 8001
     
+    # Advanced RAG Configuration
+    ENABLE_ADVANCED_RAG: bool = True
+    ENABLE_MULTI_RETRIEVAL: bool = True
+    ENABLE_RERANK: bool = True
+    ENABLE_ML_RERANK: bool = True
+    ENABLE_INTENT_CLASSIFICATION: bool = True
+    ENABLE_RELEVANCE_SCORING: bool = True
+    ENABLE_QUERY_UNDERSTANDING: bool = True
+    ENABLE_RANKING_OPTIMIZATION: bool = True
+    
+    # Multi-Retrieval Weights
+    VECTOR_RETRIEVAL_WEIGHT: float = 0.4
+    BM25_RETRIEVAL_WEIGHT: float = 0.3
+    SEMANTIC_RETRIEVAL_WEIGHT: float = 0.2
+    KG_RETRIEVAL_WEIGHT: float = 0.1
+    
+    # Reranker Configuration
+    BGE_RERANKER_MODEL: str = "BAAI/bge-reranker-base"
+    RERANK_TOP_K: int = 10
+    
+    # ML Models Directory
+    ML_MODELS_DIR: str = "./models"
+    INTENT_MODEL_DIR: str = "./models/intent"
+    RELEVANCE_MODEL_DIR: str = "./models/relevance"
+    QUERY_MODEL_DIR: str = "./models/query"
+    RANKING_MODEL_DIR: str = "./models/ranking"
+    RERANKER_MODEL_DIR: str = "./models/reranker"
+    
+    # PDF Image Processing
+    ENABLE_PDF_IMAGE_PROCESSING: bool = True
+    ENABLE_OCR: bool = True
+    ENABLE_MULTIMODAL_LLM: bool = True
+    
     class Config:
         env_file = ".env"
         case_sensitive = True
