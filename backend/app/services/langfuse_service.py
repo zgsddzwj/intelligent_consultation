@@ -3,7 +3,12 @@ from typing import Optional, Dict, Any, Callable
 from functools import wraps
 import time
 from langfuse import Langfuse
-from langfuse.decorators import langfuse_context, observe
+try:
+    from langfuse.decorators import langfuse_context, observe
+except ImportError:
+    # 新版本langfuse可能没有decorators模块
+    langfuse_context = None
+    observe = None
 from app.config import get_settings
 from app.utils.logger import app_logger
 
@@ -227,7 +232,7 @@ def observe_span(name: Optional[str] = None,
                  metadata: Optional[Dict[str, Any]] = None):
     """Span观察装饰器（使用Langfuse的observe装饰器）"""
     def decorator(func: Callable) -> Callable:
-        if not langfuse_service.enabled:
+        if not langfuse_service.enabled or observe is None:
             return func
         
         @observe(name=name or f"{func.__module__}.{func.__name__}", 

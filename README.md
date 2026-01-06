@@ -91,6 +91,42 @@ python scripts/test_system.py
 - **API文档**: http://localhost:8000/docs
 - **Neo4j浏览器**: http://localhost:7474 (用户名/密码: neo4j/neo4j)
 
+## 文档
+
+- [快速开始指南](QUICKSTART.md) - 快速启动和配置指南
+- [部署文档](DEPLOYMENT.md) - 部署方式和环境配置
+- [日志查看指南](LOGGING.md) - 如何查看前后端日志
+- [架构文档](docs/ARCHITECTURE.md) - 系统架构设计
+- [完整设置指南](docs/COMPLETE_SETUP.md) - 详细的系统设置步骤
+- [高级RAG使用](docs/ADVANCED_RAG_USAGE.md) - RAG系统使用指南
+- [对象存储实现](docs/OBJECT_STORAGE_IMPLEMENTATION.md) - 对象存储技术实现
+
+## 查看日志
+
+### 后端日志
+```bash
+# 应用日志文件
+tail -f backend/logs/app.log
+
+# 后台运行日志（如果使用nohup）
+tail -f /tmp/backend.log
+```
+
+### 前端日志
+```bash
+# 后台运行日志（如果使用nohup）
+tail -f /tmp/frontend.log
+
+# 浏览器控制台（F12）
+```
+
+### 使用脚本查看
+```bash
+./view_logs.sh
+```
+
+详细说明请参考 [LOGGING.md](LOGGING.md)
+
 ## 开发指南
 
 详细开发文档请参考 [docs/](docs/) 目录。
@@ -102,4 +138,3 @@ python scripts/test_system.py
 ## 许可证
 
 [待定]
-

@@ -31,7 +31,7 @@ class Consultation(Base):
     agent_type = Column(Enum(AgentType), nullable=False)
     status = Column(Enum(ConsultationStatus), default=ConsultationStatus.PENDING, nullable=False)
     messages = Column(JSON, default=list)  # 存储对话消息
-    metadata = Column(JSON, default=dict)  # 存储额外信息（如风险等级、来源等）
+    meta_data = Column("metadata", JSON, default=dict)  # 存储额外信息（如风险等级、来源等）
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

@@ -1,5 +1,6 @@
 """依赖注入"""
 from typing import Generator
+from fastapi import Depends
 from sqlalchemy.orm import Session
 from app.database.session import SessionLocal
 from app.config import get_settings
@@ -19,23 +20,17 @@ def get_db() -> Generator[Session, None, None]:
         db.close()
 
 
-def get_user_repository(db: Session = None) -> UserRepository:
+def get_user_repository(db: Session = Depends(get_db)) -> UserRepository:
     """获取用户Repository"""
-    if db is None:
-        db = next(get_db())
     return UserRepository(db)
 
 
-def get_consultation_repository(db: Session = None) -> ConsultationRepository:
+def get_consultation_repository(db: Session = Depends(get_db)) -> ConsultationRepository:
     """获取咨询Repository"""
-    if db is None:
-        db = next(get_db())
     return ConsultationRepository(db)
 
 
-def get_knowledge_repository(db: Session = None) -> KnowledgeRepository:
+def get_knowledge_repository(db: Session = Depends(get_db)) -> KnowledgeRepository:
     """获取知识库Repository"""
-    if db is None:
-        db = next(get_db())
     return KnowledgeRepository(db)
 

@@ -14,7 +14,7 @@ class KnowledgeDocument(Base):
     file_path = Column(String(500), nullable=True)  # 文件路径（已废弃，保留用于向后兼容）
     file_type = Column(String(50), nullable=True)  # 文件类型（pdf, docx等）
     content = Column(Text, nullable=True)  # 文档内容
-    metadata = Column(JSON, default=dict)  # 元数据（页码、章节等）
+    meta_data = Column("metadata", JSON, default=dict)  # 元数据（页码、章节等）
     vector_id = Column(String(100), nullable=True, index=True)  # Milvus向量ID
     is_indexed = Column(String(1), default="0", nullable=False)  # 是否已索引
     created_at = Column(DateTime(timezone=True), server_default=func.now())

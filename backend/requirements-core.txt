@@ -14,7 +14,7 @@ langchain==0.1.0
 langchain-community==0.0.10
 langgraph==0.0.20
 openai==1.3.7
-dashscope==1.17.0  # Qwen API
+dashscope==1.17.0
 
 # Vector Database
 pymilvus==2.3.4
@@ -31,18 +31,14 @@ pdfplumber==0.10.3
 sentence-transformers==2.2.2
 
 # RAG & Retrieval
-rank-bm25==0.2.2  # BM25算法
-jieba==0.42.1  # 中文分词
-FlagEmbedding==1.2.0  # BGE-Reranker
-transformers>=4.33.0,<5.0.0  # 模型加载（兼容FlagEmbedding）
+rank-bm25==0.2.2
+jieba==0.42.1
+FlagEmbedding==1.2.0
+transformers>=4.33.0,<5.0.0
 
 # Machine Learning
-scikit-learn==1.3.2  # SVM、决策树
-numpy==1.24.3  # 数值计算
-
-# OCR & Image Processing
-paddleocr==2.7.0.3  # OCR识别
-Pillow==10.1.0  # 图片处理
+scikit-learn==1.3.2
+numpy==1.24.3
 
 # Data Validation
 pydantic==2.5.0
@@ -51,8 +47,7 @@ pydantic-settings==2.1.0
 # Authentication & Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
-python-multipart==0.0.6
-cryptography==41.0.7  # 数据加密
+cryptography==41.0.7
 
 # Utilities
 python-dotenv==1.0.0
@@ -61,16 +56,14 @@ aiofiles==23.2.1
 loguru==0.7.2
 
 # Object Storage
-minio==7.2.0  # MinIO客户端
-boto3==1.34.0  # AWS S3客户端（可选）
-oss2==2.18.4  # 阿里云OSS客户端（可选）
+minio==7.2.0
+boto3==1.34.0
 
 # Monitoring
 prometheus-client==0.19.0
-langfuse>=2.0.0  # LLM Observability
+langfuse>=2.0.0
 
 # Testing
 pytest==7.4.3
 pytest-asyncio==0.21.1
-httpx==0.25.2
 

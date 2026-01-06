@@ -4,7 +4,6 @@ import json
 from loguru import logger
 from pathlib import Path
 from app.config import get_settings
-from app.common.tracing import get_request_id
 
 settings = get_settings()
 
@@ -26,10 +25,14 @@ def setup_logger():
             "line": record["line"],
         }
         
-        # 添加请求ID（如果存在）
-        request_id = get_request_id()
-        if request_id:
-            log_data["request_id"] = request_id
+        # 添加请求ID（如果存在）- 延迟导入避免循环依赖
+        try:
+            from app.common.tracing import get_request_id
+            request_id = get_request_id()
+            if request_id:
+                log_data["request_id"] = request_id
+        except (ImportError, RuntimeError):
+            pass
         
         # 添加异常信息
         if record["exception"]:
@@ -58,18 +61,23 @@ def setup_logger():
             serialize=False
         )
     
-    # 文件输出（JSON格式）
+    # 文件输出（使用简化的格式，避免格式错误）
     log_file = Path(settings.LOG_FILE)
+    # 如果是相对路径，基于backend目录
+    if not log_file.is_absolute():
+        # 获取backend目录（app目录的父目录的父目录）
+        backend_dir = Path(__file__).parent.parent.parent
+        log_file = backend_dir / log_file
     log_file.parent.mkdir(parents=True, exist_ok=True)
     
     logger.add(
-        log_file,
-        format=format_record,
+        str(log_file),
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
         level=settings.LOG_LEVEL,
         rotation="10 MB",
         retention="7 days",
         compression="zip",
-        serialize=False
+        encoding="utf-8"
     )
     
     return logger

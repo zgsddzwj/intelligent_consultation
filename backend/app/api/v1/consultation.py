@@ -144,8 +144,8 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         )
 
 
-@router.post("/chat/stream")
-async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)):
+@router.post("/chat/stream", response_model=None)
+async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)) -> StreamingResponse:
     """流式咨询接口（SSE）"""
     consultation_id = 0
     

@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     
     # Logging
     LOG_LEVEL: str = "INFO"
-    LOG_FILE: str = "./logs/app.log"
+    LOG_FILE: str = "logs/app.log"  # 相对于backend目录
     
     # MCP Server
     MCP_SERVER_HOST: str = "localhost"

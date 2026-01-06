@@ -5,7 +5,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import get_settings
 from app.utils.logger import app_logger
-from app.api.middleware import LoggingMiddleware
+from app.api.middleware import LoggingMiddleware  # 从文件导入
 from app.api.middleware.compression import CompressionMiddleware
 from app.common.exceptions import BaseAppException
 from app.common.error_handler import (
