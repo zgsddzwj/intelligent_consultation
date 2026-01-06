@@ -7,6 +7,10 @@ from app.agents.health_manager_agent import HealthManagerAgent
 from app.agents.customer_service_agent import CustomerServiceAgent
 from app.agents.operations_agent import OperationsAgent
 from app.utils.logger import app_logger
+from app.config import get_settings
+from app.knowledge.ml.intent_classifier import IntentClassifier
+
+settings = get_settings()
 
 
 class AgentState(TypedDict):
@@ -27,6 +31,15 @@ class AgentOrchestrator:
         self.health_manager_agent = HealthManagerAgent()
         self.customer_service_agent = CustomerServiceAgent()
         self.operations_agent = OperationsAgent()
+        
+        # 初始化意图分类器（使用ML模型）
+        self.intent_classifier = None
+        if settings.ENABLE_INTENT_CLASSIFICATION:
+            try:
+                self.intent_classifier = IntentClassifier(model_dir=settings.INTENT_MODEL_DIR)
+                app_logger.info("意图分类器初始化成功（ML模型）")
+            except Exception as e:
+                app_logger.warning(f"意图分类器初始化失败，将使用规则分类: {e}")
         
         # 构建工作流图
         self.workflow = self._build_workflow()
@@ -80,10 +93,42 @@ class AgentOrchestrator:
         return workflow.compile()
     
     def _classify_intent(self, state: AgentState) -> AgentState:
-        """意图分类"""
+        """意图分类（优先使用ML模型，回退到规则）"""
         user_input = state.get("user_input", "")
         
-        # 简单的关键词匹配（可以改进为更复杂的NLP模型）
+        # 优先使用ML模型分类
+        if self.intent_classifier and self.intent_classifier.svm_model:
+            try:
+                result = self.intent_classifier.classify(user_input)
+                ml_intent = result.get("intent", "")
+                confidence = result.get("confidence", 0.0)
+                
+                # 将ML意图映射到Agent类型
+                intent_mapping = {
+                    "diagnosis": "doctor",
+                    "medication": "doctor",
+                    "examination": "doctor",
+                    "symptom_inquiry": "doctor",
+                    "disease_info": "doctor",
+                    "health_management": "health_manager",
+                    "general": "customer_service"
+                }
+                
+                agent_type = intent_mapping.get(ml_intent, "customer_service")
+                
+                app_logger.info(
+                    f"意图分类（ML）: {ml_intent} -> {agent_type}, "
+                    f"置信度: {confidence:.2f}"
+                )
+                
+                state["intent"] = ml_intent
+                state["agent_type"] = agent_type
+                state["context"]["intent_confidence"] = confidence
+                return state
+            except Exception as e:
+                app_logger.warning(f"ML意图分类失败，使用规则分类: {e}")
+        
+        # 回退到规则分类
         intent_keywords = {
             "doctor": ["症状", "诊断", "疾病", "用药", "检查", "治疗", "病"],
             "health_manager": ["健康", "管理", "计划", "生活方式", "慢病", "追踪"],
@@ -101,10 +146,11 @@ class AgentOrchestrator:
         # 选择得分最高的意图
         intent = max(intent_scores, key=intent_scores.get) if intent_scores else "customer_service"
         
-        app_logger.info(f"意图分类: {intent}")
+        app_logger.info(f"意图分类（规则）: {intent}")
         
         state["intent"] = intent
         state["agent_type"] = intent
+        state["context"]["intent_confidence"] = 0.7  # 规则分类默认置信度
         return state
     
     def _route_by_intent(self, state: AgentState) -> str:

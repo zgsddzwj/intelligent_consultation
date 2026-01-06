@@ -1,9 +1,18 @@
 """FastAPI应用入口"""
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import get_settings
 from app.utils.logger import app_logger
 from app.api.middleware import LoggingMiddleware
+from app.common.exceptions import BaseAppException
+from app.common.error_handler import (
+    app_exception_handler,
+    validation_exception_handler,
+    http_exception_handler,
+    general_exception_handler
+)
 
 settings = get_settings()
 
@@ -16,6 +25,12 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+# 注册全局异常处理器
+app.add_exception_handler(BaseAppException, app_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(Exception, general_exception_handler)
+
 # 配置CORS
 app.add_middleware(
     CORSMiddleware,
@@ -27,6 +42,15 @@ app.add_middleware(
 
 # 添加日志中间件
 app.add_middleware(LoggingMiddleware)
+
+# 添加限流中间件
+if settings.RATE_LIMIT_ENABLED:
+    from app.infrastructure.rate_limit import RateLimitMiddleware
+    app.add_middleware(
+        RateLimitMiddleware,
+        calls=settings.RATE_LIMIT_CALLS,
+        period=settings.RATE_LIMIT_PERIOD
+    )
 
 
 @app.on_event("startup")
@@ -64,6 +88,13 @@ async def root():
 async def health_check():
     """健康检查"""
     return {"status": "healthy"}
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus指标端点"""
+    from app.infrastructure.monitoring import get_metrics
+    return get_metrics()
 
 
 # 导入路由

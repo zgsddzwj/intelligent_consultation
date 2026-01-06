@@ -4,9 +4,14 @@ from dashscope import Generation
 from typing import List, Dict, Optional, AsyncGenerator
 from app.config import get_settings
 from app.utils.logger import app_logger
+from app.infrastructure.retry import retry, get_circuit_breaker
+from app.common.exceptions import LLMServiceException, ErrorCode
 
 settings = get_settings()
 dashscope.api_key = settings.QWEN_API_KEY
+
+# LLM服务断路器
+llm_circuit_breaker = get_circuit_breaker("llm_service", failure_threshold=5, recovery_timeout=60)
 
 
 class LLMService:
@@ -16,10 +21,24 @@ class LLMService:
         self.model = settings.QWEN_MODEL
         self.api_key = settings.QWEN_API_KEY
     
+    @retry(max_attempts=3, delay=1.0, backoff=2.0, exceptions=(Exception,))
     def generate(self, prompt: str, system_prompt: str = None, 
                  temperature: float = 0.7, max_tokens: int = 2000,
                  **kwargs) -> str:
-        """生成文本"""
+        """生成文本（带重试机制）"""
+        try:
+            # 使用断路器
+            return llm_circuit_breaker.call(self._generate_internal, prompt, system_prompt, temperature, max_tokens, **kwargs)
+        except Exception as e:
+            raise LLMServiceException(
+                f"LLM生成失败: {str(e)}",
+                error_code=ErrorCode.LLM_SERVICE_ERROR
+            )
+    
+    def _generate_internal(self, prompt: str, system_prompt: str = None,
+                          temperature: float = 0.7, max_tokens: int = 2000,
+                          **kwargs) -> str:
+        """内部生成方法"""
         try:
             messages = []
             if system_prompt:

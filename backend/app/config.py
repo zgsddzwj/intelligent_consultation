@@ -1,6 +1,6 @@
 """应用配置管理"""
 from pydantic_settings import BaseSettings
-from typing import List
+from typing import List, Optional
 from functools import lru_cache
 
 
@@ -45,6 +45,14 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "your-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ENCRYPTION_KEY: Optional[str] = None  # 数据加密密钥（Fernet格式）
+    ENABLE_RBAC: bool = True  # 启用RBAC
+    ENABLE_DATA_ENCRYPTION: bool = False  # 启用数据加密（默认关闭，需要配置密钥）
+    
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_CALLS: int = 100  # 允许的请求数
+    RATE_LIMIT_PERIOD: int = 60  # 时间窗口（秒）
     
     # File Storage
     UPLOAD_DIR: str = "./data/documents"

@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
-from app.dependencies import get_db
+from app.dependencies import get_db, get_consultation_repository
+from app.infrastructure.repositories.consultation_repository import ConsultationRepository
 from app.agents.orchestrator import AgentOrchestrator
 from app.models.consultation import Consultation, ConsultationStatus, AgentType
 from app.utils.logger import app_logger
@@ -143,17 +144,14 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
 async def get_consultation_history(
     user_id: Optional[int] = None,
     limit: int = 10,
-    db: Session = Depends(get_db)
+    consultation_repo: ConsultationRepository = Depends(get_consultation_repository)
 ):
     """获取咨询历史"""
     try:
-        query = db.query(Consultation)
         if user_id:
-            query = query.filter(Consultation.user_id == user_id)
-        
-        consultations = query.order_by(
-            Consultation.created_at.desc()
-        ).limit(limit).all()
+            consultations = consultation_repo.get_by_user_id(user_id, limit=limit)
+        else:
+            consultations = consultation_repo.get_all(limit=limit, order_by="-created_at")
         
         return [
             ConsultationHistoryResponse(
@@ -173,14 +171,12 @@ async def get_consultation_history(
 
 
 @router.get("/{consultation_id}", response_model=ConsultationHistoryResponse)
-async def get_consultation(consultation_id: int, db: Session = Depends(get_db)):
+async def get_consultation(
+    consultation_id: int,
+    consultation_repo: ConsultationRepository = Depends(get_consultation_repository)
+):
     """获取咨询详情"""
-    consultation = db.query(Consultation).filter(
-        Consultation.id == consultation_id
-    ).first()
-    
-    if not consultation:
-        raise HTTPException(status_code=404, detail="咨询记录不存在")
+    consultation = consultation_repo.get_by_id_or_raise(consultation_id)
     
     return ConsultationHistoryResponse(
         id=consultation.id,
