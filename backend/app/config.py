@@ -48,6 +48,7 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: Optional[str] = None  # 数据加密密钥（Fernet格式）
     ENABLE_RBAC: bool = True  # 启用RBAC
     ENABLE_DATA_ENCRYPTION: bool = False  # 启用数据加密（默认关闭，需要配置密钥）
+    ENABLE_AUTH_MIDDLEWARE: bool = False  # 启用认证中间件（默认关闭，开发环境）
     
     # Rate Limiting
     RATE_LIMIT_ENABLED: bool = True

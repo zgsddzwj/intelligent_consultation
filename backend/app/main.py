@@ -6,6 +6,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.config import get_settings
 from app.utils.logger import app_logger
 from app.api.middleware import LoggingMiddleware
+from app.api.middleware.compression import CompressionMiddleware
 from app.common.exceptions import BaseAppException
 from app.common.error_handler import (
     app_exception_handler,
@@ -40,6 +41,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 添加追踪中间件（最外层，最先执行）
+from app.common.tracing import TracingMiddleware
+app.add_middleware(TracingMiddleware)
+
+# 添加压缩中间件
+app.add_middleware(CompressionMiddleware)
+
 # 添加日志中间件
 app.add_middleware(LoggingMiddleware)
 
@@ -51,6 +59,11 @@ if settings.RATE_LIMIT_ENABLED:
         calls=settings.RATE_LIMIT_CALLS,
         period=settings.RATE_LIMIT_PERIOD
     )
+
+# 添加认证中间件（可选，生产环境启用）
+if settings.ENABLE_AUTH_MIDDLEWARE:
+    from app.api.middleware.auth import AuthMiddleware
+    app.add_middleware(AuthMiddleware)
 
 
 @app.on_event("startup")

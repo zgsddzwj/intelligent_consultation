@@ -3,6 +3,7 @@ from app.database.base import Base
 from app.database.session import engine
 from app.models import user, consultation, knowledge, agent
 from app.utils.logger import app_logger
+from app.database.indexes import create_indexes
 
 
 def init_db():
@@ -14,6 +15,10 @@ def init_db():
         # 创建所有表
         Base.metadata.create_all(bind=engine)
         app_logger.info("数据库表创建成功")
+        
+        # 创建索引
+        create_indexes()
+        app_logger.info("数据库索引创建完成")
     except Exception as e:
         app_logger.error(f"数据库初始化失败: {e}")
         raise
