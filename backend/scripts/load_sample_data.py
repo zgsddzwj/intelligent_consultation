@@ -1,7 +1,7 @@
 """加载示例数据"""
 from app.knowledge.rag.document_processor import DocumentProcessor
 from app.knowledge.rag.embedder import Embedder
-from app.services.milvus_service import milvus_service
+from app.services.milvus_service import get_milvus_service
 from app.utils.logger import app_logger
 import os
 
@@ -123,7 +123,8 @@ def load_sample_data_to_vector_db():
             sources = [chunk["source"] for chunk in chunks]
             metadatas = [chunk["metadata"] for chunk in chunks]
             
-            milvus_service.insert(
+            milvus = get_milvus_service()
+            milvus.insert(
                 vectors=vectors,
                 texts=texts,
                 document_ids=document_ids,

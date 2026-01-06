@@ -1,6 +1,6 @@
 """知识图谱工具"""
 from typing import Dict, Any, List
-from app.knowledge.graph.neo4j_client import neo4j_client
+from app.knowledge.graph.neo4j_client import get_neo4j_client
 from app.knowledge.graph.queries import CypherQueries
 from app.utils.logger import app_logger
 
@@ -11,8 +11,15 @@ class KnowledgeGraphTool:
     def __init__(self):
         self.name = "knowledge_graph_query"
         self.description = "查询医疗知识图谱，获取疾病、症状、药物等实体关系"
-        self.client = neo4j_client
+        self._client = None
         self.queries = CypherQueries()
+    
+    @property
+    def client(self):
+        """延迟获取Neo4j客户端"""
+        if self._client is None:
+            self._client = get_neo4j_client()
+        return self._client
     
     def execute(self, operation: str, **kwargs) -> Dict[str, Any]:
         """执行知识图谱查询"""

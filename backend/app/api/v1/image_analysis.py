@@ -110,7 +110,7 @@ async def extract_medical_terms_from_image(
         analysis_result = await analyze_medical_image(file)
         
         # 查询知识图谱
-        from app.knowledge.graph.neo4j_client import neo4j_client
+        from app.knowledge.graph.neo4j_client import get_neo4j_client
         from app.knowledge.graph.queries import CypherQueries
         
         queries = CypherQueries()
@@ -122,7 +122,8 @@ async def extract_medical_terms_from_image(
             
             if term_type == "疾病":
                 result = queries.find_disease_by_name(term)
-                graph_data = neo4j_client.execute_query(result, {"name": term})
+                neo4j = get_neo4j_client()
+                graph_data = neo4j.execute_query(result, {"name": term})
                 if graph_data:
                     graph_results.append({
                         "term": term,

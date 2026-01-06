@@ -1,6 +1,6 @@
 """知识图谱构建器"""
 from typing import Dict, List, Any
-from app.knowledge.graph.neo4j_client import neo4j_client
+from app.knowledge.graph.neo4j_client import get_neo4j_client
 from app.knowledge.graph.queries import CypherQueries
 from app.utils.logger import app_logger
 
@@ -9,8 +9,15 @@ class KnowledgeGraphBuilder:
     """知识图谱构建器"""
     
     def __init__(self):
-        self.client = neo4j_client
+        self._client = None
         self.queries = CypherQueries()
+    
+    @property
+    def client(self):
+        """延迟获取Neo4j客户端"""
+        if self._client is None:
+            self._client = get_neo4j_client()
+        return self._client
     
     def create_entity(self, entity_type: str, name: str, properties: Dict[str, Any] = None):
         """创建实体节点"""

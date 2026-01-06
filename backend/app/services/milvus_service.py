@@ -23,8 +23,14 @@ class MilvusService:
         self.collection_name = settings.MILVUS_COLLECTION_NAME
         self.dimension = 1024  # Qwen embedding维度
         self._collection: Optional[Collection] = None
-        self._connect()
-        self._ensure_collection()
+        self._connected = False
+        try:
+            self._connect()
+            self._ensure_collection()
+            self._connected = True
+        except Exception as e:
+            app_logger.warning(f"Milvus初始化失败，将在首次使用时重试: {e}")
+            self._connected = False
     
     def _connect(self):
         """连接Milvus"""
@@ -85,6 +91,14 @@ class MilvusService:
                document_ids: List[int], sources: List[str], 
                metadatas: List[Dict]) -> List[int]:
         """插入向量数据"""
+        if not self._connected:
+            try:
+                self._connect()
+                self._ensure_collection()
+                self._connected = True
+            except Exception as e:
+                raise ValueError(f"Milvus未连接: {e}")
+        
         if not self._collection:
             raise ValueError("集合未初始化")
         
@@ -107,8 +121,17 @@ class MilvusService:
     def search(self, query_vector: List[float], top_k: int = 5, 
                filter_expr: Optional[str] = None) -> List[Dict]:
         """搜索相似向量"""
+        if not self._connected:
+            try:
+                self._connect()
+                self._ensure_collection()
+                self._connected = True
+            except Exception as e:
+                app_logger.error(f"Milvus连接失败: {e}")
+                return []  # 返回空列表而不是抛出异常
+        
         if not self._collection:
-            raise ValueError("集合未初始化")
+            return []
         
         # 加载集合
         self._collection.load()
@@ -155,6 +178,21 @@ class MilvusService:
         app_logger.info(f"删除了文档 {document_id} 的所有向量")
 
 
-# 全局Milvus实例
-milvus_service = MilvusService()
+# 全局Milvus实例（延迟初始化）
+_milvus_service: Optional[MilvusService] = None
+
+def get_milvus_service() -> MilvusService:
+    """获取Milvus服务实例（单例模式）"""
+    global _milvus_service
+    if _milvus_service is None:
+        _milvus_service = MilvusService()
+    return _milvus_service
+
+# 为了向后兼容，创建一个类来模拟实例
+class MilvusServiceProxy:
+    """Milvus服务代理"""
+    def __getattr__(self, name):
+        return getattr(get_milvus_service(), name)
+
+milvus_service = MilvusServiceProxy()
 

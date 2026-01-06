@@ -1,7 +1,7 @@
 """RAG检索器"""
 from typing import List, Dict, Any
 from app.knowledge.rag.embedder import Embedder
-from app.services.milvus_service import milvus_service
+from app.services.milvus_service import get_milvus_service
 from app.utils.logger import app_logger
 
 
@@ -10,7 +10,14 @@ class Retriever:
     
     def __init__(self):
         self.embedder = Embedder()
-        self.milvus = milvus_service
+        self._milvus = None
+    
+    @property
+    def milvus(self):
+        """延迟获取Milvus服务"""
+        if self._milvus is None:
+            self._milvus = get_milvus_service()
+        return self._milvus
     
     def retrieve(self, query: str, top_k: int = 5, 
                  filter_expr: str = None) -> List[Dict[str, Any]]:
@@ -41,8 +48,9 @@ class Retriever:
             return formatted_results
             
         except Exception as e:
-            app_logger.error(f"检索失败: {e}")
-            raise
+            app_logger.warning(f"RAG检索失败（将返回空结果）: {e}")
+            # 返回空结果而不是抛出异常，允许系统继续工作
+            return []
     
     def format_context(self, results: List[Dict[str, Any]]) -> str:
         """格式化检索结果为上下文"""

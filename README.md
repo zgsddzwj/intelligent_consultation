@@ -43,33 +43,53 @@ intelligent_consultation/
 ## 快速开始
 
 ### 环境要求
-- Python 3.11+
-- Node.js 18+
 - Docker & Docker Compose
+- Python 3.11+ (可选，用于本地运行)
+- Node.js 18+ (可选，用于本地运行前端)
 
-### 安装步骤
+### 一键启动（推荐）
 
 1. 克隆项目
 ```bash
-git clone <repository-url>
+git clone https://github.com/zgsddzwj/intelligent_consultation.git
 cd intelligent_consultation
 ```
 
 2. 配置环境变量
 ```bash
-cp backend/.env.example backend/.env
-# 编辑 backend/.env 文件，填入必要的配置
+# .env文件已创建，请确保QWEN_API_KEY已配置
+# 编辑 backend/.env 文件，确认API密钥正确
 ```
 
 3. 启动服务
 ```bash
+# 使用启动脚本（推荐）
+chmod +x start.sh
+./start.sh
+
+# 或直接使用docker-compose
 docker-compose up -d
 ```
 
-4. 访问应用
-- 前端: http://localhost:3000
-- 后端API: http://localhost:8000
-- API文档: http://localhost:8000/docs
+4. 初始化数据（首次运行必须）
+```bash
+# 等待服务启动后（约30秒），执行初始化
+cd backend
+python scripts/init_all.py
+```
+
+5. 测试系统
+```bash
+cd backend
+python scripts/test_system.py
+```
+
+6. 访问应用
+- **前端问诊界面**: http://localhost:3000
+- **知识图谱可视化**: http://localhost:3000/knowledge-graph
+- **后端API**: http://localhost:8000
+- **API文档**: http://localhost:8000/docs
+- **Neo4j浏览器**: http://localhost:7474 (用户名/密码: neo4j/neo4j)
 
 ## 开发指南
 

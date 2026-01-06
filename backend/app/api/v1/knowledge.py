@@ -7,7 +7,7 @@ from app.dependencies import get_db
 from app.knowledge.rag.hybrid_search import HybridSearch
 from app.knowledge.rag.document_processor import DocumentProcessor
 from app.knowledge.rag.embedder import Embedder
-from app.services.milvus_service import milvus_service
+from app.services.milvus_service import get_milvus_service
 from app.models.knowledge import KnowledgeDocument
 from app.utils.logger import app_logger
 import os
@@ -86,7 +86,8 @@ async def upload_document(
         sources = [chunk["source"] for chunk in chunks]
         metadatas = [chunk["metadata"] for chunk in chunks]
         
-        vector_ids = milvus_service.insert(
+        milvus = get_milvus_service()
+        vector_ids = milvus.insert(
             vectors=vectors,
             texts=texts,
             document_ids=document_ids,
@@ -130,7 +131,7 @@ async def search_knowledge(request: SearchRequest):
 async def query_knowledge_graph(request: GraphQueryRequest):
     """查询知识图谱"""
     try:
-        from app.knowledge.graph.neo4j_client import neo4j_client
+        from app.knowledge.graph.neo4j_client import get_neo4j_client
         from app.knowledge.graph.queries import CypherQueries
         
         queries = CypherQueries()
@@ -138,13 +139,15 @@ async def query_knowledge_graph(request: GraphQueryRequest):
         if request.operation == "get_disease_info":
             disease_name = request.parameters.get("disease_name")
             query = queries.find_disease_by_name(disease_name)
-            result = neo4j_client.execute_query(query, {"name": disease_name})
+            neo4j = get_neo4j_client()
+            result = neo4j.execute_query(query, {"name": disease_name})
             return {"operation": request.operation, "result": result}
         
         elif request.operation == "get_drug_info":
             drug_name = request.parameters.get("drug_name")
             query = "MATCH (d:Drug {name: $drug_name}) RETURN d"
-            result = neo4j_client.execute_query(query, {"drug_name": drug_name})
+            neo4j = get_neo4j_client()
+            result = neo4j.execute_query(query, {"drug_name": drug_name})
             return {"operation": request.operation, "result": result}
         
         else:
@@ -159,7 +162,7 @@ async def query_knowledge_graph(request: GraphQueryRequest):
 async def get_graph_visualization(request: GraphVisualizationRequest):
     """获取知识图谱可视化数据"""
     try:
-        from app.knowledge.graph.neo4j_client import neo4j_client
+        from app.knowledge.graph.neo4j_client import get_neo4j_client
         from app.knowledge.graph.queries import CypherQueries
         
         queries = CypherQueries()
@@ -172,7 +175,8 @@ async def get_graph_visualization(request: GraphVisualizationRequest):
         if request.department:
             # 按科室查询
             query = queries.get_department_graph(request.department, request.depth)
-            result = neo4j_client.execute_query(query, {"dept_name": request.department})
+            neo4j = get_neo4j_client()
+            result = neo4j.execute_query(query, {"dept_name": request.department})
         elif request.disease:
             # 按疾病查询
             query = f"""
@@ -185,11 +189,13 @@ async def get_graph_visualization(request: GraphVisualizationRequest):
             LIMIT 100
             RETURN d, s, drug, exam, dept
             """
-            result = neo4j_client.execute_query(query, {"disease": request.disease})
+            neo4j = get_neo4j_client()
+            result = neo4j.execute_query(query, {"disease": request.disease})
         else:
             # 查询所有科室及其关联
             query = queries.get_all_graph_data(200)
-            result = neo4j_client.execute_query(query, {})
+            neo4j = get_neo4j_client()
+            result = neo4j.execute_query(query, {})
         
         # 转换为可视化格式
         for record in result:
@@ -318,10 +324,11 @@ async def get_graph_visualization(request: GraphVisualizationRequest):
 async def get_departments():
     """获取所有科室列表"""
     try:
-        from app.knowledge.graph.neo4j_client import neo4j_client
+        from app.knowledge.graph.neo4j_client import get_neo4j_client
         
         query = "MATCH (d:Department) RETURN d.name as name, d.description as description ORDER BY d.name"
-        result = neo4j_client.execute_query(query, {})
+        neo4j = get_neo4j_client()
+        result = neo4j.execute_query(query, {})
         
         return {
             "departments": [

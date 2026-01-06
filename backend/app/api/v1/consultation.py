@@ -45,6 +45,7 @@ class ConsultationHistoryResponse(BaseModel):
 @router.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     """发送咨询消息"""
+    consultation_id = 0
     try:
         # 验证输入
         is_valid, error_msg = validate_consultation_input({"message": request.message})
@@ -63,22 +64,28 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 risk_level="high"
             )
         
-        # 创建或获取咨询记录
-        if request.consultation_id:
-            consultation = db.query(Consultation).filter(
-                Consultation.id == request.consultation_id
-            ).first()
-            if not consultation:
-                raise HTTPException(status_code=404, detail="咨询记录不存在")
-        else:
-            consultation = Consultation(
-                user_id=request.user_id or 1,  # 默认用户ID
-                agent_type=AgentType.DOCTOR,  # 默认医生Agent
-                status=ConsultationStatus.IN_PROGRESS
-            )
-            db.add(consultation)
-            db.commit()
-            db.refresh(consultation)
+        # 尝试创建或获取咨询记录（如果数据库可用）
+        try:
+            if request.consultation_id:
+                consultation = db.query(Consultation).filter(
+                    Consultation.id == request.consultation_id
+                ).first()
+                if not consultation:
+                    raise HTTPException(status_code=404, detail="咨询记录不存在")
+                consultation_id = consultation.id
+            else:
+                consultation = Consultation(
+                    user_id=request.user_id or 1,  # 默认用户ID
+                    agent_type=AgentType.DOCTOR,  # 默认医生Agent
+                    status=ConsultationStatus.IN_PROGRESS
+                )
+                db.add(consultation)
+                db.commit()
+                db.refresh(consultation)
+                consultation_id = consultation.id
+        except Exception as db_error:
+            app_logger.warning(f"数据库操作失败，继续处理咨询: {db_error}")
+            consultation = None
         
         # 使用编排器处理消息
         result = orchestrator.process(
@@ -90,34 +97,46 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
         if result.get("answer"):
             result["answer"] += f"\n\n{DISCLAIMER}"
         
-        # 更新咨询记录
-        messages = consultation.messages or []
-        messages.append({
-            "role": "user",
-            "content": request.message
-        })
-        messages.append({
-            "role": "assistant",
-            "content": result.get("answer", ""),
-            "sources": result.get("sources", []),
-            "risk_level": result.get("risk_level")
-        })
-        
-        consultation.messages = messages
-        consultation.status = ConsultationStatus.COMPLETED
-        db.commit()
+        # 尝试更新咨询记录（如果数据库可用）
+        if consultation:
+            try:
+                messages = consultation.messages or []
+                messages.append({
+                    "role": "user",
+                    "content": request.message
+                })
+                messages.append({
+                    "role": "assistant",
+                    "content": result.get("answer", ""),
+                    "sources": result.get("sources", []),
+                    "risk_level": result.get("risk_level")
+                })
+                
+                consultation.messages = messages
+                consultation.status = ConsultationStatus.COMPLETED
+                db.commit()
+            except Exception as db_error:
+                app_logger.warning(f"更新咨询记录失败: {db_error}")
         
         return ChatResponse(
-            answer=result.get("answer", ""),
-            consultation_id=consultation.id,
+            answer=result.get("answer", "抱歉，处理您的咨询时遇到问题，请稍后重试。"),
+            consultation_id=consultation_id,
             sources=result.get("sources", []),
             risk_level=result.get("risk_level"),
             execution_time=result.get("execution_time")
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         app_logger.error(f"咨询处理失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # 即使出错也返回基本响应
+        return ChatResponse(
+            answer=f"处理您的咨询时遇到错误: {str(e)}。请稍后重试或联系客服。",
+            consultation_id=consultation_id,
+            sources=[],
+            risk_level=None
+        )
 
 
 @router.get("/history", response_model=List[ConsultationHistoryResponse])

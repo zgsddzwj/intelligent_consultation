@@ -35,6 +35,13 @@ async def startup_event():
     app_logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} 启动成功")
     app_logger.info(f"环境: {settings.ENVIRONMENT}")
     app_logger.info(f"调试模式: {settings.DEBUG}")
+    
+    # 尝试初始化数据库表（如果不存在）
+    try:
+        from app.database.init_db import init_db
+        init_db()
+    except Exception as e:
+        app_logger.warning(f"数据库表初始化警告: {e}")
 
 
 @app.on_event("shutdown")

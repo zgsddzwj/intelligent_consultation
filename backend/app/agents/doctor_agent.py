@@ -74,18 +74,26 @@ class DoctorAgent(BaseAgent):
         tools_used = []
         
         # 1. RAG检索
-        rag_result = self.rag_tool.execute(question, top_k=5)
-        tools_used.append("rag_search")
-        rag_context = self.rag_tool.format_context(rag_result)
+        try:
+            rag_result = self.rag_tool.execute(question, top_k=5)
+            tools_used.append("rag_search")
+            rag_context = self.rag_tool.format_context(rag_result) if rag_result.get("results") else ""
+        except Exception as e:
+            app_logger.warning(f"RAG检索失败: {e}")
+            rag_result = {"results": []}
+            rag_context = ""
         
         # 2. 提取可能的疾病/药物实体，查询知识图谱
         kg_context = ""
-        # 这里可以添加实体识别逻辑，暂时简化
-        if "高血压" in question or "血压" in question:
-            disease_info = self.kg_tool.execute("get_disease_info", disease_name="高血压")
-            tools_used.append("knowledge_graph_query")
-            if disease_info.get("found"):
-                kg_context = self.kg_tool.format_disease_info(disease_info)
+        try:
+            # 这里可以添加实体识别逻辑，暂时简化
+            if "高血压" in question or "血压" in question:
+                disease_info = self.kg_tool.execute("get_disease_info", disease_name="高血压")
+                tools_used.append("knowledge_graph_query")
+                if disease_info.get("found"):
+                    kg_context = self.kg_tool.format_disease_info(disease_info)
+        except Exception as e:
+            app_logger.warning(f"知识图谱查询失败: {e}")
         
         # 3. 整合上下文
         full_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
@@ -134,9 +142,14 @@ class DoctorAgent(BaseAgent):
                     kg_context += f"- {disease.get('disease', '')}\n"
         
         # 3. RAG检索相关诊断信息
-        rag_result = self.rag_tool.execute(question, top_k=3)
-        tools_used.append("rag_search")
-        rag_context = self.rag_tool.format_context(rag_result)
+        try:
+            rag_result = self.rag_tool.execute(question, top_k=3)
+            tools_used.append("rag_search")
+            rag_context = self.rag_tool.format_context(rag_result) if rag_result.get("results") else ""
+        except Exception as e:
+            app_logger.warning(f"RAG检索失败: {e}")
+            rag_result = {"results": []}
+            rag_context = ""
         
         # 4. 整合上下文
         full_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
@@ -185,9 +198,14 @@ class DoctorAgent(BaseAgent):
                         kg_context += f"- {contra.get('disease', '')}\n"
         
         # 3. RAG检索用药指南
-        rag_result = self.rag_tool.execute(question, top_k=3)
-        tools_used.append("rag_search")
-        rag_context = self.rag_tool.format_context(rag_result)
+        try:
+            rag_result = self.rag_tool.execute(question, top_k=3)
+            tools_used.append("rag_search")
+            rag_context = self.rag_tool.format_context(rag_result) if rag_result.get("results") else ""
+        except Exception as e:
+            app_logger.warning(f"RAG检索失败: {e}")
+            rag_result = {"results": []}
+            rag_context = ""
         
         # 4. 整合上下文
         full_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context

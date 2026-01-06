@@ -60,6 +60,21 @@ class Neo4jClient:
             return False
 
 
-# 全局Neo4j客户端实例
-neo4j_client = Neo4jClient()
+# 全局Neo4j客户端实例（延迟初始化）
+_neo4j_client: Optional[Neo4jClient] = None
+
+def get_neo4j_client() -> Neo4jClient:
+    """获取Neo4j客户端实例（单例模式）"""
+    global _neo4j_client
+    if _neo4j_client is None:
+        _neo4j_client = Neo4jClient()
+    return _neo4j_client
+
+# 为了向后兼容
+class Neo4jClientProxy:
+    """Neo4j客户端代理"""
+    def __getattr__(self, name):
+        return getattr(get_neo4j_client(), name)
+
+neo4j_client = Neo4jClientProxy()
 

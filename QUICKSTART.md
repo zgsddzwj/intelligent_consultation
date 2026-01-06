@@ -4,16 +4,29 @@
 
 确保已安装：
 - Docker 和 Docker Compose
-- Python 3.11+（如果本地运行）
-- Node.js 18+（如果本地运行前端）
+- Python 3.11+（用于运行初始化脚本）
 
-## 2. 配置环境变量
+## 2. 验证系统设置
+
+```bash
+cd backend
+python scripts/verify_setup.py
+```
+
+这将检查：
+- 环境变量配置
+- 目录结构
+- Python依赖
+
+## 3. 配置环境变量
 
 `.env` 文件已创建，包含您的阿里云百炼API密钥。
 
 如需修改，编辑 `backend/.env` 文件。
 
-## 3. 初始化Neo4j知识图谱
+**重要**：确保 `QWEN_API_KEY` 已正确配置！
+
+## 4. 初始化Neo4j知识图谱
 
 ```bash
 # 确保Neo4j服务已启动（通过Docker Compose）
@@ -29,7 +42,18 @@ python scripts/init_knowledge_graph.py
 - 5种检查项目
 - 完整的关系网络
 
-## 4. 启动服务
+**或者使用一键初始化**：
+```bash
+python scripts/init_all.py
+```
+
+这将自动执行：
+1. 数据库表初始化
+2. 医疗数据获取
+3. 知识图谱初始化
+4. 向量数据库数据加载
+
+## 5. 启动服务
 
 ### 方式一：使用Docker Compose（推荐）
 
@@ -58,14 +82,14 @@ npm install
 npm run dev
 ```
 
-## 5. 访问系统
+## 6. 访问系统
 
 - **知识图谱可视化**：http://localhost:3000/knowledge-graph
 - **在线问诊**：http://localhost:3000/
 - **API文档**：http://localhost:8000/docs
 - **Neo4j浏览器**：http://localhost:7474（用户名/密码：neo4j/neo4j）
 
-## 6. 功能使用
+## 7. 功能使用
 
 ### 知识图谱可视化
 1. 访问 `/knowledge-graph` 页面
@@ -85,7 +109,7 @@ npm run dev
 3. 系统自动识别并提取医疗术语
 4. 显示分析结果和知识图谱关联
 
-## 7. 验证功能
+## 8. 验证功能
 
 ### 测试知识图谱
 ```bash
@@ -104,7 +128,7 @@ curl -X POST http://localhost:8000/api/v1/knowledge/graph/visualization \
   -d '{"department": "心内科"}'
 ```
 
-## 8. 常见问题
+## 9. 常见问题
 
 ### Neo4j连接失败
 - 检查Neo4j服务是否启动：`docker-compose ps neo4j`
@@ -118,7 +142,7 @@ curl -X POST http://localhost:8000/api/v1/knowledge/graph/visualization \
 - 确认 `QWEN_API_KEY` 在 `.env` 文件中正确配置
 - 检查API密钥是否有效
 
-## 9. 下一步
+## 10. 下一步
 
 - 加载更多医疗文档到RAG系统
 - 扩展知识图谱数据
