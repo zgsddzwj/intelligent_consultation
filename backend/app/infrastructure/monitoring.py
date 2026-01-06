@@ -48,6 +48,30 @@ llm_request_duration_seconds = Histogram(
     ['model']
 )
 
+llm_first_token_latency_seconds = Histogram(
+    'llm_first_token_latency_seconds',
+    'LLM first token latency in seconds',
+    ['model']
+)
+
+llm_tokens_total = Counter(
+    'llm_tokens_total',
+    'Total LLM tokens used',
+    ['model', 'type']  # type: input, output, total
+)
+
+llm_cost_total = Counter(
+    'llm_cost_total',
+    'Total LLM cost in currency units',
+    ['model', 'currency']
+)
+
+llm_cache_hits_total = Counter(
+    'llm_cache_hits_total',
+    'Total LLM cache hits',
+    ['cache_type']  # semantic, regular
+)
+
 cache_hits_total = Counter(
     'cache_hits_total',
     'Total cache hits',
@@ -73,10 +97,28 @@ def track_database_query(operation: str, table: str, duration: float):
     database_query_duration_seconds.labels(operation=operation, table=table).observe(duration)
 
 
-def track_llm_request(model: str, status: str, duration: float):
+def track_llm_request(model: str, status: str, duration: float,
+                     first_token_latency: Optional[float] = None,
+                     input_tokens: Optional[int] = None,
+                     output_tokens: Optional[int] = None,
+                     cost: Optional[float] = None,
+                     currency: str = "CNY"):
     """记录LLM请求指标"""
     llm_requests_total.labels(model=model, status=status).inc()
     llm_request_duration_seconds.labels(model=model).observe(duration)
+    
+    if first_token_latency is not None:
+        llm_first_token_latency_seconds.labels(model=model).observe(first_token_latency)
+    
+    if input_tokens is not None:
+        llm_tokens_total.labels(model=model, type="input").inc(input_tokens)
+    if output_tokens is not None:
+        llm_tokens_total.labels(model=model, type="output").inc(output_tokens)
+    if input_tokens is not None and output_tokens is not None:
+        llm_tokens_total.labels(model=model, type="total").inc(input_tokens + output_tokens)
+    
+    if cost is not None:
+        llm_cost_total.labels(model=model, currency=currency).inc(cost)
 
 
 def track_cache_hit(cache_type: str):
@@ -87,6 +129,11 @@ def track_cache_hit(cache_type: str):
 def track_cache_miss(cache_type: str):
     """记录缓存未命中"""
     cache_misses_total.labels(cache_type=cache_type).inc()
+
+
+def track_llm_cache_hit(cache_type: str = "semantic"):
+    """记录LLM缓存命中"""
+    llm_cache_hits_total.labels(cache_type=cache_type).inc()
 
 
 def metrics_middleware(app):

@@ -100,6 +100,28 @@ class Settings(BaseSettings):
     ENABLE_OCR: bool = True
     ENABLE_MULTIMODAL_LLM: bool = True
     
+    # Langfuse Configuration
+    ENABLE_LANGFUSE: bool = True
+    LANGFUSE_PUBLIC_KEY: Optional[str] = None
+    LANGFUSE_SECRET_KEY: Optional[str] = None
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"  # 默认使用云服务，也可以使用自托管
+    
+    # LLM Performance Configuration
+    LLM_DEFAULT_TEMPERATURE: float = 0.7
+    LLM_DEFAULT_MAX_TOKENS: int = 2000
+    LLM_STREAM_ENABLED: bool = True
+    LLM_SEMANTIC_CACHE_ENABLED: bool = True
+    LLM_SEMANTIC_CACHE_THRESHOLD: float = 0.95  # 相似度阈值
+    
+    # Context Management
+    CONTEXT_MAX_TOKENS: int = 8000  # 最大上下文token数
+    CONTEXT_COMPRESSION_ENABLED: bool = True
+    CONTEXT_HISTORY_LIMIT: int = 10  # 保留的对话轮次
+    
+    # Prompt Engineering
+    PROMPT_VERSION: str = "v1.0"
+    ENABLE_PROMPT_AB_TEST: bool = False
+    
     class Config:
         env_file = ".env"
         case_sensitive = True

@@ -1,5 +1,5 @@
 """Agent编排器 - 基于LangGraph"""
-from typing import Dict, Any, TypedDict, Annotated
+from typing import Dict, Any, TypedDict, Annotated, Optional
 from langgraph.graph import StateGraph, END
 from langgraph.graph.message import add_messages
 from app.agents.doctor_agent import DoctorAgent
@@ -9,6 +9,8 @@ from app.agents.operations_agent import OperationsAgent
 from app.utils.logger import app_logger
 from app.config import get_settings
 from app.knowledge.ml.intent_classifier import IntentClassifier
+from app.services.langfuse_service import langfuse_service
+import time
 
 settings = get_settings()
 
@@ -21,6 +23,7 @@ class AgentState(TypedDict):
     agent_type: str
     result: Dict[str, Any]
     context: Dict[str, Any]
+    trace_id: Optional[str]  # Langfuse trace ID
 
 
 class AgentOrchestrator:
@@ -95,8 +98,23 @@ class AgentOrchestrator:
     def _classify_intent(self, state: AgentState) -> AgentState:
         """意图分类（优先使用ML模型，回退到规则）"""
         user_input = state.get("user_input", "")
+        trace_id = state.get("trace_id")
         
-        # 优先使用ML模型分类
+        # 创建span追踪
+        span = None
+        if langfuse_service.enabled:
+            span = langfuse_service.span(
+                name="orchestrator.intent_classification",
+                trace_id=trace_id,
+                metadata={
+                    "user_input": user_input[:200]  # 限制长度
+                }
+            )
+        
+        start_time = time.time()
+        
+        try:
+            # 优先使用ML模型分类
         if self.intent_classifier and self.intent_classifier.svm_model:
             try:
                 result = self.intent_classifier.classify(user_input)
@@ -124,6 +142,20 @@ class AgentOrchestrator:
                 state["intent"] = ml_intent
                 state["agent_type"] = agent_type
                 state["context"]["intent_confidence"] = confidence
+                
+                # 记录span
+                if langfuse_service.enabled and span:
+                    try:
+                        span.end(metadata={
+                            "intent": ml_intent,
+                            "agent_type": agent_type,
+                            "confidence": confidence,
+                            "method": "ml",
+                            "execution_time": time.time() - start_time
+                        })
+                    except:
+                        pass
+                
                 return state
             except Exception as e:
                 app_logger.warning(f"ML意图分类失败，使用规则分类: {e}")
@@ -151,6 +183,20 @@ class AgentOrchestrator:
         state["intent"] = intent
         state["agent_type"] = intent
         state["context"]["intent_confidence"] = 0.7  # 规则分类默认置信度
+        
+        # 记录span
+        if langfuse_service.enabled and span:
+            try:
+                span.end(metadata={
+                    "intent": intent,
+                    "agent_type": intent,
+                    "confidence": 0.7,
+                    "method": "rule",
+                    "execution_time": time.time() - start_time
+                })
+            except:
+                pass
+        
         return state
     
     def _route_by_intent(self, state: AgentState) -> str:
@@ -161,23 +207,62 @@ class AgentOrchestrator:
         """路由到医生Agent"""
         user_input = state.get("user_input", "")
         context = state.get("context", {})
+        trace_id = state.get("trace_id")
         
-        # 判断咨询类型
-        consultation_type = "general"
-        if any(keyword in user_input for keyword in ["症状", "诊断", "可能"]):
-            consultation_type = "diagnosis"
-        elif any(keyword in user_input for keyword in ["用药", "药物", "药"]):
-            consultation_type = "drug"
+        # 创建span追踪
+        span = None
+        if langfuse_service.enabled:
+            span = langfuse_service.span(
+                name="orchestrator.doctor_agent",
+                trace_id=trace_id,
+                metadata={
+                    "agent": "doctor",
+                    "user_input": user_input[:200]
+                }
+            )
         
-        input_data = {
-            "question": user_input,
-            "context": context,
-            "type": consultation_type
-        }
+        start_time = time.time()
         
-        result = self.doctor_agent.process(input_data)
-        state["result"] = result
-        return state
+        try:
+            # 判断咨询类型
+            consultation_type = "general"
+            if any(keyword in user_input for keyword in ["症状", "诊断", "可能"]):
+                consultation_type = "diagnosis"
+            elif any(keyword in user_input for keyword in ["用药", "药物", "药"]):
+                consultation_type = "drug"
+            
+            input_data = {
+                "question": user_input,
+                "context": context,
+                "type": consultation_type
+            }
+            
+            result = self.doctor_agent.process(input_data)
+            state["result"] = result
+            
+            # 记录span
+            if langfuse_service.enabled and span:
+                try:
+                    span.end(metadata={
+                        "consultation_type": consultation_type,
+                        "execution_time": time.time() - start_time,
+                        "tools_used": result.get("tools_used", [])
+                    })
+                except:
+                    pass
+            
+            return state
+        except Exception as e:
+            if langfuse_service.enabled and span:
+                try:
+                    span.end(metadata={
+                        "error": True,
+                        "error_message": str(e),
+                        "execution_time": time.time() - start_time
+                    })
+                except:
+                    pass
+            raise
     
     def _route_to_health_manager(self, state: AgentState) -> AgentState:
         """路由到健康管家Agent"""
@@ -275,8 +360,27 @@ class AgentOrchestrator:
         
         return state
     
-    def process(self, user_input: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
-        """处理用户输入"""
+    def process(self, user_input: str, context: Dict[str, Any] = None,
+                user_id: Optional[str] = None,
+                session_id: Optional[str] = None,
+                trace_id: Optional[str] = None) -> Dict[str, Any]:
+        """处理用户输入（带Langfuse追踪）"""
+        # 创建或使用现有的trace
+        trace = None
+        if langfuse_service.enabled and not trace_id:
+            trace = langfuse_service.trace(
+                name="agent_orchestrator.process",
+                user_id=user_id,
+                session_id=session_id,
+                metadata={
+                    "user_input": user_input[:200],
+                    "context_keys": list((context or {}).keys())
+                }
+            )
+            trace_id = trace.id if trace and hasattr(trace, 'id') else None
+        
+        start_time = time.time()
+        
         try:
             initial_state = {
                 "messages": [],
@@ -284,18 +388,48 @@ class AgentOrchestrator:
                 "intent": "",
                 "agent_type": "",
                 "result": {},
-                "context": context or {}
+                "context": context or {},
+                "trace_id": trace_id
             }
             
             # 执行工作流
             final_state = self.workflow.invoke(initial_state)
             
-            return final_state.get("result", {})
+            result = final_state.get("result", {})
+            
+            # 记录工作流执行完成
+            if langfuse_service.enabled and trace:
+                try:
+                    # 更新trace metadata
+                    execution_time = time.time() - start_time
+                    result["execution_time"] = execution_time
+                    result["trace_id"] = trace_id
+                except:
+                    pass
+            
+            return result
             
         except Exception as e:
             app_logger.error(f"编排器处理失败: {e}")
+            
+            # 记录错误
+            if langfuse_service.enabled and trace:
+                try:
+                    langfuse_service.span(
+                        name="orchestrator.error",
+                        trace_id=trace_id,
+                        metadata={
+                            "error": True,
+                            "error_message": str(e),
+                            "execution_time": time.time() - start_time
+                        }
+                    )
+                except:
+                    pass
+            
             return {
                 "answer": "处理请求时发生错误，请稍后重试。",
-                "error": str(e)
+                "error": str(e),
+                "trace_id": trace_id
             }
 

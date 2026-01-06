@@ -1,6 +1,8 @@
 """医生Agent"""
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import time
+import asyncio
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.agents.base import BaseAgent
 from app.agents.tools.rag_tool import RAGTool
 from app.agents.tools.knowledge_graph_tool import KnowledgeGraphTool
@@ -34,6 +36,7 @@ class DoctorAgent(BaseAgent):
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """处理医疗咨询"""
         start_time = time.time()
+        trace_id = input_data.get("trace_id")
         
         try:
             question = input_data.get("question", "")
@@ -44,11 +47,11 @@ class DoctorAgent(BaseAgent):
             
             # 根据咨询类型选择处理方式
             if consultation_type == "diagnosis":
-                result = self._handle_diagnosis(question, context)
+                result = self._handle_diagnosis(question, context, trace_id=trace_id)
             elif consultation_type == "drug":
-                result = self._handle_drug_consultation(question, context)
+                result = self._handle_drug_consultation(question, context, trace_id=trace_id)
             else:
-                result = self._handle_general_consultation(question, context)
+                result = self._handle_general_consultation(question, context, trace_id=trace_id)
             
             execution_time = time.time() - start_time
             
@@ -69,33 +72,60 @@ class DoctorAgent(BaseAgent):
                 "tools_used": []
             }
     
-    def _handle_general_consultation(self, question: str, context: Dict) -> Dict[str, Any]:
-        """处理一般咨询"""
+    def _handle_general_consultation(self, question: str, context: Dict, trace_id: Optional[str] = None) -> Dict[str, Any]:
+        """处理一般咨询（并行优化）"""
         tools_used = []
         
-        # 1. RAG检索
-        try:
-            rag_result = self.rag_tool.execute(question, top_k=5)
-            tools_used.append("rag_search")
-            rag_context = self.rag_tool.format_context(rag_result) if rag_result.get("results") else ""
-        except Exception as e:
-            app_logger.warning(f"RAG检索失败: {e}")
-            rag_result = {"results": []}
-            rag_context = ""
-        
-        # 2. 提取可能的疾病/药物实体，查询知识图谱
+        # 并行执行RAG检索和KG查询
+        rag_result = {"results": []}
+        rag_context = ""
         kg_context = ""
-        try:
-            # 这里可以添加实体识别逻辑，暂时简化
-            if "高血压" in question or "血压" in question:
-                disease_info = self.kg_tool.execute("get_disease_info", disease_name="高血压")
-                tools_used.append("knowledge_graph_query")
-                if disease_info.get("found"):
-                    kg_context = self.kg_tool.format_disease_info(disease_info)
-        except Exception as e:
-            app_logger.warning(f"知识图谱查询失败: {e}")
         
-        # 3. 整合上下文
+        def execute_rag():
+            """执行RAG检索"""
+            try:
+                result = self.rag_tool.execute(question, top_k=5)
+                return ("rag", result, self.rag_tool.format_context(result) if result.get("results") else "")
+            except Exception as e:
+                app_logger.warning(f"RAG检索失败: {e}")
+                return ("rag", {"results": []}, "")
+        
+        def execute_kg():
+            """执行知识图谱查询"""
+            try:
+                # 这里可以添加实体识别逻辑，暂时简化
+                if "高血压" in question or "血压" in question:
+                    disease_info = self.kg_tool.execute("get_disease_info", disease_name="高血压")
+                    if disease_info.get("found"):
+                        return ("kg", disease_info, self.kg_tool.format_disease_info(disease_info))
+                return ("kg", None, "")
+            except Exception as e:
+                app_logger.warning(f"知识图谱查询失败: {e}")
+                return ("kg", None, "")
+        
+        # 使用线程池并行执行
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            futures = {
+                executor.submit(execute_rag): "rag",
+                executor.submit(execute_kg): "kg"
+            }
+            
+            for future in as_completed(futures):
+                try:
+                    tool_type, result, formatted_context = future.result()
+                    if tool_type == "rag":
+                        rag_result = result
+                        rag_context = formatted_context
+                        if rag_result.get("results"):
+                            tools_used.append("rag_search")
+                    elif tool_type == "kg":
+                        if result:
+                            kg_context = formatted_context
+                            tools_used.append("knowledge_graph_query")
+                except Exception as e:
+                    app_logger.warning(f"并行执行失败: {e}")
+        
+        # 整合上下文
         full_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
         
         # 4. 生成回答
@@ -118,7 +148,7 @@ class DoctorAgent(BaseAgent):
             "tools_used": tools_used
         }
     
-    def _handle_diagnosis(self, question: str, context: Dict) -> Dict[str, Any]:
+    def _handle_diagnosis(self, question: str, context: Dict, trace_id: Optional[str] = None) -> Dict[str, Any]:
         """处理诊断咨询"""
         tools_used = []
         
@@ -175,7 +205,7 @@ class DoctorAgent(BaseAgent):
             "tools_used": tools_used
         }
     
-    def _handle_drug_consultation(self, question: str, context: Dict) -> Dict[str, Any]:
+    def _handle_drug_consultation(self, question: str, context: Dict, trace_id: Optional[str] = None) -> Dict[str, Any]:
         """处理用药咨询"""
         tools_used = []
         

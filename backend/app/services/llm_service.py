@@ -2,10 +2,14 @@
 import dashscope
 from dashscope import Generation
 from typing import List, Dict, Optional, AsyncGenerator
+import time
 from app.config import get_settings
 from app.utils.logger import app_logger
 from app.infrastructure.retry import retry, get_circuit_breaker
 from app.common.exceptions import LLMServiceException, ErrorCode
+from app.services.langfuse_service import langfuse_service
+from app.services.semantic_cache import semantic_cache
+from app.infrastructure.monitoring import track_llm_request, track_llm_cache_hit
 
 settings = get_settings()
 dashscope.api_key = settings.QWEN_API_KEY
@@ -20,16 +24,164 @@ class LLMService:
     def __init__(self):
         self.model = settings.QWEN_MODEL
         self.api_key = settings.QWEN_API_KEY
+        self.prompt_version = settings.PROMPT_VERSION
     
     @retry(max_attempts=3, delay=1.0, backoff=2.0, exceptions=(Exception,))
     def generate(self, prompt: str, system_prompt: str = None, 
-                 temperature: float = 0.7, max_tokens: int = 2000,
+                 temperature: float = None, max_tokens: int = None,
+                 trace_id: Optional[str] = None,
+                 user_id: Optional[str] = None,
+                 session_id: Optional[str] = None,
+                 prompt_version: Optional[str] = None,
                  **kwargs) -> str:
-        """生成文本（带重试机制）"""
+        """生成文本（带重试机制和Langfuse追踪）"""
+        temperature = temperature if temperature is not None else settings.LLM_DEFAULT_TEMPERATURE
+        max_tokens = max_tokens if max_tokens is not None else settings.LLM_DEFAULT_MAX_TOKENS
+        prompt_version = prompt_version or self.prompt_version
+        
+        # 创建或使用现有的trace
+        trace = None
+        if langfuse_service.enabled:
+            if trace_id:
+                # 使用现有trace
+                pass
+            else:
+                # 创建新trace
+                trace = langfuse_service.trace(
+                    name="llm.generate",
+                    user_id=user_id,
+                    session_id=session_id,
+                    metadata={
+                        "prompt_version": prompt_version,
+                        "model": self.model,
+                        "temperature": temperature,
+                        "max_tokens": max_tokens
+                    }
+                )
+                trace_id = trace.id if trace and hasattr(trace, 'id') else None
+        
+        start_time = time.time()
+        first_token_time = None
+        
+        # 检查语义缓存
+        cache_key = f"{system_prompt or ''}:{prompt}" if system_prompt else prompt
+        cached_result = semantic_cache.get(cache_key)
+        if cached_result:
+            app_logger.info(f"语义缓存命中，相似度: {cached_result.get('similarity', 0):.3f}")
+            track_llm_cache_hit("semantic")
+            # 记录缓存命中到Langfuse
+            if langfuse_service.enabled:
+                langfuse_service.generation(
+                    name="llm.generate",
+                    model=self.model,
+                    model_parameters={"cached": True},
+                    input={"prompt": prompt, "system_prompt": system_prompt},
+                    output=cached_result["response"],
+                    trace_id=trace_id,
+                    metadata={
+                        "cache_hit": True,
+                        "similarity": cached_result.get("similarity"),
+                        "latency": time.time() - start_time
+                    }
+                )
+            return cached_result["response"]
+        
         try:
             # 使用断路器
-            return llm_circuit_breaker.call(self._generate_internal, prompt, system_prompt, temperature, max_tokens, **kwargs)
+            result = llm_circuit_breaker.call(
+                self._generate_internal, 
+                prompt, system_prompt, temperature, max_tokens, **kwargs
+            )
+            
+            # 计算延迟
+            latency = time.time() - start_time
+            first_token_latency = first_token_time - start_time if first_token_time else latency
+            
+            # 估算token使用（Qwen API可能不返回详细token信息）
+            estimated_input_tokens = len(prompt.split()) * 1.3  # 粗略估算
+            estimated_output_tokens = len(result.split()) * 1.3
+            
+            # 估算成本（Qwen定价，需要根据实际调整）
+            # 示例：假设输入0.008元/1K tokens，输出0.008元/1K tokens
+            estimated_cost = (estimated_input_tokens / 1000 * 0.008) + (estimated_output_tokens / 1000 * 0.008)
+            
+            # 记录监控指标
+            track_llm_request(
+                model=self.model,
+                status="success",
+                duration=latency,
+                first_token_latency=first_token_latency,
+                input_tokens=int(estimated_input_tokens),
+                output_tokens=int(estimated_output_tokens),
+                cost=estimated_cost
+            )
+            
+            # 记录到Langfuse
+            if langfuse_service.enabled:
+                langfuse_service.generation(
+                    name="llm.generate",
+                    model=self.model,
+                    model_parameters={
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                        "prompt_version": prompt_version
+                    },
+                    input={
+                        "prompt": prompt,
+                        "system_prompt": system_prompt
+                    },
+                    output=result,
+                    usage={
+                        "input": int(estimated_input_tokens),
+                        "output": int(estimated_output_tokens),
+                        "total": int(estimated_input_tokens + estimated_output_tokens)
+                    },
+                    trace_id=trace_id,
+                    metadata={
+                        "latency": latency,
+                        "first_token_latency": first_token_latency,
+                        "prompt_version": prompt_version,
+                        "estimated_cost": estimated_cost
+                    }
+                )
+            
+            # 存储到语义缓存
+            semantic_cache.set(
+                cache_key,
+                result,
+                metadata={
+                    "model": self.model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "prompt_version": prompt_version
+                }
+            )
+            
+            return result
+            
         except Exception as e:
+            # 记录错误
+            if langfuse_service.enabled:
+                langfuse_service.generation(
+                    name="llm.generate",
+                    model=self.model,
+                    model_parameters={
+                        "temperature": temperature,
+                        "max_tokens": max_tokens
+                    },
+                    input={
+                        "prompt": prompt,
+                        "system_prompt": system_prompt
+                    },
+                    output=f"Error: {str(e)}",
+                    trace_id=trace_id,
+                    metadata={
+                        "error": True,
+                        "error_message": str(e),
+                        "latency": time.time() - start_time
+                    }
+                )
+            
             raise LLMServiceException(
                 f"LLM生成失败: {str(e)}",
                 error_code=ErrorCode.LLM_SERVICE_ERROR
@@ -64,9 +216,34 @@ class LLMService:
             raise
     
     def stream_generate(self, prompt: str, system_prompt: str = None,
-                       temperature: float = 0.7, max_tokens: int = 2000,
+                       temperature: float = None, max_tokens: int = None,
+                       trace_id: Optional[str] = None,
+                       user_id: Optional[str] = None,
+                       session_id: Optional[str] = None,
                        **kwargs) -> AsyncGenerator[str, None]:
-        """流式生成文本"""
+        """流式生成文本（带Langfuse追踪）"""
+        temperature = temperature if temperature is not None else settings.LLM_DEFAULT_TEMPERATURE
+        max_tokens = max_tokens if max_tokens is not None else settings.LLM_DEFAULT_MAX_TOKENS
+        
+        # 创建trace
+        trace = None
+        if langfuse_service.enabled and not trace_id:
+            trace = langfuse_service.trace(
+                name="llm.stream_generate",
+                user_id=user_id,
+                session_id=session_id,
+                metadata={
+                    "model": self.model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens
+                }
+            )
+            trace_id = trace.id if trace and hasattr(trace, 'id') else None
+        
+        start_time = time.time()
+        first_token_time = None
+        full_output = ""
+        
         try:
             messages = []
             if system_prompt:
@@ -87,19 +264,103 @@ class LLMService:
                     if response.output.choices:
                         content = response.output.choices[0].message.content
                         if content:
+                            # 记录首token时间
+                            if first_token_time is None:
+                                first_token_time = time.time()
+                            
+                            full_output += content
                             yield content
                 else:
                     app_logger.error(f"流式生成失败: {response.message}")
                     break
+            
+            # 记录完整的流式生成结果
+            if langfuse_service.enabled:
+                latency = time.time() - start_time
+                first_token_latency = first_token_time - start_time if first_token_time else latency
+                estimated_input_tokens = len(prompt.split()) * 1.3
+                estimated_output_tokens = len(full_output.split()) * 1.3
+                
+                langfuse_service.generation(
+                    name="llm.stream_generate",
+                    model=self.model,
+                    model_parameters={
+                        "temperature": temperature,
+                        "max_tokens": max_tokens
+                    },
+                    input={
+                        "prompt": prompt,
+                        "system_prompt": system_prompt
+                    },
+                    output=full_output,
+                    usage={
+                        "input": int(estimated_input_tokens),
+                        "output": int(estimated_output_tokens),
+                        "total": int(estimated_input_tokens + estimated_output_tokens)
+                    },
+                    trace_id=trace_id,
+                    metadata={
+                        "latency": latency,
+                        "first_token_latency": first_token_latency,
+                        "stream": True
+                    }
+                )
                     
         except Exception as e:
             app_logger.error(f"流式生成出错: {e}")
+            
+            # 记录错误
+            if langfuse_service.enabled:
+                langfuse_service.generation(
+                    name="llm.stream_generate",
+                    model=self.model,
+                    model_parameters={
+                        "temperature": temperature,
+                        "max_tokens": max_tokens
+                    },
+                    input={
+                        "prompt": prompt,
+                        "system_prompt": system_prompt
+                    },
+                    output=f"Error: {str(e)}",
+                    trace_id=trace_id,
+                    metadata={
+                        "error": True,
+                        "error_message": str(e),
+                        "latency": time.time() - start_time
+                    }
+                )
+            
             raise
     
     def chat(self, messages: List[Dict[str, str]], 
-             temperature: float = 0.7, max_tokens: int = 2000,
+             temperature: float = None, max_tokens: int = None,
+             trace_id: Optional[str] = None,
+             user_id: Optional[str] = None,
+             session_id: Optional[str] = None,
              **kwargs) -> str:
-        """多轮对话"""
+        """多轮对话（带Langfuse追踪）"""
+        temperature = temperature if temperature is not None else settings.LLM_DEFAULT_TEMPERATURE
+        max_tokens = max_tokens if max_tokens is not None else settings.LLM_DEFAULT_MAX_TOKENS
+        
+        # 创建trace
+        trace = None
+        if langfuse_service.enabled and not trace_id:
+            trace = langfuse_service.trace(
+                name="llm.chat",
+                user_id=user_id,
+                session_id=session_id,
+                metadata={
+                    "model": self.model,
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                    "message_count": len(messages)
+                }
+            )
+            trace_id = trace.id if trace and hasattr(trace, 'id') else None
+        
+        start_time = time.time()
+        
         try:
             response = Generation.call(
                 model=self.model,
@@ -110,13 +371,63 @@ class LLMService:
             )
             
             if response.status_code == 200:
-                return response.output.choices[0].message.content
+                result = response.output.choices[0].message.content
+                
+                # 记录到Langfuse
+                if langfuse_service.enabled:
+                    # 估算token使用
+                    total_text = " ".join([msg.get("content", "") for msg in messages])
+                    estimated_input_tokens = len(total_text.split()) * 1.3
+                    estimated_output_tokens = len(result.split()) * 1.3
+                    
+                    langfuse_service.generation(
+                        name="llm.chat",
+                        model=self.model,
+                        model_parameters={
+                            "temperature": temperature,
+                            "max_tokens": max_tokens
+                        },
+                        input={"messages": messages},
+                        output=result,
+                        usage={
+                            "input": int(estimated_input_tokens),
+                            "output": int(estimated_output_tokens),
+                            "total": int(estimated_input_tokens + estimated_output_tokens)
+                        },
+                        trace_id=trace_id,
+                        metadata={
+                            "latency": time.time() - start_time,
+                            "message_count": len(messages)
+                        }
+                    )
+                
+                return result
             else:
                 app_logger.error(f"对话失败: {response.message}")
                 raise Exception(f"对话失败: {response.message}")
                 
         except Exception as e:
             app_logger.error(f"对话出错: {e}")
+            
+            # 记录错误
+            if langfuse_service.enabled:
+                langfuse_service.generation(
+                    name="llm.chat",
+                    model=self.model,
+                    model_parameters={
+                        "temperature": temperature,
+                        "max_tokens": max_tokens
+                    },
+                    input={"messages": messages},
+                    output=f"Error: {str(e)}",
+                    trace_id=trace_id,
+                    metadata={
+                        "error": True,
+                        "error_message": str(e),
+                        "latency": time.time() - start_time
+                    }
+                )
+            
             raise
 
 

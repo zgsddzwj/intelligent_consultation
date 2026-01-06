@@ -62,6 +62,7 @@ loguru==0.7.2
 
 # Monitoring
 prometheus-client==0.19.0
+langfuse==2.0.0  # LLM Observability
 
 # Testing
 pytest==7.4.3
