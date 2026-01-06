@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: medical-consultation
+  labels:
+    name: medical-consultation
+    environment: production
+

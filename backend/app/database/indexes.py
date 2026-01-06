@@ -24,6 +24,8 @@ def create_indexes():
         "CREATE INDEX IF NOT EXISTS idx_knowledge_documents_source ON knowledge_documents(source)",
         "CREATE INDEX IF NOT EXISTS idx_knowledge_documents_title ON knowledge_documents(title)",
         "CREATE INDEX IF NOT EXISTS idx_knowledge_documents_created_at ON knowledge_documents(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_documents_object_storage_key ON knowledge_documents(object_storage_key)",
+        "CREATE INDEX IF NOT EXISTS idx_knowledge_documents_storage_type ON knowledge_documents(storage_type)",
         
         # Agent日志表索引
         "CREATE INDEX IF NOT EXISTS idx_agent_logs_agent_type ON agent_logs(agent_type)",

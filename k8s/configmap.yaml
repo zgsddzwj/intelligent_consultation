@@ -1,0 +1,65 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: medical-config
+  namespace: medical-consultation
+data:
+  # 应用配置
+  APP_NAME: "智能医疗管家平台"
+  APP_VERSION: "0.1.0"
+  ENVIRONMENT: "production"
+  DEBUG: "false"
+  
+  # API配置
+  API_V1_PREFIX: "/api/v1"
+  CORS_ORIGINS: "https://yourdomain.com"
+  
+  # 数据库配置（从Secret读取敏感信息）
+  DATABASE_POOL_SIZE: "10"
+  DATABASE_MAX_OVERFLOW: "20"
+  
+  # Redis配置
+  REDIS_CACHE_TTL: "3600"
+  
+  # Neo4j配置
+  NEO4J_URI: "bolt://neo4j-service:7687"
+  
+  # Milvus配置
+  MILVUS_HOST: "milvus-service"
+  MILVUS_PORT: "19530"
+  MILVUS_COLLECTION_NAME: "medical_documents"
+  
+  # 对象存储配置（MinIO）
+  OBJECT_STORAGE_TYPE: "minio"
+  OBJECT_STORAGE_ENDPOINT: "minio-service:9000"
+  OBJECT_STORAGE_BUCKET: "medical-documents"
+  OBJECT_STORAGE_USE_SSL: "false"
+  OBJECT_STORAGE_REGION: ""
+  
+  # 文件上传配置
+  MAX_UPLOAD_SIZE: "10485760"  # 10MB
+  
+  # LLM配置
+  QWEN_MODEL: "qwen-turbo"
+  QWEN_EMBEDDING_MODEL: "text-embedding-v2"
+  
+  # 高级RAG配置
+  ENABLE_ADVANCED_RAG: "true"
+  ENABLE_MULTI_RETRIEVAL: "true"
+  ENABLE_RERANK: "true"
+  
+  # Langfuse配置
+  ENABLE_LANGFUSE: "true"
+  LANGFUSE_HOST: "https://cloud.langfuse.com"
+  
+  # 上下文管理
+  CONTEXT_MAX_TOKENS: "8000"
+  CONTEXT_COMPRESSION_ENABLED: "true"
+  CONTEXT_HISTORY_LIMIT: "10"
+  
+  # 性能配置
+  LLM_DEFAULT_TEMPERATURE: "0.7"
+  LLM_DEFAULT_MAX_TOKENS: "2000"
+  LLM_SEMANTIC_CACHE_ENABLED: "true"
+  LLM_SEMANTIC_CACHE_THRESHOLD: "0.95"
+

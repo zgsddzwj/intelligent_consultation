@@ -1,5 +1,6 @@
 """知识库API"""
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Response
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
@@ -8,14 +9,20 @@ from app.knowledge.rag.hybrid_search import HybridSearch
 from app.knowledge.rag.document_processor import DocumentProcessor
 from app.knowledge.rag.embedder import Embedder
 from app.services.milvus_service import get_milvus_service
+from app.services.object_storage import object_storage_service
 from app.models.knowledge import KnowledgeDocument
+from app.config import get_settings
 from app.utils.logger import app_logger
 import os
+import tempfile
+from pathlib import Path
+from io import BytesIO
 
 router = APIRouter()
 hybrid_search = HybridSearch()
 document_processor = DocumentProcessor()
 embedder = Embedder()
+settings = get_settings()
 
 
 class SearchRequest(BaseModel):
@@ -50,29 +57,64 @@ async def upload_document(
     source: str = "unknown",
     db: Session = Depends(get_db)
 ):
-    """上传文档"""
+    """上传文档（存储到对象存储）"""
     try:
-        # 保存文件
-        upload_dir = "./data/documents"
-        os.makedirs(upload_dir, exist_ok=True)
+        # 1. 验证文件大小
+        file_content = await file.read()
+        file_size = len(file_content)
         
-        file_path = os.path.join(upload_dir, file.filename)
-        with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+        if file_size > settings.MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"文件大小超过限制: {file_size} > {settings.MAX_UPLOAD_SIZE}"
+            )
         
-        # 处理文档
-        chunks = document_processor.process_document(file_path, source=source)
+        # 2. 上传到对象存储
+        content_type = file.content_type or "application/octet-stream"
+        upload_result = object_storage_service.upload_document(
+            file_data=file_content,
+            filename=file.filename,
+            content_type=content_type
+        )
         
-        # 向量化并存储
+        object_key = upload_result["object_key"]
+        storage_type = upload_result["storage_type"]
+        storage_bucket = upload_result.get("bucket", "")
+        
+        # 3. 处理文档（临时下载到本地处理）
+        temp_file_path = None
+        try:
+            # 创建临时文件
+            with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as temp_file:
+                temp_file.write(file_content)
+                temp_file_path = temp_file.name
+            
+            # 处理文档
+            chunks = document_processor.process_document(temp_file_path, source=source)
+            
+        finally:
+            # 清理临时文件
+            if temp_file_path and os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+        
+        if not chunks:
+            # 如果处理失败，删除已上传的文件
+            object_storage_service.delete_document(object_key)
+            raise HTTPException(status_code=400, detail="文档处理失败，无法提取内容")
+        
+        # 4. 向量化并存储
         texts = [chunk["text"] for chunk in chunks]
         vectors = embedder.embed(texts)
         
-        # 创建文档记录
+        # 5. 创建文档记录
         doc = KnowledgeDocument(
             title=file.filename,
             source=source,
-            file_path=file_path,
+            file_path=None,  # 不再使用本地路径
+            object_storage_key=object_key,
+            storage_type=storage_type,
+            storage_bucket=storage_bucket,
+            file_size=file_size,
             file_type=os.path.splitext(file.filename)[1],
             content="\n\n".join(texts),
             is_indexed="1"
@@ -81,7 +123,7 @@ async def upload_document(
         db.commit()
         db.refresh(doc)
         
-        # 插入向量数据库
+        # 6. 插入向量数据库
         document_ids = [doc.id] * len(chunks)
         sources = [chunk["source"] for chunk in chunks]
         metadatas = [chunk["metadata"] for chunk in chunks]
@@ -95,7 +137,7 @@ async def upload_document(
             metadatas=metadatas
         )
         
-        # 更新文档的向量ID
+        # 7. 更新文档的向量ID
         doc.vector_id = str(vector_ids[0]) if vector_ids else None
         db.commit()
         
@@ -103,11 +145,117 @@ async def upload_document(
             "document_id": doc.id,
             "title": doc.title,
             "chunks_count": len(chunks),
-            "status": "indexed"
+            "status": "indexed",
+            "object_storage_key": object_key,
+            "storage_type": storage_type,
+            "file_size": file_size
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         app_logger.error(f"上传文档失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/documents/{document_id}/download")
+async def download_document(
+    document_id: int,
+    use_presigned_url: bool = False,
+    expires: int = 3600,
+    db: Session = Depends(get_db)
+):
+    """下载文档"""
+    try:
+        # 查询文档
+        doc = db.query(KnowledgeDocument).filter(KnowledgeDocument.id == document_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="文档不存在")
+        
+        # 如果使用预签名URL
+        if use_presigned_url and doc.object_storage_key:
+            url = object_storage_service.get_download_url(doc.object_storage_key, expires)
+            return {"download_url": url, "expires_in": expires}
+        
+        # 直接下载
+        if doc.object_storage_key:
+            # 从对象存储下载
+            file_data = object_storage_service.download_document(doc.object_storage_key)
+        elif doc.file_path and os.path.exists(doc.file_path):
+            # 向后兼容：从本地文件系统读取
+            with open(doc.file_path, "rb") as f:
+                file_data = f.read()
+        else:
+            raise HTTPException(status_code=404, detail="文档文件不存在")
+        
+        # 返回文件流
+        return Response(
+            content=file_data,
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{doc.title}"'
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"下载文档失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/documents/{document_id}")
+async def delete_document(
+    document_id: int,
+    delete_vectors: bool = True,
+    db: Session = Depends(get_db)
+):
+    """删除文档"""
+    try:
+        # 查询文档
+        doc = db.query(KnowledgeDocument).filter(KnowledgeDocument.id == document_id).first()
+        if not doc:
+            raise HTTPException(status_code=404, detail="文档不存在")
+        
+        # 1. 删除对象存储中的文件
+        if doc.object_storage_key:
+            try:
+                object_storage_service.delete_document(doc.object_storage_key)
+            except Exception as e:
+                app_logger.warning(f"删除对象存储文件失败: {e}")
+        
+        # 2. 删除本地文件（向后兼容）
+        if doc.file_path and os.path.exists(doc.file_path):
+            try:
+                os.unlink(doc.file_path)
+            except Exception as e:
+                app_logger.warning(f"删除本地文件失败: {e}")
+        
+        # 3. 删除Milvus中的向量（可选）
+        if delete_vectors and doc.vector_id:
+            try:
+                milvus = get_milvus_service()
+                # 注意：这里需要根据实际Milvus API实现删除逻辑
+                # milvus.delete_by_document_id(doc.id)
+                app_logger.info(f"向量删除功能待实现: document_id={doc.id}")
+            except Exception as e:
+                app_logger.warning(f"删除向量失败: {e}")
+        
+        # 4. 删除数据库记录
+        db.delete(doc)
+        db.commit()
+        
+        return {
+            "document_id": document_id,
+            "status": "deleted",
+            "message": "文档已删除"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        app_logger.error(f"删除文档失败: {e}")
+        db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 

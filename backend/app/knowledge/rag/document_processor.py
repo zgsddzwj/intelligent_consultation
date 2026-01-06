@@ -153,4 +153,51 @@ class DocumentProcessor:
         
         app_logger.info(f"文档处理完成，生成 {len(chunks)} 个文本块")
         return chunks
+    
+    def process_document_from_storage(self, object_key: str, source: str = "", 
+                                     metadata: Dict = None, 
+                                     extract_images: bool = True) -> List[Dict[str, Any]]:
+        """
+        从对象存储处理文档
+        
+        Args:
+            object_key: 对象存储键
+            source: 文档来源
+            metadata: 元数据
+            extract_images: 是否提取图片
+        
+        Returns:
+            文档块列表
+        """
+        temp_file_path = None
+        try:
+            # 1. 从对象存储下载文件到临时位置
+            file_data = object_storage_service.download_document(object_key)
+            
+            # 2. 保存到临时文件
+            file_ext = Path(object_key).suffix
+            with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
+                temp_file.write(file_data)
+                temp_file_path = temp_file.name
+            
+            # 3. 处理文档（使用现有方法）
+            chunks = self.process_document(temp_file_path, source, metadata, extract_images)
+            
+            # 4. 更新元数据，添加对象存储信息
+            for chunk in chunks:
+                chunk["metadata"]["object_storage_key"] = object_key
+                chunk["metadata"]["storage_type"] = object_storage_service.storage_type
+            
+            return chunks
+            
+        except Exception as e:
+            app_logger.error(f"从对象存储处理文档失败: {object_key}, {e}")
+            raise
+        finally:
+            # 5. 清理临时文件
+            if temp_file_path and os.path.exists(temp_file_path):
+                try:
+                    os.unlink(temp_file_path)
+                except Exception as e:
+                    app_logger.warning(f"清理临时文件失败: {temp_file_path}, {e}")
 

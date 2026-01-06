@@ -69,12 +69,20 @@ frontend/dist/
 frontend/build/
 
 # Data files (keep structure, ignore content)
-data/documents/*
+# 注意：data目录仅用于本地开发，生产环境使用对象存储
+data/documents/**/*
 !data/documents/.gitkeep
-data/knowledge_graph/*
+!data/documents/**/.gitkeep
+data/knowledge_graph/**/*
 !data/knowledge_graph/.gitkeep
-data/sample/*
+!data/knowledge_graph/**/.gitkeep
+data/sample/**/*
 !data/sample/.gitkeep
+!data/sample/**/.gitkeep
+
+# 临时文件（文档处理时生成）
+data/temp/
+data/cache/
 
 # Temporary files
 *.tmp

@@ -1,0 +1,211 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: medical-consultation
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: your-registry/medical-backend:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+        env:
+        # 从ConfigMap读取配置
+        - name: APP_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: APP_NAME
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: ENVIRONMENT
+        - name: DATABASE_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB)"
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: POSTGRES_USER
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: POSTGRES_PASSWORD
+        - name: POSTGRES_DB
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: POSTGRES_DB
+        - name: REDIS_URL
+          value: "redis://redis-service:6379/0"
+        - name: NEO4J_URI
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: NEO4J_URI
+        - name: NEO4J_USER
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: NEO4J_USER
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: NEO4J_PASSWORD
+        - name: MILVUS_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: MILVUS_HOST
+        - name: MILVUS_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: MILVUS_PORT
+        - name: QWEN_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: QWEN_API_KEY
+        - name: LANGFUSE_PUBLIC_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: LANGFUSE_PUBLIC_KEY
+        - name: LANGFUSE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: LANGFUSE_SECRET_KEY
+        # 对象存储配置
+        - name: OBJECT_STORAGE_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: OBJECT_STORAGE_TYPE
+        - name: OBJECT_STORAGE_ENDPOINT
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: OBJECT_STORAGE_ENDPOINT
+        - name: OBJECT_STORAGE_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: OBJECT_STORAGE_BUCKET
+        - name: OBJECT_STORAGE_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: OBJECT_STORAGE_ACCESS_KEY
+        - name: OBJECT_STORAGE_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: OBJECT_STORAGE_SECRET_KEY
+        - name: OBJECT_STORAGE_USE_SSL
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: OBJECT_STORAGE_USE_SSL
+        - name: MAX_UPLOAD_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: MAX_UPLOAD_SIZE
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        # 注意：生产环境不需要挂载data目录，文档存储在对象存储中
+        # volumeMounts:
+        # - name: data-volume
+        #   mountPath: /app/data
+      # volumes:
+      # - name: data-volume
+      #   persistentVolumeClaim:
+      #     claimName: data-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: medical-consultation
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: backend-hpa
+  namespace: medical-consultation
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: backend
+  minReplicas: 3
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+# 注意：生产环境不需要data目录的PVC，文档存储在对象存储中
+# ---
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: data-pvc
+#   namespace: medical-consultation
+# spec:
+#   accessModes:
+#     - ReadWriteMany
+#   resources:
+#     requests:
+#       storage: 10Gi
+

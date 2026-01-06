@@ -55,9 +55,18 @@ class Settings(BaseSettings):
     RATE_LIMIT_CALLS: int = 100  # 允许的请求数
     RATE_LIMIT_PERIOD: int = 60  # 时间窗口（秒）
     
-    # File Storage
+    # File Storage (Local - for development only)
     UPLOAD_DIR: str = "./data/documents"
     MAX_UPLOAD_SIZE: int = 10485760  # 10MB
+    
+    # Object Storage Configuration
+    OBJECT_STORAGE_TYPE: str = "minio"  # "minio" | "s3" | "oss" | "local"
+    OBJECT_STORAGE_ENDPOINT: str = "localhost:9000"  # MinIO/S3/OSS端点
+    OBJECT_STORAGE_ACCESS_KEY: str = "minioadmin"
+    OBJECT_STORAGE_SECRET_KEY: str = "minioadmin"
+    OBJECT_STORAGE_BUCKET: str = "medical-documents"
+    OBJECT_STORAGE_REGION: Optional[str] = None  # S3/OSS区域
+    OBJECT_STORAGE_USE_SSL: bool = False  # 是否使用SSL
     
     # Logging
     LOG_LEVEL: str = "INFO"
