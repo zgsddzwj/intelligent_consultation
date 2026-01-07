@@ -38,8 +38,9 @@ services:
     image: neo4j:5
     container_name: medical_neo4j
     environment:
-      NEO4J_AUTH: neo4j/neo4j
+      NEO4J_AUTH: neo4j/medical123  # 修改密码，不能使用默认值
       NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
     ports:
       - "7474:7474"  # HTTP
       - "7687:7687"  # Bolt

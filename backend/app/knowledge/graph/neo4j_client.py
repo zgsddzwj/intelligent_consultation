@@ -30,8 +30,13 @@ class Neo4jClient:
     def execute_write(self, query: str, parameters: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """执行写操作"""
         with self.driver.session() as session:
-            result = session.write_transaction(lambda tx: tx.run(query, parameters or {}))
-            return [record.data() for record in result]
+            # Neo4j 5.0+ 使用 execute_write
+            # 在事务内部处理结果，避免事务关闭后访问结果
+            def work(tx):
+                result = tx.run(query, parameters or {})
+                # 在事务内立即消费结果
+                return [record.data() for record in result]
+            return session.execute_write(work)
     
     def create_indexes(self):
         """创建索引"""

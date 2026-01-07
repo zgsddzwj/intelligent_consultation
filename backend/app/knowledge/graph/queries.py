@@ -113,16 +113,36 @@ class CypherQueries:
     @staticmethod
     def create_relationship(from_type: str, from_name: str, 
                            rel_type: str, to_type: str, to_name: str,
-                           properties: Optional[Dict] = None) -> str:
-        """创建关系"""
+                           properties: Optional[Dict] = None, merge: bool = True) -> str:
+        """创建关系（默认使用MERGE避免重复）"""
         rel_props = ""
         if properties:
             props_str = ", ".join([f"{k}: ${k}" for k in properties.keys()])
             rel_props = f" {{{props_str}}}"
         
-        return f"""
-        MATCH (a:{from_type} {{name: $from_name}})
-        MATCH (b:{to_type} {{name: $to_name}})
-        CREATE (a)-[r:{rel_type}{rel_props}]->(b)
-        RETURN r
-        """
+        if merge:
+            # 使用MERGE避免重复创建关系
+            if properties:
+                set_props = ", ".join([f"r.{k} = ${k}" for k in properties.keys()])
+                return f"""
+                MATCH (a:{from_type} {{name: $from_name}})
+                MATCH (b:{to_type} {{name: $to_name}})
+                MERGE (a)-[r:{rel_type}]->(b)
+                SET {set_props}
+                RETURN r
+                """
+            else:
+                return f"""
+                MATCH (a:{from_type} {{name: $from_name}})
+                MATCH (b:{to_type} {{name: $to_name}})
+                MERGE (a)-[r:{rel_type}]->(b)
+                RETURN r
+                """
+        else:
+            # 使用CREATE（不推荐，可能重复）
+            return f"""
+            MATCH (a:{from_type} {{name: $from_name}})
+            MATCH (b:{to_type} {{name: $to_name}})
+            CREATE (a)-[r:{rel_type}{rel_props}]->(b)
+            RETURN r
+            """

@@ -19,28 +19,39 @@ class KnowledgeGraphBuilder:
             self._client = get_neo4j_client()
         return self._client
     
-    def create_entity(self, entity_type: str, name: str, properties: Dict[str, Any] = None):
+    def create_entity(self, entity_type: str, name: str, properties: Dict[str, Any] = None, merge: bool = False):
         """创建实体节点"""
         properties = properties or {}
         properties["name"] = name
         
         props_str = ", ".join([f"{k}: ${k}" for k in properties.keys()])
-        query = f"CREATE (e:{entity_type} {{{props_str}}}) RETURN e"
+        set_str = ", ".join([f"e.{k} = ${k}" for k in properties.keys() if k != "name"])
+        
+        if merge:
+            # 使用MERGE避免重复创建
+            if set_str:
+                query = f"MERGE (e:{entity_type} {{name: $name}}) SET {set_str} RETURN e"
+            else:
+                query = f"MERGE (e:{entity_type} {{name: $name}}) RETURN e"
+        else:
+            query = f"CREATE (e:{entity_type} {{{props_str}}}) RETURN e"
         
         try:
             result = self.client.execute_write(query, properties)
-            app_logger.info(f"创建实体: {entity_type} - {name}")
+            # 减少日志输出，只在debug模式下记录
+            # if not merge:
+            #     app_logger.debug(f"创建实体: {entity_type} - {name}")
             return result
         except Exception as e:
-            app_logger.error(f"创建实体失败: {e}")
+            app_logger.warning(f"创建实体失败 {entity_type}:{name}: {str(e)[:100]}")
             raise
     
     def create_relationship(self, from_type: str, from_name: str,
                            rel_type: str, to_type: str, to_name: str,
-                           properties: Dict[str, Any] = None):
-        """创建关系"""
+                           properties: Dict[str, Any] = None, merge: bool = True):
+        """创建关系（默认使用MERGE避免重复）"""
         query = self.queries.create_relationship(
-            from_type, from_name, rel_type, to_type, to_name, properties
+            from_type, from_name, rel_type, to_type, to_name, properties, merge=merge
         )
         
         params = {
@@ -52,10 +63,11 @@ class KnowledgeGraphBuilder:
         
         try:
             result = self.client.execute_write(query, params)
-            app_logger.info(f"创建关系: {from_type}({from_name}) -[{rel_type}]-> {to_type}({to_name})")
+            # 减少日志输出，只在debug模式下记录
+            # app_logger.debug(f"创建关系: {from_type}({from_name}) -[{rel_type}]-> {to_type}({to_name})")
             return result
         except Exception as e:
-            app_logger.error(f"创建关系失败: {e}")
+            app_logger.warning(f"创建关系失败: {from_type}({from_name})-[{rel_type}]->{to_type}({to_name}): {str(e)[:100]}")
             raise
     
     def query_disease_info(self, disease_name: str) -> Dict:
