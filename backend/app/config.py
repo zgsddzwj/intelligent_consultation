@@ -18,31 +18,39 @@ class Settings(BaseSettings):
     CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:5173"]
     
     # Database
-    DATABASE_URL: str = "postgresql://postgres:postgres@localhost:5432/medical_consultation"
+    DATABASE_URL: str = ""  # 从.env读取，格式: postgresql://user:password@host:port/dbname
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     
     # Redis
-    REDIS_URL: str = "redis://localhost:6379/0"
+    REDIS_URL: str = ""  # 从.env读取，格式: redis://host:port/db
     REDIS_CACHE_TTL: int = 3600
     
     # Neo4j
     NEO4J_URI: str = "bolt://localhost:7687"
     NEO4J_USER: str = "neo4j"
-    NEO4J_PASSWORD: str = "neo4j"
+    NEO4J_PASSWORD: str = ""  # 从.env读取
     
     # Milvus
     MILVUS_HOST: str = "localhost"
     MILVUS_PORT: int = 19530
     MILVUS_COLLECTION_NAME: str = "medical_documents"
     
-    # LLM - Qwen
-    QWEN_API_KEY: str = ""
-    QWEN_MODEL: str = "qwen-turbo"
-    QWEN_EMBEDDING_MODEL: str = "text-embedding-v2"
+    # LLM Provider Configuration
+    LLM_PROVIDER: str = "qwen"  # "qwen" | "deepseek" - 从.env读取
+    
+    # LLM - Qwen (阿里云百炼)
+    QWEN_API_KEY: str = ""  # 从.env读取
+    QWEN_MODEL: str = "qwen-turbo"  # 从.env读取，默认qwen-turbo
+    QWEN_EMBEDDING_MODEL: str = "text-embedding-v2"  # 从.env读取
+    
+    # LLM - DeepSeek (兼容OpenAI API)
+    DEEPSEEK_API_KEY: str = ""  # 从.env读取
+    DEEPSEEK_MODEL: str = "deepseek-chat"  # 从.env读取，默认deepseek-chat
+    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"  # DeepSeek API端点
     
     # Security
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = ""  # JWT密钥，从.env读取
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     ENCRYPTION_KEY: Optional[str] = None  # 数据加密密钥（Fernet格式）
@@ -62,8 +70,8 @@ class Settings(BaseSettings):
     # Object Storage Configuration
     OBJECT_STORAGE_TYPE: str = "minio"  # "minio" | "s3" | "oss" | "local"
     OBJECT_STORAGE_ENDPOINT: str = "localhost:9000"  # MinIO/S3/OSS端点
-    OBJECT_STORAGE_ACCESS_KEY: str = "minioadmin"
-    OBJECT_STORAGE_SECRET_KEY: str = "minioadmin"
+    OBJECT_STORAGE_ACCESS_KEY: str = ""  # 从.env读取
+    OBJECT_STORAGE_SECRET_KEY: str = ""  # 从.env读取
     OBJECT_STORAGE_BUCKET: str = "medical-documents"
     OBJECT_STORAGE_REGION: Optional[str] = None  # S3/OSS区域
     OBJECT_STORAGE_USE_SSL: bool = False  # 是否使用SSL

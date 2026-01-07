@@ -1,4 +1,4 @@
-"""LLM服务 - Qwen模型集成"""
+"""LLM服务 - 支持Qwen和DeepSeek动态切换"""
 import dashscope
 from dashscope import Generation
 from typing import List, Dict, Optional, AsyncGenerator
@@ -12,19 +12,53 @@ from app.services.semantic_cache import semantic_cache
 from app.infrastructure.monitoring import track_llm_request, track_llm_cache_hit
 
 settings = get_settings()
-dashscope.api_key = settings.QWEN_API_KEY
+
+# 初始化Qwen API Key（如果使用Qwen）
+if settings.LLM_PROVIDER == "qwen":
+    dashscope.api_key = settings.QWEN_API_KEY
 
 # LLM服务断路器
 llm_circuit_breaker = get_circuit_breaker("llm_service", failure_threshold=5, recovery_timeout=60)
 
 
 class LLMService:
-    """LLM服务类"""
+    """LLM服务类 - 支持Qwen和DeepSeek动态切换"""
     
     def __init__(self):
-        self.model = settings.QWEN_MODEL
-        self.api_key = settings.QWEN_API_KEY
+        self.provider = settings.LLM_PROVIDER.lower()
         self.prompt_version = settings.PROMPT_VERSION
+        
+        # 根据provider初始化配置
+        if self.provider == "deepseek":
+            self.model = settings.DEEPSEEK_MODEL
+            self.api_key = settings.DEEPSEEK_API_KEY
+            self.base_url = settings.DEEPSEEK_BASE_URL
+            # 初始化OpenAI客户端（DeepSeek兼容OpenAI API）
+            try:
+                from openai import OpenAI
+                self.client = OpenAI(
+                    api_key=self.api_key,
+                    base_url=self.base_url
+                )
+            except ImportError:
+                app_logger.error("OpenAI库未安装，无法使用DeepSeek。请运行: pip install openai")
+                raise LLMServiceException(
+                    "OpenAI库未安装，无法使用DeepSeek",
+                    error_code=ErrorCode.LLM_SERVICE_ERROR
+                )
+        elif self.provider == "qwen":
+            self.model = settings.QWEN_MODEL
+            self.api_key = settings.QWEN_API_KEY
+            self.client = None
+            # 确保dashscope已配置
+            dashscope.api_key = self.api_key
+        else:
+            raise LLMServiceException(
+                f"不支持的LLM Provider: {self.provider}，支持: qwen, deepseek",
+                error_code=ErrorCode.LLM_SERVICE_ERROR
+            )
+        
+        app_logger.info(f"LLM服务初始化完成，Provider: {self.provider}, Model: {self.model}")
     
     @retry(max_attempts=3, delay=1.0, backoff=2.0, exceptions=(Exception,))
     def generate(self, prompt: str, system_prompt: str = None, 
@@ -197,19 +231,32 @@ class LLMService:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
             
-            response = Generation.call(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs
-            )
-            
-            if response.status_code == 200:
-                return response.output.choices[0].message.content
+            if self.provider == "deepseek":
+                # 使用OpenAI兼容API调用DeepSeek
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs
+                )
+                return response.choices[0].message.content
+            elif self.provider == "qwen":
+                # 使用Dashscope调用Qwen
+                response = Generation.call(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs
+                )
+                if response.status_code == 200:
+                    return response.output.choices[0].message.content
+                else:
+                    app_logger.error(f"LLM生成失败: {response.message}")
+                    raise Exception(f"LLM生成失败: {response.message}")
             else:
-                app_logger.error(f"LLM生成失败: {response.message}")
-                raise Exception(f"LLM生成失败: {response.message}")
+                raise Exception(f"不支持的Provider: {self.provider}")
                 
         except Exception as e:
             app_logger.error(f"LLM调用出错: {e}")
@@ -250,29 +297,49 @@ class LLMService:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
             
-            responses = Generation.call(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                stream=True,
-                **kwargs
-            )
-            
-            for response in responses:
-                if response.status_code == 200:
-                    if response.output.choices:
-                        content = response.output.choices[0].message.content
-                        if content:
-                            # 记录首token时间
-                            if first_token_time is None:
-                                first_token_time = time.time()
-                            
-                            full_output += content
-                            yield content
-                else:
-                    app_logger.error(f"流式生成失败: {response.message}")
-                    break
+            if self.provider == "deepseek":
+                # 使用OpenAI兼容API流式调用DeepSeek
+                stream = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=True,
+                    **kwargs
+                )
+                for chunk in stream:
+                    if chunk.choices and chunk.choices[0].delta.content:
+                        content = chunk.choices[0].delta.content
+                        # 记录首token时间
+                        if first_token_time is None:
+                            first_token_time = time.time()
+                        full_output += content
+                        yield content
+            elif self.provider == "qwen":
+                # 使用Dashscope流式调用Qwen
+                responses = Generation.call(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    stream=True,
+                    **kwargs
+                )
+                for response in responses:
+                    if response.status_code == 200:
+                        if response.output.choices:
+                            content = response.output.choices[0].message.content
+                            if content:
+                                # 记录首token时间
+                                if first_token_time is None:
+                                    first_token_time = time.time()
+                                full_output += content
+                                yield content
+                    else:
+                        app_logger.error(f"流式生成失败: {response.message}")
+                        break
+            else:
+                raise Exception(f"不支持的Provider: {self.provider}")
             
             # 记录完整的流式生成结果
             if langfuse_service.enabled:
@@ -362,16 +429,34 @@ class LLMService:
         start_time = time.time()
         
         try:
-            response = Generation.call(
-                model=self.model,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                **kwargs
-            )
+            if self.provider == "deepseek":
+                # 使用OpenAI兼容API调用DeepSeek
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs
+                )
+                result = response.choices[0].message.content
+            elif self.provider == "qwen":
+                # 使用Dashscope调用Qwen
+                response = Generation.call(
+                    model=self.model,
+                    messages=messages,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    **kwargs
+                )
+                if response.status_code == 200:
+                    result = response.output.choices[0].message.content
+                else:
+                    app_logger.error(f"对话失败: {response.message}")
+                    raise Exception(f"对话失败: {response.message}")
+            else:
+                raise Exception(f"不支持的Provider: {self.provider}")
             
-            if response.status_code == 200:
-                result = response.output.choices[0].message.content
+            if result:
                 
                 # 记录到Langfuse
                 if langfuse_service.enabled:
@@ -403,8 +488,7 @@ class LLMService:
                 
                 return result
             else:
-                app_logger.error(f"对话失败: {response.message}")
-                raise Exception(f"对话失败: {response.message}")
+                raise Exception("LLM返回结果为空")
                 
         except Exception as e:
             app_logger.error(f"对话出错: {e}")

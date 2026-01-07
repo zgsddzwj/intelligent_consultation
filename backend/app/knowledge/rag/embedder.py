@@ -2,7 +2,7 @@
 from typing import List
 import dashscope
 try:
-    from dashscope import Embeddings
+from dashscope import Embeddings
 except ImportError:
     # 新版本dashscope使用不同的API
     try:
@@ -34,10 +34,10 @@ class Embedder:
                     input=texts
                 )
             else:
-                result = Embeddings.call(
-                    model=self.model,
-                    input=texts
-                )
+            result = Embeddings.call(
+                model=self.model,
+                input=texts
+            )
             
             if result.status_code == 200:
                 embeddings = [item['embedding'] for item in result.output['embeddings']]
