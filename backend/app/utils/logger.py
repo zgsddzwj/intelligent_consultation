@@ -28,9 +28,9 @@ def setup_logger():
         # 添加请求ID（如果存在）- 延迟导入避免循环依赖
         try:
             from app.common.tracing import get_request_id
-        request_id = get_request_id()
-        if request_id:
-            log_data["request_id"] = request_id
+            request_id = get_request_id()
+            if request_id:
+                log_data["request_id"] = request_id
         except (ImportError, RuntimeError):
             pass
         
