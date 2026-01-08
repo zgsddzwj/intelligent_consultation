@@ -57,8 +57,10 @@ cryptography==41.0.7  # 数据加密
 # Utilities
 python-dotenv==1.0.0
 httpx==0.25.2
+aiohttp==3.9.1  # 异步HTTP客户端（用于MinerU API）
 aiofiles==23.2.1
 loguru==0.7.2
+pandas==2.1.4  # 表格数据处理（用于PDF数据导出）
 
 # Object Storage
 minio==7.2.0  # MinIO客户端

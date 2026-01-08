@@ -117,6 +117,32 @@ class Settings(BaseSettings):
     ENABLE_OCR: bool = True
     ENABLE_MULTIMODAL_LLM: bool = True
     
+    # MinerU Configuration
+    ENABLE_MINERU: bool = False  # 是否启用MinerU
+    MINERU_API_URL: str = ""  # MinerU服务地址
+    MINERU_API_KEY: Optional[str] = None  # API密钥（如果需要）
+    MINERU_OUTPUT_DIR: str = "./data/mineru_output"  # MinerU输出目录
+    MINERU_TIMEOUT: int = 300  # 超时时间（秒）
+    
+    # PDF Parser Configuration
+    PDF_PARSER_TYPE: str = "pdfplumber"  # "pdfplumber" | "mineru"
+    PDF_PARSER_FALLBACK: bool = True  # MinerU失败时是否回退到pdfplumber
+    
+    # Table/Image Description Configuration
+    ENABLE_TABLE_DESCRIPTION: bool = False
+    TABLE_DESCRIPTION_API_KEY: Optional[str] = None
+    TABLE_DESCRIPTION_MODEL: str = "deepseek-chat"
+    TABLE_DESCRIPTION_BASE_URL: str = "https://api.deepseek.com"
+    
+    ENABLE_IMAGE_DESCRIPTION: bool = False
+    IMAGE_DESCRIPTION_API_KEY: Optional[str] = None
+    IMAGE_DESCRIPTION_MODEL: str = "gpt-4o"
+    IMAGE_DESCRIPTION_BASE_URL: str = "https://api.openai.com/v1"
+    
+    # Export Configuration
+    PDF_EXPORT_DIR: str = "./data/pdf_exports"
+    ENABLE_PDF_EXPORT: bool = True
+    
     # Langfuse Configuration
     ENABLE_LANGFUSE: bool = True
     LANGFUSE_PUBLIC_KEY: Optional[str] = None

@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 import re
 from app.utils.logger import app_logger
 from app.knowledge.rag.image_processor import ImageProcessor
+from app.knowledge.rag.pdf_parser import PDFParserFactory
 
 
 class DocumentProcessor:
@@ -17,42 +18,56 @@ class DocumentProcessor:
         self.chunk_overlap = chunk_overlap
         self.enable_image_processing = enable_image_processing
         self.image_processor = ImageProcessor() if enable_image_processing else None
+        # 初始化PDF解析器（支持MinerU和pdfplumber）
+        try:
+            self.pdf_parser = PDFParserFactory.create_parser_with_fallback()
+        except Exception as e:
+            app_logger.warning(f"PDF解析器初始化失败，使用默认pdfplumber: {e}")
+            from app.knowledge.rag.pdfplumber_parser import PDFPlumberParser
+            self.pdf_parser = PDFPlumberParser(enable_image_processing=enable_image_processing)
     
     def extract_text_from_pdf(self, file_path: str, extract_images: bool = True) -> Dict[str, Any]:
-        """从PDF提取文本和图片"""
+        """从PDF提取文本和图片（使用配置的PDF解析器）"""
         try:
-            text = ""
-            image_texts = []
+            # 使用PDF解析器工厂创建的解析器
+            parser_result = self.pdf_parser.parse_pdf(file_path, extract_images=extract_images)
             
-            with pdfplumber.open(file_path) as pdf:
-                for page_num, page in enumerate(pdf.pages, start=1):
-                    # 提取文本
-                    page_text = page.extract_text()
-                    if page_text:
-                        text += f"[页{page_num}]\n{page_text}\n\n"
-                    
-                    # 提取图片（如果启用）
-                    if extract_images and self.image_processor:
-                        try:
-                            # 提取页面中的图片
-                            images = self.image_processor.extract_images_from_pdf(file_path)
-                            
-                            # 处理每张图片
-                            for img_info in images:
-                                if img_info.get("page") == page_num:
-                                    # 这里简化处理，实际需要从PDF中提取图片字节
-                                    # 可以使用PyMuPDF等库更好地提取图片
-                                    app_logger.info(f"检测到图片 (页{page_num})")
-                        except Exception as e:
-                            app_logger.warning(f"图片提取失败 (页{page_num}): {e}")
+            # 转换结果格式以保持向后兼容
+            text = parser_result.get("text", "")
+            images = parser_result.get("images", [])
+            
+            # 处理图片文本（如果有AI描述）
+            image_texts = []
+            if images and extract_images:
+                for img_info in images:
+                    if img_info.get("ai_description"):
+                        image_texts.append(img_info.get("ai_description"))
+                    elif img_info.get("description"):
+                        image_texts.append(img_info.get("description"))
+            
+            # 如果使用MinerU解析器，尝试使用markdown格式
+            if parser_result.get("markdown") and self.pdf_parser.get_parser_type() == "mineru":
+                # 可以选择使用markdown格式的文本
+                text = parser_result.get("markdown", text)
             
             return {
                 "text": text,
                 "image_texts": image_texts,
-                "has_images": len(image_texts) > 0
+                "has_images": len(images) > 0 or parser_result.get("has_images", False),
+                "tables": parser_result.get("tables", []),
+                "images": images,
+                "metadata": parser_result.get("metadata", {})
             }
         except Exception as e:
             app_logger.error(f"PDF提取失败: {e}")
+            # 如果失败且有错误结果，返回错误信息
+            if hasattr(e, 'error') and isinstance(e.error, dict):
+                return {
+                    "text": "",
+                    "image_texts": [],
+                    "has_images": False,
+                    "error": str(e)
+                }
             raise
     
     def extract_text_from_docx(self, file_path: str) -> str:
@@ -128,16 +143,16 @@ class DocumentProcessor:
         path = Path(file_path)
         suffix = path.suffix.lower()
         
-        if suffix == ".pdf" and extract_images and self.image_processor:
-            # PDF文件，提取文本和图片
-            pdf_result = self.extract_text_from_pdf(file_path, extract_images=True)
+        if suffix == ".pdf":
+            # PDF文件，使用新的PDF解析器
+            pdf_result = self.extract_text_from_pdf(file_path, extract_images=extract_images)
             text = pdf_result["text"]
             
-            # 处理图片（如果有）
-            if pdf_result.get("has_images") and self.image_processor:
-                # 这里可以进一步处理图片
-                # 实际实现中需要从PDF提取图片字节并处理
-                app_logger.info("检测到PDF中的图片，将进行OCR和内容理解")
+            # 处理图片和表格（如果有）
+            if pdf_result.get("has_images"):
+                app_logger.info(f"检测到PDF中的图片，数量: {len(pdf_result.get('images', []))}")
+            if pdf_result.get("tables"):
+                app_logger.info(f"检测到PDF中的表格，数量: {len(pdf_result.get('tables', []))}")
         else:
             # 其他文件类型或图片处理未启用
             text = self.extract_text(file_path, extract_images=False)
