@@ -7,16 +7,19 @@ import re
 from app.utils.logger import app_logger
 from app.knowledge.rag.image_processor import ImageProcessor
 from app.knowledge.rag.pdf_parser import PDFParserFactory
+from app.knowledge.rag.structure_aware_chunker import StructureAwareChunker
 
 
 class DocumentProcessor:
     """文档处理器"""
     
     def __init__(self, chunk_size: int = 500, chunk_overlap: int = 50, 
-                 enable_image_processing: bool = True):
+                 enable_image_processing: bool = True,
+                 use_structure_aware_chunking: bool = True):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.enable_image_processing = enable_image_processing
+        self.use_structure_aware_chunking = use_structure_aware_chunking
         self.image_processor = ImageProcessor() if enable_image_processing else None
         # 初始化PDF解析器（支持MinerU和pdfplumber）
         try:
@@ -25,6 +28,14 @@ class DocumentProcessor:
             app_logger.warning(f"PDF解析器初始化失败，使用默认pdfplumber: {e}")
             from app.knowledge.rag.pdfplumber_parser import PDFPlumberParser
             self.pdf_parser = PDFPlumberParser(enable_image_processing=enable_image_processing)
+        # 初始化结构感知分块器
+        if self.use_structure_aware_chunking:
+            self.structure_chunker = StructureAwareChunker(
+                chunk_size=self.chunk_size,
+                chunk_overlap=self.chunk_overlap
+            )
+        else:
+            self.structure_chunker = None
     
     def extract_text_from_pdf(self, file_path: str, extract_images: bool = True) -> Dict[str, Any]:
         """从PDF提取文本和图片（使用配置的PDF解析器）"""
@@ -146,28 +157,116 @@ class DocumentProcessor:
         if suffix == ".pdf":
             # PDF文件，使用新的PDF解析器
             pdf_result = self.extract_text_from_pdf(file_path, extract_images=extract_images)
-            text = pdf_result["text"]
+            text = pdf_result.get("text", "")
+            markdown_text = pdf_result.get("markdown", "")
+            tables = pdf_result.get("tables", [])
+            images = pdf_result.get("images", [])
             
             # 处理图片和表格（如果有）
             if pdf_result.get("has_images"):
-                app_logger.info(f"检测到PDF中的图片，数量: {len(pdf_result.get('images', []))}")
-            if pdf_result.get("tables"):
-                app_logger.info(f"检测到PDF中的表格，数量: {len(pdf_result.get('tables', []))}")
+                app_logger.info(f"检测到PDF中的图片，数量: {len(images)}")
+            if tables:
+                app_logger.info(f"检测到PDF中的表格，数量: {len(tables)}")
+            
+            # 更新元数据
+            doc_metadata = metadata or {}
+            doc_metadata["file_path"] = file_path
+            doc_metadata["file_name"] = Path(file_path).name
+            doc_metadata["has_images"] = extract_images
+            doc_metadata["has_tables"] = len(tables) > 0
+            doc_metadata["parser_type"] = pdf_result.get("metadata", {}).get("parser_type", "unknown")
+            
+            # 使用结构感知分块（如果是MinerU解析结果且有结构感知分块器）
+            use_structure_aware = (
+                self.use_structure_aware_chunking 
+                and self.structure_chunker 
+                and pdf_result.get("metadata", {}).get("parser_type") == "mineru"
+                and (tables or images or markdown_text)
+            )
+            
+            if use_structure_aware:
+                app_logger.info("使用结构感知分块处理PDF文档")
+                chunks = self.split_text_structure_aware(
+                    content={
+                        "text": text,
+                        "markdown": markdown_text,
+                        "tables": tables,
+                        "images": images
+                    },
+                    source=source,
+                    metadata=doc_metadata
+                )
+            else:
+                # 使用传统分块方式
+                text_to_chunk = markdown_text if markdown_text else text
+                chunks = self.split_text(text_to_chunk, source, doc_metadata)
         else:
             # 其他文件类型或图片处理未启用
             text = self.extract_text(file_path, extract_images=False)
-        
-        # 更新元数据
-        doc_metadata = metadata or {}
-        doc_metadata["file_path"] = file_path
-        doc_metadata["file_name"] = Path(file_path).name
-        doc_metadata["has_images"] = extract_images and suffix == ".pdf"
-        
-        # 分块
-        chunks = self.split_text(text, source, doc_metadata)
+            
+            # 更新元数据
+            doc_metadata = metadata or {}
+            doc_metadata["file_path"] = file_path
+            doc_metadata["file_name"] = Path(file_path).name
+            doc_metadata["has_images"] = False
+            
+            # 分块
+            chunks = self.split_text(text, source, doc_metadata)
         
         app_logger.info(f"文档处理完成，生成 {len(chunks)} 个文本块")
         return chunks
+    
+    def split_text_structure_aware(self, content: Dict[str, Any], source: str = "", 
+                                   metadata: Dict = None) -> List[Dict[str, Any]]:
+        """
+        结构感知分块
+        
+        Args:
+            content: 包含text、markdown、tables、images的字典
+            source: 文档来源
+            metadata: 元数据
+        
+        Returns:
+            分块列表
+        """
+        if not self.structure_chunker:
+            # 如果没有结构感知分块器，降级到普通分块
+            text = content.get("text", "") or content.get("markdown", "")
+            return self.split_text(text, source, metadata)
+        
+        try:
+            # 1. 解析文档结构
+            structure = self.structure_chunker.parse_structure(content)
+            
+            # 2. 按结构分块
+            chunks = self.structure_chunker.chunk_by_structure(structure)
+            
+            # 3. 转换为标准格式并添加元数据
+            result_chunks = []
+            for i, chunk in enumerate(chunks):
+                result_chunk = {
+                    "text": chunk.get("text", ""),
+                    "source": source,
+                    "metadata": {
+                        **(metadata or {}),
+                        "chunk_index": i,
+                        "chunk_type": chunk.get("chunk_type", "text"),
+                        "chunk_title": chunk.get("title", ""),
+                        "chunk_level": chunk.get("level", 0),
+                        "parent_title": chunk.get("parent_title"),
+                        **chunk.get("metadata", {})
+                    }
+                }
+                result_chunks.append(result_chunk)
+            
+            app_logger.info(f"结构感知分块完成，生成 {len(result_chunks)} 个块")
+            return result_chunks
+        
+        except Exception as e:
+            app_logger.error(f"结构感知分块失败，降级到普通分块: {e}")
+            # 降级到普通分块
+            text = content.get("text", "") or content.get("markdown", "")
+            return self.split_text(text, source, metadata)
     
     def process_document_from_storage(self, object_key: str, source: str = "", 
                                      metadata: Dict = None, 

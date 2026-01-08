@@ -151,22 +151,55 @@ class MinerUParser(BasePDFParser):
                     content_type = content_item.get("type", "")
                     if content_type == "image" or "image" in str(content_type).lower():
                         image_path = content_item.get("path", "")
+                        if not image_path:
+                            # 如果content_list中没有路径，尝试从Images文件夹查找
+                            page_num = content_item.get("page_num", 0)
+                            image_index = content_item.get("index", idx)
+                            # 尝试多种可能的图片路径格式
+                            possible_paths = [
+                                extract_dir / "Images" / f"page_{page_num}_{image_index}.png",
+                                extract_dir / "Images" / f"page_{page_num}_{image_index}.jpg",
+                                extract_dir / "Images" / f"{page_num}_{image_index}.png",
+                                extract_dir / "images" / f"page_{page_num}_{image_index}.png",
+                                extract_dir / "images" / f"{page_num}_{image_index}.png",
+                                extract_dir / "output" / "Images" / f"page_{page_num}_{image_index}.png",
+                            ]
+                            
+                            for possible_path in possible_paths:
+                                if possible_path.exists():
+                                    image_path = str(possible_path)
+                                    break
+                        
                         if image_path:
                             # 处理相对路径
                             if not Path(image_path).is_absolute():
-                                image_path = extract_dir / image_path
+                                full_path = extract_dir / image_path
+                                if not full_path.exists():
+                                    # 尝试从Images文件夹查找
+                                    image_name = Path(image_path).name
+                                    images_dir = extract_dir / "Images"
+                                    if images_dir.exists():
+                                        image_file = images_dir / image_name
+                                        if image_file.exists():
+                                            full_path = image_file
+                                        else:
+                                            # 查找Images文件夹下的所有图片，按索引匹配
+                                            image_files = sorted(list(images_dir.glob("*")))
+                                            if idx < len(image_files):
+                                                full_path = image_files[idx]
+                                image_path = str(full_path) if full_path.exists() else str(extract_dir / image_path)
                             else:
-                                image_path = Path(image_path)
+                                image_path = str(Path(image_path))
                             
                             # 提取上下文（前后文本）
-                            context_before = content_item.get("context_before", "")
-                            context_after = content_item.get("context_after", "")
-                            title = content_item.get("title", "")
+                            context_before = content_item.get("context_before", "") or content_item.get("text_before", "") or content_item.get("before_text", "")
+                            context_after = content_item.get("context_after", "") or content_item.get("text_after", "") or content_item.get("after_text", "")
+                            title = content_item.get("title", "") or content_item.get("caption", "") or content_item.get("image_title", "")
                             
                             image_data = {
                                 "page": content_item.get("page_num", 0),
                                 "index": idx,
-                                "path": str(image_path),
+                                "path": image_path,
                                 "title": title,
                                 "bbox": content_item.get("bbox", {}),
                                 "context_before": context_before,
@@ -329,29 +362,51 @@ class MinerUParser(BasePDFParser):
                             text_parts.append(element_text)
                 text = "\n".join(text_parts)
             
-            # 6. 生成AI描述（如果启用）
+            # 6. 生成AI描述（如果启用）- 确保在分块前完成
             if self.description_generator:
                 # 生成表格描述（同步调用异步方法）
                 if tables and settings.ENABLE_TABLE_DESCRIPTION:
+                    app_logger.info(f"开始为 {len(tables)} 个表格生成AI描述...")
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
                         tables = loop.run_until_complete(
                             self.description_generator.generate_table_descriptions_batch(tables)
                         )
+                        # 验证描述已添加到元数据
+                        for table in tables:
+                            if not table.get("ai_description"):
+                                app_logger.warning(f"表格 {table.get('index')} 未生成AI描述")
                     finally:
                         loop.close()
+                    app_logger.info("表格AI描述生成完成")
+                else:
+                    # 即使未启用AI描述，也确保每个表格都有description字段
+                    for table in tables:
+                        if not table.get("ai_description"):
+                            table["ai_description"] = ""
                 
                 # 生成图片描述（同步调用异步方法）
                 if images and settings.ENABLE_IMAGE_DESCRIPTION:
+                    app_logger.info(f"开始为 {len(images)} 张图片生成AI描述...")
                     loop = asyncio.new_event_loop()
                     asyncio.set_event_loop(loop)
                     try:
                         images = loop.run_until_complete(
                             self.description_generator.generate_image_descriptions_batch(images)
                         )
+                        # 验证描述已添加到元数据
+                        for image in images:
+                            if not image.get("ai_description"):
+                                app_logger.warning(f"图片 {image.get('index')} 未生成AI描述")
                     finally:
                         loop.close()
+                    app_logger.info("图片AI描述生成完成")
+                else:
+                    # 即使未启用AI描述，也确保每张图片都有description字段
+                    for image in images:
+                        if not image.get("ai_description"):
+                            image["ai_description"] = ""
             
             # 7. 生成Markdown（带元数据）
             markdown_text = self._generate_markdown_with_metadata(text, tables, images)
