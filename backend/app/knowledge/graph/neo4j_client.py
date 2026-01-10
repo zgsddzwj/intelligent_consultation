@@ -14,29 +14,79 @@ class Neo4jClient:
         self.uri = settings.NEO4J_URI
         self.user = settings.NEO4J_USER
         self.password = settings.NEO4J_PASSWORD
-        self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
-        app_logger.info(f"已连接到Neo4j: {self.uri}")
+        self.driver = None
+        self._connected = False
+        try:
+            self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+            # 测试连接
+            self.driver.verify_connectivity()
+            self._connected = True
+            app_logger.info(f"已连接到Neo4j: {self.uri}")
+        except Exception as e:
+            app_logger.warning(f"Neo4j连接失败（将在首次使用时重试）: {e}")
+            self._connected = False
     
     def close(self):
         """关闭连接"""
-        self.driver.close()
+        if self.driver:
+            try:
+                self.driver.close()
+            except Exception as e:
+                app_logger.warning(f"关闭Neo4j连接失败: {e}")
+            finally:
+                self.driver = None
+                self._connected = False
     
     def execute_query(self, query: str, parameters: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """执行Cypher查询"""
-        with self.driver.session() as session:
-            result = session.run(query, parameters or {})
-            return [record.data() for record in result]
+        # 如果未连接，尝试重新连接
+        if not self._connected or not self.driver:
+            try:
+                self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+                self.driver.verify_connectivity()
+                self._connected = True
+                app_logger.info(f"Neo4j重新连接成功: {self.uri}")
+            except Exception as e:
+                app_logger.warning(f"Neo4j连接失败，返回空结果: {e}")
+                raise  # 重新抛出异常，让调用方处理
+        
+        try:
+            with self.driver.session() as session:
+                result = session.run(query, parameters or {})
+                return [record.data() for record in result]
+        except Exception as e:
+            # 连接可能已断开，标记为未连接
+            self._connected = False
+            app_logger.warning(f"Neo4j查询失败: {e}")
+            raise
     
     def execute_write(self, query: str, parameters: Optional[Dict] = None) -> List[Dict[str, Any]]:
         """执行写操作"""
-        with self.driver.session() as session:
-            # Neo4j 5.0+ 使用 execute_write
-            # 在事务内部处理结果，避免事务关闭后访问结果
-            def work(tx):
-                result = tx.run(query, parameters or {})
-                # 在事务内立即消费结果
-                return [record.data() for record in result]
-            return session.execute_write(work)
+        # 如果未连接，尝试重新连接
+        if not self._connected or not self.driver:
+            try:
+                self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
+                self.driver.verify_connectivity()
+                self._connected = True
+                app_logger.info(f"Neo4j重新连接成功: {self.uri}")
+            except Exception as e:
+                app_logger.warning(f"Neo4j连接失败，无法执行写操作: {e}")
+                raise  # 重新抛出异常，让调用方处理
+        
+        try:
+            with self.driver.session() as session:
+                # Neo4j 5.0+ 使用 execute_write
+                # 在事务内部处理结果，避免事务关闭后访问结果
+                def work(tx):
+                    result = tx.run(query, parameters or {})
+                    # 在事务内立即消费结果
+                    return [record.data() for record in result]
+                return session.execute_write(work)
+        except Exception as e:
+            # 连接可能已断开，标记为未连接
+            self._connected = False
+            app_logger.warning(f"Neo4j写操作失败: {e}")
+            raise
     
     def create_indexes(self):
         """创建索引"""

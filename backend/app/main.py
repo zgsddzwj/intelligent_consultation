@@ -110,11 +110,18 @@ async def metrics():
     return get_metrics()
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    """Favicon图标（避免404错误）"""
+    from starlette.responses import Response
+    return Response(status_code=204)  # No Content
+
+
 # 导入路由
 from app.api.v1 import consultation, agents, knowledge, users, image_analysis
-app.include_router(consultation.router, prefix=settings.API_V1_PREFIX, tags=["咨询"])
-app.include_router(agents.router, prefix=settings.API_V1_PREFIX, tags=["Agent"])
-app.include_router(knowledge.router, prefix=settings.API_V1_PREFIX, tags=["知识库"])
-app.include_router(users.router, prefix=settings.API_V1_PREFIX, tags=["用户"])
-app.include_router(image_analysis.router, prefix=settings.API_V1_PREFIX, tags=["图片分析"])
+app.include_router(consultation.router, prefix=f"{settings.API_V1_PREFIX}/consultation", tags=["咨询"])
+app.include_router(agents.router, prefix=f"{settings.API_V1_PREFIX}/agents", tags=["Agent"])
+app.include_router(knowledge.router, prefix=f"{settings.API_V1_PREFIX}/knowledge", tags=["知识库"])
+app.include_router(users.router, prefix=f"{settings.API_V1_PREFIX}/users", tags=["用户"])
+app.include_router(image_analysis.router, prefix=f"{settings.API_V1_PREFIX}/image", tags=["图片分析"])
 

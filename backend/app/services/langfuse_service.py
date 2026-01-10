@@ -3,8 +3,9 @@ from typing import Optional, Dict, Any, Callable
 from functools import wraps
 import time
 from langfuse import Langfuse
+
 try:
-from langfuse.decorators import langfuse_context, observe
+    from langfuse.decorators import langfuse_context, observe
 except ImportError:
     # 新版本langfuse可能没有decorators模块
     langfuse_context = None

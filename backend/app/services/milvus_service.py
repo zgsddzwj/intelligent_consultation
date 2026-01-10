@@ -42,7 +42,8 @@ class MilvusService:
             )
             app_logger.info(f"已连接到Milvus: {self.host}:{self.port}")
         except Exception as e:
-            app_logger.error(f"连接Milvus失败: {e}")
+            # 使用WARNING级别，因为调用方已有降级策略
+            app_logger.warning(f"连接Milvus失败（将降级处理）: {e}")
             raise
     
     def _ensure_collection(self):
@@ -127,7 +128,8 @@ class MilvusService:
                 self._ensure_collection()
                 self._connected = True
             except Exception as e:
-                app_logger.error(f"Milvus连接失败: {e}")
+                # 使用WARNING级别，因为已有降级策略（返回空列表）
+                app_logger.warning(f"Milvus连接失败，返回空结果: {e}")
                 return []  # 返回空列表而不是抛出异常
         
         if not self._collection:

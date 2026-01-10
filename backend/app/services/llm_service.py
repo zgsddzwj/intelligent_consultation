@@ -240,6 +240,15 @@ class LLMService:
                     max_tokens=max_tokens,
                     **kwargs
                 )
+                # 添加空值检查
+                if not response.choices or len(response.choices) == 0:
+                    error_msg = f"DeepSeek响应格式异常: choices为空, response={response}"
+                    app_logger.error(error_msg)
+                    raise Exception(error_msg)
+                if not response.choices[0].message or not response.choices[0].message.content:
+                    error_msg = "DeepSeek响应内容为空"
+                    app_logger.error(error_msg)
+                    raise Exception(error_msg)
                 return response.choices[0].message.content
             elif self.provider == "qwen":
                 # 使用Dashscope调用Qwen
@@ -251,10 +260,34 @@ class LLMService:
                     **kwargs
                 )
                 if response.status_code == 200:
-                    return response.output.choices[0].message.content
+                    # Qwen API有两种响应格式：
+                    # 1. 标准格式: response.output.choices[0].message.content
+                    # 2. 简化格式: response.output.text (当choices为null时)
+                    if not response.output:
+                        error_msg = f"Qwen响应格式异常: output为空, status_code={response.status_code}"
+                        app_logger.error(error_msg)
+                        raise Exception(error_msg)
+                    
+                    # 优先尝试标准格式 (choices)
+                    if hasattr(response.output, 'choices') and response.output.choices:
+                        if len(response.output.choices) > 0:
+                            if (response.output.choices[0].message and 
+                                hasattr(response.output.choices[0].message, 'content') and 
+                                response.output.choices[0].message.content):
+                                return response.output.choices[0].message.content
+                    
+                    # 回退到简化格式 (text字段)
+                    if hasattr(response.output, 'text') and response.output.text:
+                        return response.output.text
+                    
+                    # 如果两种格式都不可用，抛出错误
+                    error_msg = f"Qwen响应格式异常: 无法从choices或text字段获取内容, output={response.output}"
+                    app_logger.error(error_msg)
+                    raise Exception(error_msg)
                 else:
-                    app_logger.error(f"LLM生成失败: {response.message}")
-                    raise Exception(f"LLM生成失败: {response.message}")
+                    error_msg = f"Qwen API调用失败: status_code={response.status_code}, message={getattr(response, 'message', '未知错误')}"
+                    app_logger.error(error_msg)
+                    raise Exception(error_msg)
             else:
                 raise Exception(f"不支持的Provider: {self.provider}")
                 
@@ -308,13 +341,15 @@ class LLMService:
                     **kwargs
                 )
                 for chunk in stream:
-                    if chunk.choices and chunk.choices[0].delta.content:
-                        content = chunk.choices[0].delta.content
-                        # 记录首token时间
-                        if first_token_time is None:
-                            first_token_time = time.time()
-                        full_output += content
-                        yield content
+                    # 添加更严格的空值检查
+                    if chunk.choices and len(chunk.choices) > 0:
+                        if chunk.choices[0].delta and chunk.choices[0].delta.content:
+                            content = chunk.choices[0].delta.content
+                            # 记录首token时间
+                            if first_token_time is None:
+                                first_token_time = time.time()
+                            full_output += content
+                            yield content
             elif self.provider == "qwen":
                 # 使用Dashscope流式调用Qwen
                 responses = Generation.call(
@@ -327,16 +362,29 @@ class LLMService:
                 )
                 for response in responses:
                     if response.status_code == 200:
-                        if response.output.choices:
-                            content = response.output.choices[0].message.content
-                            if content:
-                                # 记录首token时间
-                                if first_token_time is None:
-                                    first_token_time = time.time()
-                                full_output += content
-                                yield content
+                        content = None
+                        # 优先尝试标准格式 (choices)
+                        if (response.output and hasattr(response.output, 'choices') and 
+                            response.output.choices and len(response.output.choices) > 0):
+                            if (response.output.choices[0].message and 
+                                hasattr(response.output.choices[0].message, 'content') and 
+                                response.output.choices[0].message.content):
+                                content = response.output.choices[0].message.content
+                        
+                        # 回退到简化格式 (text字段)
+                        if not content and response.output and hasattr(response.output, 'text'):
+                            content = response.output.text
+                        
+                        # 如果获取到内容，yield它
+                        if content:
+                            # 记录首token时间
+                            if first_token_time is None:
+                                first_token_time = time.time()
+                            full_output += content
+                            yield content
                     else:
-                        app_logger.error(f"流式生成失败: {response.message}")
+                        error_msg = f"Qwen流式生成失败: status_code={response.status_code}, message={getattr(response, 'message', '未知错误')}"
+                        app_logger.error(error_msg)
                         break
             else:
                 raise Exception(f"不支持的Provider: {self.provider}")
@@ -438,6 +486,15 @@ class LLMService:
                     max_tokens=max_tokens,
                     **kwargs
                 )
+                # 添加空值检查
+                if not response.choices or len(response.choices) == 0:
+                    error_msg = f"DeepSeek对话响应格式异常: choices为空, response={response}"
+                    app_logger.error(error_msg)
+                    raise Exception(error_msg)
+                if not response.choices[0].message or not response.choices[0].message.content:
+                    error_msg = "DeepSeek对话响应内容为空"
+                    app_logger.error(error_msg)
+                    raise Exception(error_msg)
                 result = response.choices[0].message.content
             elif self.provider == "qwen":
                 # 使用Dashscope调用Qwen
@@ -449,10 +506,36 @@ class LLMService:
                     **kwargs
                 )
                 if response.status_code == 200:
-                    result = response.output.choices[0].message.content
+                    # Qwen API有两种响应格式：
+                    # 1. 标准格式: response.output.choices[0].message.content
+                    # 2. 简化格式: response.output.text (当choices为null时)
+                    if not response.output:
+                        error_msg = f"Qwen对话响应格式异常: output为空, status_code={response.status_code}"
+                        app_logger.error(error_msg)
+                        raise Exception(error_msg)
+                    
+                    result = None
+                    # 优先尝试标准格式 (choices)
+                    if hasattr(response.output, 'choices') and response.output.choices:
+                        if len(response.output.choices) > 0:
+                            if (response.output.choices[0].message and 
+                                hasattr(response.output.choices[0].message, 'content') and 
+                                response.output.choices[0].message.content):
+                                result = response.output.choices[0].message.content
+                    
+                    # 如果标准格式不可用，尝试简化格式 (text字段)
+                    if not result and hasattr(response.output, 'text') and response.output.text:
+                        result = response.output.text
+                    
+                    # 如果两种格式都不可用，抛出错误
+                    if not result:
+                        error_msg = f"Qwen对话响应格式异常: 无法从choices或text字段获取内容, output={response.output}"
+                        app_logger.error(error_msg)
+                        raise Exception(error_msg)
                 else:
-                    app_logger.error(f"对话失败: {response.message}")
-                    raise Exception(f"对话失败: {response.message}")
+                    error_msg = f"Qwen对话API调用失败: status_code={response.status_code}, message={getattr(response, 'message', '未知错误')}"
+                    app_logger.error(error_msg)
+                    raise Exception(error_msg)
             else:
                 raise Exception(f"不支持的Provider: {self.provider}")
             

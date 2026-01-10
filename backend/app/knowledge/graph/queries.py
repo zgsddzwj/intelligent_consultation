@@ -140,9 +140,9 @@ class CypherQueries:
                 """
         else:
             # 使用CREATE（不推荐，可能重复）
-            return f"""
-            MATCH (a:{from_type} {{name: $from_name}})
-            MATCH (b:{to_type} {{name: $to_name}})
-            CREATE (a)-[r:{rel_type}{rel_props}]->(b)
-            RETURN r
-            """
+        return f"""
+        MATCH (a:{from_type} {{name: $from_name}})
+        MATCH (b:{to_type} {{name: $to_name}})
+        CREATE (a)-[r:{rel_type}{rel_props}]->(b)
+        RETURN r
+        """

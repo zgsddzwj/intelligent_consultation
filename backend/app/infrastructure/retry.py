@@ -174,3 +174,15 @@ def get_circuit_breaker(
         )
     return _circuit_breakers[service_name]
 
+
+def reset_circuit_breaker(service_name: str):
+    """重置断路器状态"""
+    if service_name in _circuit_breakers:
+        cb = _circuit_breakers[service_name]
+        cb.state = CircuitState.CLOSED
+        cb.failure_count = 0
+        cb.last_failure_time = None
+        app_logger.info(f"断路器 {service_name} 已手动重置")
+    else:
+        app_logger.warning(f"断路器 {service_name} 不存在，无法重置")
+

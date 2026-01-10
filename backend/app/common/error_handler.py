@@ -83,6 +83,11 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     """HTTP异常处理器"""
+    # 常见的静态资源404错误不记录为警告
+    common_static_paths = ["/favicon.ico", "/robots.txt", "/apple-touch-icon.png"]
+    if exc.status_code == 404 and request.url.path in common_static_paths:
+        app_logger.debug(f"静态资源未找到: {request.url.path}")
+    else:
     app_logger.warning(
         f"HTTP异常: {exc.status_code} - {exc.detail}",
         extra={"status_code": exc.status_code, "path": request.url.path}

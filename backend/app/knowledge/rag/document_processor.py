@@ -203,15 +203,15 @@ class DocumentProcessor:
         else:
             # 其他文件类型或图片处理未启用
             text = self.extract_text(file_path, extract_images=False)
-            
-            # 更新元数据
-            doc_metadata = metadata or {}
-            doc_metadata["file_path"] = file_path
-            doc_metadata["file_name"] = Path(file_path).name
+        
+        # 更新元数据
+        doc_metadata = metadata or {}
+        doc_metadata["file_path"] = file_path
+        doc_metadata["file_name"] = Path(file_path).name
             doc_metadata["has_images"] = False
-            
-            # 分块
-            chunks = self.split_text(text, source, doc_metadata)
+        
+        # 分块
+        chunks = self.split_text(text, source, doc_metadata)
         
         app_logger.info(f"文档处理完成，生成 {len(chunks)} 个文本块")
         return chunks

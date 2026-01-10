@@ -485,5 +485,8 @@ async def get_departments():
             ]
         }
     except Exception as e:
-        app_logger.error(f"获取科室列表失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        # Neo4j连接失败时，返回空列表而不是抛出异常（降级策略）
+        app_logger.warning(f"获取科室列表失败（Neo4j可能未连接），返回空列表: {e}")
+        return {
+            "departments": []
+        }

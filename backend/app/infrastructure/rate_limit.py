@@ -42,7 +42,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     
     async def dispatch(self, request: Request, call_next):
         # 跳过健康检查和文档页面
-        if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json"]:
+        if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json", "/"]:
+            return await call_next(request)
+        
+        # 如果Redis不可用，跳过限流检查（降级策略）
+        if not redis_service.enabled:
             return await call_next(request)
         
         # 获取客户端标识
@@ -89,8 +93,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         except RateLimitException:
             raise
         except Exception as e:
-            app_logger.error(f"限流中间件错误: {e}")
-            # 限流中间件出错时，允许请求通过（降级策略）
+            # 限流中间件出错时，记录警告但不阻塞请求（降级策略）
+            app_logger.debug(f"限流中间件错误（已降级）: {e}")
+            # 允许请求通过
             return await call_next(request)
 
 
@@ -106,6 +111,10 @@ def rate_limit(calls: int = 100, period: int = 60, key_func: Optional[Callable[[
     def decorator(func):
         @wraps(func)
         async def wrapper(request: Request, *args, **kwargs):
+            # 如果Redis不可用，跳过限流检查
+            if not redis_service.enabled:
+                return await func(request, *args, **kwargs)
+            
             identifier = (key_func or get_client_identifier)(request)
             cache_key = f"rate_limit:{identifier}:{func.__name__}"
             
@@ -122,13 +131,15 @@ def rate_limit(calls: int = 100, period: int = 60, key_func: Optional[Callable[[
                 if current_count == 0:
                     redis_service.set(cache_key, "1", ttl=period)
                 else:
+                    if redis_service.client:
                     redis_service.client.incr(cache_key)
                 
                 return await func(request, *args, **kwargs)
             except RateLimitException:
                 raise
             except Exception as e:
-                app_logger.warning(f"限流装饰器错误: {e}")
+                app_logger.debug(f"限流装饰器错误（已降级）: {e}")
+                # 降级：允许请求通过
                 return await func(request, *args, **kwargs)
         
         return wrapper
