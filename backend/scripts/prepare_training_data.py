@@ -4,6 +4,17 @@ from pathlib import Path
 from typing import List, Dict, Any
 
 
+def save_training_data(data: List[Dict[str, Any]], file_path: str):
+    """通用函数：保存训练数据到指定路径"""
+    output_file = Path(file_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+    print(f"训练数据已保存到: {output_file}")
+
+
 def create_intent_training_data():
     """创建意图分类训练数据"""
     data = [
@@ -38,14 +49,7 @@ def create_intent_training_data():
             "intent_name": "疾病信息"
         },
     ]
-    
-    output_file = Path("./data/training/intent_data.json")
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    
-    print(f"意图分类训练数据已保存到: {output_file}")
+    save_training_data(data, "./data/training/intent_data.json")
 
 
 def create_relevance_training_data():
@@ -70,14 +74,7 @@ def create_relevance_training_data():
             "relevance_score": 0.9
         },
     ]
-    
-    output_file = Path("./data/training/relevance_data.json")
-    output_file.parent.mkdir(parents=True, exist_ok=True)
-    
-    with open(output_file, 'w', encoding='utf-8') as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    
-    print(f"相关性评分训练数据已保存到: {output_file}")
+    save_training_data(data, "./data/training/relevance_data.json")
 
 
 if __name__ == "__main__":
