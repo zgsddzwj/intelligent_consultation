@@ -269,7 +269,7 @@ class KnowledgeGraphRetriever:
             for entity_name in entity_list[:limit]:
                 if entity_type == "diseases":
                     results = self.retrieve_by_entity("Disease", entity_name, depth=depth)
-                all_results.extend(results)
+                    all_results.extend(results)
                 elif entity_type == "symptoms":
                     results = self.retrieve_by_entity("Symptom", entity_name, depth=depth)
                     all_results.extend(results)
@@ -278,7 +278,7 @@ class KnowledgeGraphRetriever:
                     all_results.extend(results)
                 elif entity_type == "examinations":
                     results = self._retrieve_examination_info(entity_name)
-                all_results.extend(results)
+                    all_results.extend(results)
             
         return all_results
     
@@ -378,14 +378,14 @@ class KnowledgeGraphRetriever:
     
     def _deduplicate_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """去重结果"""
-            seen_texts = set()
-            unique_results = []
+        seen_texts = set()
+        unique_results = []
         
         for result in results:
             text = result.get("text", "")
             if text and text not in seen_texts:
-                    seen_texts.add(text)
-                    unique_results.append(result)
-            
+                seen_texts.add(text)
+                unique_results.append(result)
+        
         return unique_results
 

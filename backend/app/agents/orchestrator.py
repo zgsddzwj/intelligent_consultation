@@ -115,50 +115,50 @@ class AgentOrchestrator:
         
         try:
             # 优先使用ML模型分类
-        if self.intent_classifier and self.intent_classifier.svm_model:
-            try:
-                result = self.intent_classifier.classify(user_input)
-                ml_intent = result.get("intent", "")
-                confidence = result.get("confidence", 0.0)
-                
-                # 将ML意图映射到Agent类型
-                intent_mapping = {
-                    "diagnosis": "doctor",
-                    "medication": "doctor",
-                    "examination": "doctor",
-                    "symptom_inquiry": "doctor",
-                    "disease_info": "doctor",
-                    "health_management": "health_manager",
-                    "general": "customer_service"
-                }
-                
-                agent_type = intent_mapping.get(ml_intent, "customer_service")
-                
-                app_logger.info(
-                    f"意图分类（ML）: {ml_intent} -> {agent_type}, "
-                    f"置信度: {confidence:.2f}"
-                )
-                
-                state["intent"] = ml_intent
-                state["agent_type"] = agent_type
-                state["context"]["intent_confidence"] = confidence
-                
-                # 记录span
-                if langfuse_service.enabled and span:
-                    try:
-                        span.end(metadata={
-                            "intent": ml_intent,
-                            "agent_type": agent_type,
-                            "confidence": confidence,
-                            "method": "ml",
-                            "execution_time": time.time() - start_time
-                        })
-                    except:
-                        pass
-                
-                return state
-            except Exception as e:
-                app_logger.warning(f"ML意图分类失败，使用规则分类: {e}")
+            if self.intent_classifier and self.intent_classifier.svm_model:
+                try:
+                    result = self.intent_classifier.classify(user_input)
+                    ml_intent = result.get("intent", "")
+                    confidence = result.get("confidence", 0.0)
+                    
+                    # 将ML意图映射到Agent类型
+                    intent_mapping = {
+                        "diagnosis": "doctor",
+                        "medication": "doctor",
+                        "examination": "doctor",
+                        "symptom_inquiry": "doctor",
+                        "disease_info": "doctor",
+                        "health_management": "health_manager",
+                        "general": "customer_service"
+                    }
+                    
+                    agent_type = intent_mapping.get(ml_intent, "customer_service")
+                    
+                    app_logger.info(
+                        f"意图分类（ML）: {ml_intent} -> {agent_type}, "
+                        f"置信度: {confidence:.2f}"
+                    )
+                    
+                    state["intent"] = ml_intent
+                    state["agent_type"] = agent_type
+                    state["context"]["intent_confidence"] = confidence
+                    
+                    # 记录span
+                    if langfuse_service.enabled and span:
+                        try:
+                            span.end(metadata={
+                                "intent": ml_intent,
+                                "agent_type": agent_type,
+                                "confidence": confidence,
+                                "method": "ml",
+                                "execution_time": time.time() - start_time
+                            })
+                        except:
+                            pass
+                    
+                    return state
+                except Exception as e:
+                    app_logger.warning(f"ML意图分类失败，使用规则分类: {e}")
         except Exception as e:
             app_logger.warning(f"意图分类异常: {e}")
         

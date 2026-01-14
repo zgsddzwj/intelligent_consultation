@@ -132,7 +132,7 @@ def rate_limit(calls: int = 100, period: int = 60, key_func: Optional[Callable[[
                     redis_service.set(cache_key, "1", ttl=period)
                 else:
                     if redis_service.client:
-                    redis_service.client.incr(cache_key)
+                        redis_service.client.incr(cache_key)
                 
                 return await func(request, *args, **kwargs)
             except RateLimitException:

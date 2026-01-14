@@ -88,10 +88,10 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
     if exc.status_code == 404 and request.url.path in common_static_paths:
         app_logger.debug(f"静态资源未找到: {request.url.path}")
     else:
-    app_logger.warning(
-        f"HTTP异常: {exc.status_code} - {exc.detail}",
-        extra={"status_code": exc.status_code, "path": request.url.path}
-    )
+        app_logger.warning(
+            f"HTTP异常: {exc.status_code} - {exc.detail}",
+            extra={"status_code": exc.status_code, "path": request.url.path}
+        )
     
     return JSONResponse(
         status_code=exc.status_code,

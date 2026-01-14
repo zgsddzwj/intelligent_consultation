@@ -19,9 +19,9 @@ class RedisService:
         redis_url = settings.REDIS_URL or "redis://localhost:6379/0"
         
         try:
-        self.client = redis.from_url(
+            self.client = redis.from_url(
                 redis_url,
-            decode_responses=True,
+                decode_responses=True,
                 encoding="utf-8",
                 socket_connect_timeout=2,
                 socket_timeout=2,
@@ -49,7 +49,7 @@ class RedisService:
         if not self.enabled or not self.client:
             return None
         try:
-        return self.client.get(key)
+            return self.client.get(key)
         except Exception as e:
             app_logger.warning(f"Redis get操作失败: {e}")
             return None
@@ -59,10 +59,10 @@ class RedisService:
         if not self.enabled or not self.client:
             return False
         try:
-        if isinstance(value, (dict, list)):
-            value = json.dumps(value, ensure_ascii=False)
-        ttl = ttl or settings.REDIS_CACHE_TTL
-        return self.client.setex(key, ttl, value)
+            if isinstance(value, (dict, list)):
+                value = json.dumps(value, ensure_ascii=False)
+            ttl = ttl or settings.REDIS_CACHE_TTL
+            return self.client.setex(key, ttl, value)
         except Exception as e:
             app_logger.warning(f"Redis set操作失败: {e}")
             return False
@@ -72,7 +72,7 @@ class RedisService:
         if not self.enabled or not self.client:
             return False
         try:
-        return bool(self.client.delete(key))
+            return bool(self.client.delete(key))
         except Exception as e:
             app_logger.warning(f"Redis delete操作失败: {e}")
             return False
@@ -82,7 +82,7 @@ class RedisService:
         if not self.enabled or not self.client:
             return False
         try:
-        return bool(self.client.exists(key))
+            return bool(self.client.exists(key))
         except Exception as e:
             app_logger.warning(f"Redis exists操作失败: {e}")
             return False
@@ -94,7 +94,7 @@ class RedisService:
         value = self.get(key)
         if value:
             try:
-            return json.loads(value)
+                return json.loads(value)
             except json.JSONDecodeError:
                 return None
         return None
