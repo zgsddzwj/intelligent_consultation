@@ -193,12 +193,33 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)) -> St
             # 发送开始信号
             yield f"data: {json.dumps({'type': 'start', 'consultation_id': consultation_id})}\n\n"
             
-            # 使用LLM流式生成（简化版，实际应该通过Agent）
-            # 这里先实现基础流式，后续可以集成到Agent中
+            # 使用编排器获取上下文（同步执行，快速完成）
+            # 这样可以获得RAG检索和知识图谱查询的结果
+            rag_context = ""
+            sources = []
+            try:
+                result = orchestrator.process(
+                    user_input=sanitized_message,
+                    context=request.context or {}
+                )
+                
+                # 获取检索到的上下文
+                rag_context = result.get("context_used", "")
+                sources = result.get("sources", [])
+                
+                # 发送检索完成信号和来源信息
+                if sources:
+                    yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+            except Exception as e:
+                app_logger.warning(f"获取上下文失败，使用基础prompt: {e}")
+            
+            # 构建包含上下文的prompt
             system_prompt = "你是一位专业的AI医疗助手。基于提供的医疗信息，为用户提供准确的医疗咨询。"
             
-            # 构建prompt（简化版，实际应该包含RAG检索结果）
-            prompt = f"用户问题：{sanitized_message}\n\n请提供专业、准确的回答。"
+            if rag_context:
+                prompt = f"基于以下医疗知识：\n{rag_context}\n\n用户问题：{sanitized_message}\n\n请提供专业、准确的回答。"
+            else:
+                prompt = f"用户问题：{sanitized_message}\n\n请提供专业、准确的回答。"
             
             full_answer = ""
             first_token_sent = False
@@ -235,7 +256,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)) -> St
                     messages.append({
                         "role": "assistant",
                         "content": full_answer,
-                        "sources": [],
+                        "sources": sources,
                         "risk_level": None
                     })
                     consultation.messages = messages

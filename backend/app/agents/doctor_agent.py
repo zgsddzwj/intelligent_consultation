@@ -91,13 +91,40 @@ class DoctorAgent(BaseAgent):
                 return ("rag", {"results": []}, "")
         
         def execute_kg():
-            """执行知识图谱查询"""
+            """执行知识图谱查询（从RAG结果中提取，或使用KG工具）"""
             try:
-                # 这里可以添加实体识别逻辑，暂时简化
-                if "高血压" in question or "血压" in question:
-                    disease_info = self.kg_tool.execute("get_disease_info", disease_name="高血压")
-                    if disease_info.get("found"):
-                        return ("kg", disease_info, self.kg_tool.format_disease_info(disease_info))
+                # 方法1: 从RAG结果中提取知识图谱相关结果
+                # RAG检索已经包含了知识图谱检索（通过AdvancedRAG）
+                rag_result = self.rag_tool.execute(question, top_k=5)
+                kg_results = [
+                    r for r in rag_result.get("results", [])
+                    if r.get("retrieval_method") == "knowledge_graph" or 
+                       r.get("source") == "knowledge_graph"
+                ]
+                
+                if kg_results:
+                    kg_context = "\n".join([
+                        f"- {r.get('text', '')}" 
+                        for r in kg_results[:3]
+                    ])
+                    return ("kg", kg_results, kg_context)
+                
+                # 方法2: 如果RAG中没有KG结果，尝试直接使用KG工具
+                # 使用实体识别进行智能查询
+                try:
+                    from app.knowledge.rag.kg_retriever import KnowledgeGraphRetriever
+                    kg_retriever = KnowledgeGraphRetriever()
+                    kg_results = kg_retriever.retrieve(question, top_k=3)
+                    
+                    if kg_results:
+                        kg_context = "\n".join([
+                            f"- {r.get('text', '')}" 
+                            for r in kg_results[:3]
+                        ])
+                        return ("kg", kg_results, kg_context)
+                except Exception as kg_error:
+                    app_logger.debug(f"直接KG查询失败: {kg_error}")
+                
                 return ("kg", None, "")
             except Exception as e:
                 app_logger.warning(f"知识图谱查询失败: {e}")

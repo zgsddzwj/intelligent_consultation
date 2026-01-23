@@ -210,6 +210,7 @@ class KnowledgeGraphRetriever:
             排序后的检索结果列表
         """
         if not self.client:
+            app_logger.warning(f"知识图谱检索跳过：Neo4j客户端未连接（查询: {query}）")
             return []
         
         try:
