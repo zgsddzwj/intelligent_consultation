@@ -266,10 +266,14 @@ class SemanticCache:
             import time
             cutoff_timestamp = int(time.time()) - (older_than_days * 24 * 3600)
             
-            if self.use_milvus:
-                # Milvus清理（需要根据timestamp过滤）
-                # 这里简化处理，实际可以使用Milvus的delete功能
-                app_logger.info("Milvus缓存清理功能待实现")
+            if self.use_milvus and getattr(self, "collection", None):
+                try:
+                    expr = f"timestamp < {cutoff_timestamp}"
+                    self.collection.delete(expr)
+                    self.collection.flush()
+                    app_logger.info(f"Milvus 语义缓存已清理（删除 timestamp < {cutoff_timestamp} 的条目）")
+                except Exception as e:
+                    app_logger.warning(f"Milvus 缓存清理失败: {e}")
             else:
                 # Redis清理
                 cache_keys = redis_service.client.keys("semantic_cache:*")

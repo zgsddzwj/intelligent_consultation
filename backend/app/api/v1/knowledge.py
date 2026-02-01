@@ -232,14 +232,16 @@ async def delete_document(
                 app_logger.warning(f"删除本地文件失败: {e}")
         
         # 3. 删除Milvus中的向量（可选）
-        if delete_vectors and doc.vector_id:
+        if delete_vectors:
             try:
                 milvus = get_milvus_service()
-                # 注意：这里需要根据实际Milvus API实现删除逻辑
-                # milvus.delete_by_document_id(doc.id)
-                app_logger.info(f"向量删除功能待实现: document_id={doc.id}")
+                if milvus._connected and milvus._collection:
+                    milvus.delete_by_document_id(doc.id)
+                    app_logger.info(f"已删除文档 {doc.id} 在 Milvus 中的向量")
+                else:
+                    app_logger.debug(f"Milvus 未连接，跳过向量删除: document_id={doc.id}")
             except Exception as e:
-                app_logger.warning(f"删除向量失败: {e}")
+                app_logger.warning(f"删除向量失败（文档仍会从库中删除）: {e}")
         
         # 4. 删除数据库记录
         db.delete(doc)

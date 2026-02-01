@@ -47,6 +47,11 @@ intelligent_consultation/
 - Python 3.11+ (可选，用于本地运行)
 - Node.js 18+ (可选，用于本地运行前端)
 
+### 最小可运行环境
+- **仅后端 + LLM**：可只启动后端并配置 `QWEN_API_KEY`，问答可用（无 RAG/知识图谱时会有提示）。
+- **完整能力**：需同时运行 **Neo4j**（知识图谱）、**Milvus**（向量检索）、**Redis**（缓存/限流）、**PostgreSQL**（业务库）。详见 `docker-compose.yml` 或 [QUICKSTART.md](QUICKSTART.md)。
+- **知识图谱**：首次使用前**必须**执行一次 `python scripts/init_knowledge_graph.py`（或 `init_all.py`）以导入图谱数据，否则知识图谱检索为空。
+
 ### 一键启动（推荐）
 
 1. 克隆项目
@@ -77,6 +82,7 @@ docker-compose up -d
 cd backend
 python scripts/init_all.py
 ```
+   - 其中 **知识图谱** 依赖：`init_knowledge_graph.py`（或 `init_all.py` 会调用）。未执行则知识图谱检索无数据，问答会提示「未找到相关知识库结果」。
 
 5. 测试系统
 ```bash

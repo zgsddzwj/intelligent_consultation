@@ -163,6 +163,11 @@ class DoctorAgent(BaseAgent):
             temperature=0.7
         )
         
+        # 无检索结果时添加用户提示
+        no_result_hint = "未找到相关医疗文献。"
+        if not full_context or no_result_hint in full_context.strip():
+            answer = answer.rstrip() + "\n\n（未找到相关知识库结果，以上回答仅基于模型通用知识，仅供参考。）"
+        
         # 5. 添加来源信息
         sources = []
         if rag_result.get("results"):
@@ -219,7 +224,11 @@ class DoctorAgent(BaseAgent):
             temperature=0.7
         )
         
-        # 6. 添加风险提示
+        # 6. 无检索结果时添加用户提示
+        if not full_context or "未找到相关医疗文献" in full_context:
+            answer = answer.rstrip() + "\n\n（未找到相关知识库结果，以上回答仅基于模型通用知识，仅供参考。）"
+        
+        # 7. 添加风险提示
         if risk_level in ["high", "critical"]:
             risk_recommendation = self.diagnosis_tool.get_risk_recommendation(risk_level)
             answer += f"\n\n⚠️ 风险提示: {risk_recommendation}"
@@ -274,6 +283,10 @@ class DoctorAgent(BaseAgent):
             system_prompt=PromptTemplate.DRUG_CONSULTATION_SYSTEM,
             temperature=0.7
         )
+        
+        # 6. 无检索结果时添加用户提示
+        if not full_context or "未找到相关医疗文献" in full_context:
+            answer = answer.rstrip() + "\n\n（未找到相关知识库结果，以上回答仅基于模型通用知识，仅供参考。）"
         
         return {
             "answer": answer,
