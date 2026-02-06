@@ -1,29 +1,47 @@
-# 文档目录
+# 智能医疗管家平台 - 文档中心
 
-本文档目录包含项目的核心文档和技术文档。
+本文档目录包含项目的核心架构文档、技术指南和开发规范。
 
-## 核心文档
+## 📚 核心文档
 
-### 架构文档
-- [系统架构](ARCHITECTURE.md) - 完整的系统架构设计文档，包括分层架构、模块设计、数据流等
+### 架构设计
+- [系统架构 (ARCHITECTURE.md)](ARCHITECTURE.md)
+  - 分层架构设计与模块依赖
+  - 数据流向与技术栈
+  - 对象存储与文档管理架构
+  - **核心必读**：理解系统整体设计的入口
 
-### 设置和部署
-- [完整设置指南](../COMPLETE_SETUP.md) - 详细的系统设置步骤和功能说明
-- [部署文档](../DEPLOYMENT.md) - 部署方式和环境配置
+### 核心功能指南
+- [RAG 系统指南 (RAG_GUIDE.md)](RAG_GUIDE.md)
+  - **包含内容**：原 `ADVANCED_RAG_IMPLEMENTATION.md` 和 `ADVANCED_RAG_USAGE.md` 的整合
+  - 混合检索策略 (Vector + BM25 + KG)
+  - 重排序模型 (BGE-Reranker) 配置
+  - 检索流程与 API 使用说明
 
-### 技术实现
-- [高级RAG实现](ADVANCED_RAG_IMPLEMENTATION.md) - RAG系统的技术实现细节
-- [高级RAG使用](ADVANCED_RAG_USAGE.md) - RAG系统的使用指南
-- [对象存储实现](OBJECT_STORAGE_IMPLEMENTATION.md) - 对象存储的技术实现
+- [知识图谱指南 (KNOWLEDGE_GRAPH_GUIDE.md)](KNOWLEDGE_GRAPH_GUIDE.md)
+  - **包含内容**：原 `KG_OPERATIONS.md` 和 `KG_OPTIMIZATION.md` 的整合
+  - 图谱导入与导出操作
+  - 实体识别 (NER) 与关系抽取
+  - 图谱查询优化与 Cypher 模板
 
-### 开发规范
-- [命名规范](NAMING_CONVENTIONS.md) - 代码命名规范和约定
+- [系统优化与路线图 (OPTIMIZATION_GUIDE.md)](OPTIMIZATION_GUIDE.md)
+  - **包含内容**：原 `OPTIMIZATION_*.md` 系列文档的整合
+  - 已完成的 QA 优化清单
+  - 性能瓶颈分析与推荐方案
+  - 未来开发路线图
 
-## 其他文档
+## 🛠️ 设置与部署
 
-- [项目主文档](../README.md) - 项目概述和快速开始
-- [快速开始指南](../QUICKSTART.md) - 快速启动指南
-- [Kubernetes部署](../k8s/README.md) - Kubernetes部署说明
-- [脚本说明](../backend/scripts/README.md) - 后端脚本使用说明
-- [测试指南](../backend/tests/README.md) - 测试相关文档
+- [完整设置指南](../COMPLETE_SETUP.md) - 环境搭建与初始化
+- [部署文档](../DEPLOYMENT.md) - Docker/K8s 部署说明
+- [Kubernetes 部署](../k8s/README.md) - K8s 详细配置
 
+## 📏 开发规范
+
+- [命名规范 (NAMING_CONVENTIONS.md)](NAMING_CONVENTIONS.md) - 代码风格与命名约定
+
+## 🔗 其他资源
+
+- [项目主页](../README.md) - 项目概述与快速开始
+- [脚本说明](../backend/scripts/README.md) - 数据处理脚本使用说明
+- [测试指南](../backend/tests/README.md) - 单元测试与集成测试

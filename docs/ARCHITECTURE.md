@@ -41,6 +41,7 @@ graph TB
         Redis[(Redis<br/>缓存)]
         Neo4j[(Neo4j<br/>知识图谱)]
         Milvus[(Milvus<br/>向量数据库)]
+        ObjectStorage[(MinIO/S3<br/>对象存储)]
     end
     
     subgraph ExternalServices["外部服务"]
@@ -61,6 +62,7 @@ graph TB
     Repository --> Redis
     Repository --> Neo4j
     Repository --> Milvus
+    Repository --> ObjectStorage
     Service --> External
     External --> QwenAPI
     External --> PaddleOCR
@@ -188,6 +190,7 @@ graph TB
   - `LLMService`: Qwen API集成
   - `MilvusService`: Milvus向量数据库
   - `RedisService`: Redis缓存
+  - `ObjectStorageService`: 对象存储服务 (MinIO/S3/OSS)
 
 #### 4.3 Tool层
 - **位置**: `backend/app/agents/tools/`
@@ -200,10 +203,11 @@ graph TB
 
 **职责**: 数据持久化
 
-- **PostgreSQL**: 业务数据（用户、咨询、文档等）
+- **PostgreSQL**: 业务数据（用户、咨询、文档元数据等）
 - **Redis**: 缓存数据
 - **Neo4j**: 知识图谱数据
 - **Milvus**: 向量数据
+- **Object Storage**: 非结构化文档文件 (PDF/图片等)
 
 ## 数据流图
 
@@ -278,6 +282,27 @@ graph LR
     KnowledgeDomain --> KnowledgeRepo
 ```
 
+## 对象存储与文档管理
+
+系统实现了基于对象存储的企业级文档管理架构，支持 MinIO、AWS S3 和阿里云 OSS。
+
+### 存储架构
+```
+用户上传文档
+    ↓
+[API层] 验证和接收
+    ↓
+[对象存储服务] 上传到MinIO/S3/OSS
+    ├─ 文档文件 → 对象存储（MinIO/S3/OSS）
+    ├─ 文档元数据 → PostgreSQL数据库
+    └─ 向量数据 → Milvus向量数据库
+```
+
+### 核心组件
+- **ObjectStorageService**: 封装 MinIO/S3/OSS 客户端，提供统一的文件操作接口（上传、下载、删除、预签名URL）。
+- **配置**: 通过 `.env` 配置 `OBJECT_STORAGE_TYPE` (minio/s3/oss) 及相关凭证。
+- **数据迁移**: 提供 `migrate_to_object_storage.py` 脚本，支持将本地文件迁移至对象存储。
+
 ## 命名规范映射
 
 ### 当前命名 → 工业级命名
@@ -333,7 +358,8 @@ backend/app/
 │   ├── external/           # 外部服务
 │   │   ├── llm_client.py
 │   │   ├── milvus_client.py
-│   │   └── neo4j_client.py
+│   │   ├── neo4j_client.py
+│   │   └── object_storage_client.py
 │   └── database/           # 数据库配置
 │
 ├── common/                 # 通用层（原utils/）
@@ -379,8 +405,8 @@ backend/app/
 | API层 | FastAPI, Pydantic |
 | 应用层 | Python, LangGraph |
 | 领域层 | Python, Domain Models |
-| 基础设施层 | SQLAlchemy, Redis, Neo4j Driver, Milvus Client |
-| 数据层 | PostgreSQL, Redis, Neo4j, Milvus |
+| 基础设施层 | SQLAlchemy, Redis, Neo4j Driver, Milvus Client, MinIO Client |
+| 数据层 | PostgreSQL, Redis, Neo4j, Milvus, MinIO/S3 |
 
 ## 部署架构
 
@@ -405,6 +431,7 @@ graph TB
         Redis[(Redis)]
         Neo4j[(Neo4j)]
         Milvus[(Milvus)]
+        MinIO[(MinIO)]
     end
     
     subgraph External["外部服务"]
@@ -419,6 +446,7 @@ graph TB
     Backend --> Redis
     Backend --> Neo4j
     Backend --> Milvus
+    Backend --> MinIO
     Backend --> Qwen
     Frontend --> Backend
 ```
@@ -432,6 +460,7 @@ graph TB
 5. **策略模式**: 多种检索策略（向量、BM25、语义、图谱）
 6. **工厂模式**: Agent工厂创建不同类型的Agent
 7. **观察者模式**: 日志和监控系统
+8. **适配器模式**: 封装不同的对象存储后端（S3/OSS/MinIO）
 
 ## 数据流向
 
@@ -452,7 +481,8 @@ graph TB
 ```
 文档上传
   → Controller
-  → Service
+  → Service (ObjectStorageService)
+  → ObjectStorage (文件存储)
   → DocumentProcessor (文档处理)
   → Embedder (向量化)
   → Repository
@@ -491,4 +521,3 @@ graph TB
 - **监控**: Agent执行监控，API性能监控
 - **追踪**: 请求追踪，来源追溯
 - **审计**: 操作审计，数据变更记录
-
