@@ -1,29 +1,33 @@
 # 智能医疗管家平台
 
-一个以AI医生Agent为核心的智能医疗管家平台，集成多Agent协同系统、RAG检索、Neo4j知识图谱、MCP服务器和React前端。
+一个以AI医生Agent为核心的智能医疗管家平台，集成多Agent协同系统、高级RAG检索、Neo4j知识图谱、MCP服务器和React前端。
 
 ## 项目概述
 
 本平台旨在为用户提供精准、可靠、个性化的健康服务，通过整合多种AI Agent（医学诊断、健康管家、客户服务、运营分析），利用最新的LLM技术与医疗知识图谱，构建智能医疗咨询系统。
 
+主要特性：
+- **多Agent协同**：基于LangGraph编排的专业分工Agent系统。
+- **高级RAG**：混合检索（BM25+向量）、多路召回、重排序（BGE-Reranker）、结构化文档解析（MinerU/PDFPlumber）。
+- **医疗知识图谱**：基于Neo4j构建的专业医疗图谱，支持实体识别与意图分类。
+- **全链路监控**：集成Langfuse进行LLM可观测性监控。
+
 ## 技术栈
 
 ### 后端
-- Python 3.11+
-- FastAPI (API框架)
-- LangChain + LangGraph (Agent编排)
-- Qwen/Qwen-Med (LLM模型)
-- Neo4j (知识图谱)
-- Milvus (向量数据库)
-- PostgreSQL (业务数据)
-- Redis (缓存)
+- **核心框架**: Python 3.11+, FastAPI
+- **AI/LLM**: LangChain, LangGraph, Qwen/Qwen-Med (DashScope)
+- **RAG & 搜索**: Milvus (向量库), BM25, FlagEmbedding (Reranker), Jieba
+- **知识图谱**: Neo4j
+- **数据存储**: PostgreSQL (业务), Redis (缓存), MinIO (对象存储)
+- **文档处理**: PDFPlumber, Mineru, PaddleOCR
+- **监控**: Langfuse, Prometheus
 
 ### 前端
-- React 18 + TypeScript
-- Vite (构建工具)
-- Ant Design (UI组件库)
-- React Query (数据获取)
-- Zustand (状态管理)
+- **框架**: React 18 + TypeScript + Vite
+- **UI组件**: Ant Design
+- **状态管理**: Zustand, React Query
+- **可视化**: 知识图谱可视化组件
 
 ### 部署
 - Docker + Docker Compose (本地开发)
@@ -99,13 +103,28 @@ python scripts/test_system.py
 
 ## 文档
 
+详细文档位于 `docs/` 目录：
+
+### 基础指南
 - [快速开始指南](QUICKSTART.md) - 快速启动和配置指南
 - [部署文档](DEPLOYMENT.md) - 部署方式和环境配置
 - [日志查看指南](LOGGING.md) - 如何查看前后端日志
-- [架构文档](docs/ARCHITECTURE.md) - 系统架构设计
 - [完整设置指南](docs/COMPLETE_SETUP.md) - 详细的系统设置步骤
+
+### 架构与设计
+- [架构文档](docs/ARCHITECTURE.md) - 系统架构设计
+- [命名规范](docs/NAMING_CONVENTIONS.md) - 代码命名与开发规范
+
+### 核心功能实现
 - [高级RAG使用](docs/ADVANCED_RAG_USAGE.md) - RAG系统使用指南
-- [对象存储实现](docs/OBJECT_STORAGE_IMPLEMENTATION.md) - 对象存储技术实现
+- [高级RAG实现](docs/ADVANCED_RAG_IMPLEMENTATION.md) - RAG技术实现细节
+- [知识图谱操作](docs/KG_OPERATIONS.md) - KG维护与操作手册
+- [知识图谱优化](docs/KG_OPTIMIZATION.md) - KG性能与质量优化
+- [对象存储实现](docs/OBJECT_STORAGE_IMPLEMENTATION.md) - MinIO集成说明
+
+### 优化与维护
+- [优化清单](docs/OPTIMIZATION_CHECKLIST.md) - 系统优化检查表
+- [QA优化总结](docs/QA_OPTIMIZATION_SUMMARY.md) - 问答系统优化总结
 
 ## 查看日志
 
@@ -145,26 +164,19 @@ tail -f /tmp/frontend.log
 
 [待定]
 
-## 项目优化建议
+## 未来规划 (Roadmap)
 
-1. **清理冗余文件**:
-   - 检查 `backend/scripts/` 中的脚本是否仍然被使用，例如 `prepare_training_data.py`。
-   - 移除未使用的测试文件，确保测试目录保持整洁。
+1. **系统优化**:
+   - 清理冗余脚本与测试文件
+   - 优化后端服务模块拆分
+   - 前端组件分层优化
 
-2. **目录结构优化**:
-   - 将 `backend/app/` 中的模块进一步细分，例如将 `services/` 按功能模块拆分。
-   - 在 `frontend/src/` 中引入更清晰的页面和组件分层。
+2. **功能增强**:
+   - 完善知识图谱的实时更新机制
+   - 增强多模态诊断能力（图片分析）
+   - 扩展更多医疗垂类模型支持
 
-3. **文档改进**:
-   - 在 `docs/` 中添加更多关于开发和部署的细节。
-   - 提供一个快速入门指南，帮助新开发者快速上手。
-
-4. **依赖管理**:
-   - 检查 `requirements.txt` 和 `package.json` 中的依赖是否有未使用的条目。
-   - 定期更新依赖以确保安全性。
-
-5. **日志管理**:
-   - 将 `logs/` 目录中的日志文件按日期归档，避免文件过多导致混乱。
-
-6. **Kubernetes 配置**:
-   - 优化 `k8s/` 中的配置文件，确保资源分配合理，避免浪费。
+3. **运维升级**:
+   - 完善Kubernetes资源配置
+   - 增强日志归档与分析策略
+   - 依赖包安全性审计与更新
