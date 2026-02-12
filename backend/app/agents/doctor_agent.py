@@ -7,6 +7,7 @@ from app.agents.base import BaseAgent
 from app.agents.tools.rag_tool import RAGTool
 from app.agents.tools.knowledge_graph_tool import KnowledgeGraphTool
 from app.agents.tools.diagnosis_tool import DiagnosisTool
+from app.knowledge.ml.entity_recognizer import MedicalEntityRecognizer
 from app.services.llm_service import PromptTemplate
 from app.utils.logger import app_logger
 
@@ -28,6 +29,9 @@ class DoctorAgent(BaseAgent):
         self.add_tool(self.rag_tool)
         self.add_tool(self.kg_tool)
         self.add_tool(self.diagnosis_tool)
+        
+        # 实体识别器
+        self.entity_recognizer = MedicalEntityRecognizer()
     
     def get_system_prompt(self) -> str:
         """获取系统Prompt"""
@@ -72,6 +76,23 @@ class DoctorAgent(BaseAgent):
                 "tools_used": []
             }
     
+    def _format_history(self, context: Dict) -> str:
+        """格式化历史记录"""
+        history = context.get("history", [])
+        if not history:
+            return ""
+        
+        history_text = "\n【对话历史】\n"
+        for msg in history:
+            role = "用户" if msg.get("role") == "user" else "AI助手"
+            content = msg.get("content", "")
+            # 简单的截断，防止历史记录过长
+            if len(content) > 200:
+                content = content[:200] + "..."
+            history_text += f"{role}: {content}\n"
+        
+        return history_text + "\n"
+
     def _handle_general_consultation(self, question: str, context: Dict, trace_id: Optional[str] = None) -> Dict[str, Any]:
         """处理一般咨询（并行优化）"""
         tools_used = []
@@ -153,7 +174,9 @@ class DoctorAgent(BaseAgent):
                     app_logger.warning(f"并行执行失败: {e}")
         
         # 整合上下文
-        full_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
+        history_text = self._format_history(context)
+        base_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
+        full_context = f"{history_text}{base_context}" if history_text else base_context
         
         # 4. 生成回答
         prompt = PromptTemplate.format_medical_prompt(full_context, question)
@@ -164,9 +187,7 @@ class DoctorAgent(BaseAgent):
         )
         
         # 无检索结果时添加用户提示
-        no_result_hint = "未找到相关医疗文献。"
-        if not full_context or no_result_hint in full_context.strip():
-            answer = answer.rstrip() + "\n\n（未找到相关知识库结果，以上回答仅基于模型通用知识，仅供参考。）"
+        answer = self.format_answer_with_fallback(answer, full_context)
         
         # 5. 添加来源信息
         sources = []
@@ -214,7 +235,9 @@ class DoctorAgent(BaseAgent):
             rag_context = ""
         
         # 4. 整合上下文
-        full_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
+        history_text = self._format_history(context)
+        base_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
+        full_context = f"{history_text}{base_context}" if history_text else base_context
         
         # 5. 生成诊断建议
         prompt = PromptTemplate.format_diagnosis_prompt(question, full_context)
@@ -225,8 +248,7 @@ class DoctorAgent(BaseAgent):
         )
         
         # 6. 无检索结果时添加用户提示
-        if not full_context or "未找到相关医疗文献" in full_context:
-            answer = answer.rstrip() + "\n\n（未找到相关知识库结果，以上回答仅基于模型通用知识，仅供参考。）"
+        answer = self.format_answer_with_fallback(answer, full_context)
         
         # 7. 添加风险提示
         if risk_level in ["high", "critical"]:
@@ -245,23 +267,37 @@ class DoctorAgent(BaseAgent):
         """处理用药咨询"""
         tools_used = []
         
-        # 1. 提取药物名称（简化处理）
-        drug_name = None
-        if "高血压" in question or "降压" in question:
-            drug_name = "高血压药物"  # 示例
+        # 1. 提取药物名称（使用NER）
+        drug_names = []
+        try:
+            entities = self.entity_recognizer.extract_entities(question)
+            drug_names = entities.get("drugs", [])
+        except Exception as e:
+            app_logger.warning(f"药物实体识别失败: {e}")
         
         # 2. 查询药物信息
         kg_context = ""
-        if drug_name:
-            drug_info = self.kg_tool.execute("get_drug_info", drug_name=drug_name)
-            tools_used.append("knowledge_graph_query")
-            if drug_info.get("found"):
-                drug = drug_info.get("drug", {})
-                kg_context = f"药物信息: {drug.get('name', '')}\n"
-                if drug_info.get("contraindications"):
-                    kg_context += "禁忌症:\n"
-                    for contra in drug_info["contraindications"]:
-                        kg_context += f"- {contra.get('disease', '')}\n"
+        found_drugs = []
+        
+        if drug_names:
+            kg_context = "知识图谱药物信息:\n"
+            for drug_name in drug_names:
+                try:
+                    drug_info = self.kg_tool.execute("get_drug_info", drug_name=drug_name)
+                    tools_used.append("knowledge_graph_query")
+                    
+                    if drug_info.get("found"):
+                        found_drugs.append(drug_name)
+                        drug = drug_info.get("drug", {})
+                        kg_context += f"- 药物: {drug.get('name', drug_name)}\n"
+                        
+                        if drug_info.get("contraindications"):
+                            kg_context += "  禁忌症: " + ", ".join([c.get('disease', '') for c in drug_info["contraindications"]]) + "\n"
+                            
+                        if drug_info.get("interactions"):
+                            kg_context += "  相互作用: " + ", ".join([i.get('interacting_drug', '') for i in drug_info["interactions"]]) + "\n"
+                except Exception as e:
+                    app_logger.warning(f"查询药物 {drug_name} 失败: {e}")
         
         # 3. RAG检索用药指南
         try:
@@ -274,10 +310,15 @@ class DoctorAgent(BaseAgent):
             rag_context = ""
         
         # 4. 整合上下文
-        full_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
+        history_text = self._format_history(context)
+        base_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
+        full_context = f"{history_text}{base_context}" if history_text else base_context
         
         # 5. 生成用药建议
-        prompt = PromptTemplate.format_drug_prompt(question, drug_info=drug_name, context=full_context)
+        # 如果有明确的药物，传递给Prompt
+        drug_info_str = ", ".join(found_drugs) if found_drugs else (drug_names[0] if drug_names else None)
+        
+        prompt = PromptTemplate.format_drug_prompt(question, drug_info=drug_info_str, context=full_context)
         answer = self.llm.generate(
             prompt=prompt,
             system_prompt=PromptTemplate.DRUG_CONSULTATION_SYSTEM,
@@ -285,8 +326,7 @@ class DoctorAgent(BaseAgent):
         )
         
         # 6. 无检索结果时添加用户提示
-        if not full_context or "未找到相关医疗文献" in full_context:
-            answer = answer.rstrip() + "\n\n（未找到相关知识库结果，以上回答仅基于模型通用知识，仅供参考。）"
+        answer = self.format_answer_with_fallback(answer, full_context)
         
         return {
             "answer": answer,

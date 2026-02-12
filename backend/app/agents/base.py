@@ -98,4 +98,21 @@ class BaseAgent(ABC):
         }
         app_logger.info(f"Agent执行日志: {log_data}")
         return log_data
+    
+    def format_answer_with_fallback(self, answer: str, context: str) -> str:
+        """
+        格式化回答，如果没有找到上下文则添加提示
+        """
+        no_result_hints = ["未找到相关医疗文献", "未找到相关知识库结果"]
+        
+        # 检查上下文是否为空或包含无结果提示
+        has_context = bool(context and context.strip())
+        is_empty_result = any(hint in context for hint in no_result_hints) if has_context else True
+        
+        if not has_context or is_empty_result:
+            fallback_hint = "\n\n（未找到相关知识库结果，以上回答仅基于模型通用知识，仅供参考。）"
+            if fallback_hint not in answer:
+                return answer.rstrip() + fallback_hint
+        
+        return answer
 

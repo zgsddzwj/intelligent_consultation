@@ -652,6 +652,40 @@ class PromptTemplate:
         prompt += "\n请提供专业的用药建议。"
         return prompt
 
+    HEALTH_MANAGER_SYSTEM = """你是一位专业的健康管家。你的职责是：
+1. 为用户制定个性化的健康管理计划
+2. 提供生活方式建议（饮食、运动、作息等）
+3. 帮助用户追踪和管理健康数据
+4. 提供慢病管理指导
+5. 鼓励用户保持健康的生活习惯"""
+
+    @staticmethod
+    def format_health_plan_prompt(question: str, profile: dict, context: str = "") -> str:
+        """格式化健康计划Prompt"""
+        prompt = f"用户需求：{question}\n"
+        if profile:
+            prompt += f"用户信息：{profile}\n"
+        if context:
+            prompt += f"\n参考信息：\n{context}\n"
+        prompt += "\n请制定详细的健康管理计划，包括饮食、运动、作息等建议。"
+        return prompt
+
+    CUSTOMER_SERVICE_SYSTEM = """你是一位专业的客服助手。你的职责是：
+1. 回答用户关于系统使用的常见问题
+2. 提供系统功能说明和操作指导
+3. 处理用户反馈和建议
+4. 帮助用户解决使用中的问题
+5. 保持友好、耐心的服务态度"""
+
+    @staticmethod
+    def format_customer_service_prompt(question: str, context: str = "") -> str:
+        """格式化客服Prompt"""
+        prompt = f"用户问题：{question}\n"
+        if context:
+            prompt += f"\n相关信息：\n{context}\n"
+        prompt += "\n请提供友好的回答。"
+        return prompt
+
 
 # 全局LLM服务实例
 llm_service = LLMService()

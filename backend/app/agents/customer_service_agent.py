@@ -1,7 +1,9 @@
 """客服Agent"""
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import time
 from app.agents.base import BaseAgent
+from app.agents.tools.rag_tool import RAGTool
+from app.services.llm_service import PromptTemplate
 from app.utils.logger import app_logger
 
 
@@ -14,7 +16,11 @@ class CustomerServiceAgent(BaseAgent):
             description="客服助手，处理常见问题、系统使用指导、用户反馈"
         )
         
-        # FAQ数据（可以存储在数据库中）
+        # 添加工具
+        self.rag_tool = RAGTool()
+        self.add_tool(self.rag_tool)
+        
+        # FAQ数据（作为快速缓存）
         self.faq_data = {
             "如何使用系统": "您可以通过对话界面与AI医生进行咨询，也可以使用知识库搜索功能查找医疗信息。",
             "系统功能": "本系统提供医疗咨询、健康管理、知识库查询等功能。",
@@ -24,34 +30,29 @@ class CustomerServiceAgent(BaseAgent):
     
     def get_system_prompt(self) -> str:
         """获取系统Prompt"""
-        return """你是一位专业的客服助手。你的职责是：
-1. 回答用户关于系统使用的常见问题
-2. 提供系统功能说明和操作指导
-3. 处理用户反馈和建议
-4. 帮助用户解决使用中的问题
-5. 保持友好、耐心的服务态度"""
+        return PromptTemplate.CUSTOMER_SERVICE_SYSTEM
     
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """处理客服咨询"""
         start_time = time.time()
+        trace_id = input_data.get("trace_id")
         
         try:
             question = input_data.get("question", "")
+            context = input_data.get("context", {})
             request_type = input_data.get("type", "faq")  # faq, guidance, feedback
             
             app_logger.info(f"客服Agent处理请求: {question[:50]}...")
             
-            if request_type == "faq":
-                result = self._handle_faq(question)
-            elif request_type == "guidance":
-                result = self._handle_guidance(question)
-            elif request_type == "feedback":
-                result = self._handle_feedback(question, input_data.get("feedback_data", {}))
+            if request_type == "feedback":
+                result = self._handle_feedback(question, input_data.get("feedback_data", {}), context)
             else:
-                result = self._handle_general_inquiry(question)
+                # 统一处理咨询类请求
+                result = self._handle_inquiry(question, context, request_type)
             
             execution_time = time.time() - start_time
-            self.log_execution(input_data, result, execution_time, [])
+            tools_used = result.get("tools_used", [])
+            self.log_execution(input_data, result, execution_time, tools_used)
             
             result["execution_time"] = execution_time
             return result
@@ -62,29 +63,59 @@ class CustomerServiceAgent(BaseAgent):
             return {
                 "answer": f"处理请求时发生错误: {str(e)}",
                 "error": str(e),
-                "execution_time": execution_time
+                "execution_time": execution_time,
+                "tools_used": []
             }
-    
-    def _handle_faq(self, question: str) -> Dict[str, Any]:
-        """处理FAQ"""
-        # 简单的关键词匹配
-        question_lower = question.lower()
-        for key, answer in self.faq_data.items():
-            if key in question_lower:
-                return {
-                    "answer": answer,
-                    "type": "faq",
-                    "matched_key": key
-                }
+            
+    def _format_history(self, context: Dict) -> str:
+        """格式化历史记录"""
+        history = context.get("history", [])
+        if not history:
+            return ""
         
-        # 如果没有匹配，使用LLM生成回答
-        prompt = f"""用户问题：{question}
-
-请基于以下常见问题信息，提供友好的回答：
-
-{self.faq_data}
-
-如果问题不在常见问题中，请提供一般性的帮助信息。"""
+        history_text = "\n【对话历史】\n"
+        for msg in history:
+            role = "用户" if msg.get("role") == "user" else "AI助手"
+            content = msg.get("content", "")
+            if len(content) > 200:
+                content = content[:200] + "..."
+            history_text += f"{role}: {content}\n"
+        
+        return history_text + "\n"
+    
+    def _handle_inquiry(self, question: str, context: Dict, request_type: str = "faq") -> Dict[str, Any]:
+        """处理咨询（FAQ或指导）"""
+        tools_used = []
+        
+        # 1. 检查静态FAQ（仅对FAQ类型）
+        if request_type == "faq":
+            question_lower = question.lower()
+            for key, answer in self.faq_data.items():
+                if key in question_lower:
+                    return {
+                        "answer": answer,
+                        "type": "faq",
+                        "matched_key": key,
+                        "tools_used": ["static_faq"]
+                    }
+        
+        # 2. RAG检索（尝试查找系统文档）
+        rag_context = ""
+        try:
+            # 搜索系统相关文档
+            rag_result = self.rag_tool.execute(question, top_k=3)
+            if rag_result.get("results"):
+                rag_context = self.rag_tool.format_context(rag_result)
+                tools_used.append("rag_search")
+        except Exception:
+            rag_result = {"results": []}
+        
+        # 3. 整合上下文
+        history_text = self._format_history(context)
+        full_context = f"{history_text}{rag_context}" if history_text else rag_context
+        
+        # 4. 生成回答
+        prompt = PromptTemplate.format_customer_service_prompt(question, full_context)
         
         answer = self.llm.generate(
             prompt=prompt,
@@ -94,31 +125,17 @@ class CustomerServiceAgent(BaseAgent):
         
         return {
             "answer": answer,
-            "type": "faq"
+            "type": request_type,
+            "sources": [r.get("source") for r in rag_result.get("results", [])],
+            "tools_used": tools_used
         }
     
-    def _handle_guidance(self, question: str) -> Dict[str, Any]:
-        """处理使用指导"""
-        prompt = f"""用户需要系统使用指导：
-
-问题：{question}
-
-请提供详细的操作步骤和说明。"""
-        
-        answer = self.llm.generate(
-            prompt=prompt,
-            system_prompt=self.get_system_prompt(),
-            temperature=0.7
-        )
-        
-        return {
-            "answer": answer,
-            "type": "guidance"
-        }
-    
-    def _handle_feedback(self, question: str, feedback_data: Dict) -> Dict[str, Any]:
+    def _handle_feedback(self, question: str, feedback_data: Dict, context: Dict) -> Dict[str, Any]:
         """处理用户反馈"""
-        prompt = f"""用户反馈：
+        history_text = self._format_history(context)
+        
+        prompt = f"""{history_text}
+用户反馈：
 
 反馈内容：{question}
 反馈数据：{feedback_data}
@@ -134,23 +151,6 @@ class CustomerServiceAgent(BaseAgent):
         return {
             "answer": answer,
             "type": "feedback",
-            "feedback_received": True
+            "feedback_received": True,
+            "tools_used": []
         }
-    
-    def _handle_general_inquiry(self, question: str) -> Dict[str, Any]:
-        """处理一般咨询"""
-        prompt = f"""用户咨询：{question}
-
-请提供友好的帮助。"""
-        
-        answer = self.llm.generate(
-            prompt=prompt,
-            system_prompt=self.get_system_prompt(),
-            temperature=0.7
-        )
-        
-        return {
-            "answer": answer,
-            "type": "general"
-        }
-

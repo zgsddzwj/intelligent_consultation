@@ -92,10 +92,16 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             app_logger.warning(f"数据库操作失败，继续处理咨询: {db_error}")
             consultation = None
         
+        # 准备上下文（包含历史记录）
+        context_data = request.context or {}
+        if consultation and consultation.messages:
+            # 获取最近10条历史记录作为上下文
+            context_data["history"] = consultation.messages[-10:]
+            
         # 使用编排器处理消息
         result = orchestrator.process(
             user_input=sanitized_message,
-            context=request.context or {}
+            context=context_data
         )
         
         # 添加免责声明
