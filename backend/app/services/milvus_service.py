@@ -171,6 +171,14 @@ class MilvusService:
     
     def delete_by_document_id(self, document_id: int):
         """根据文档ID删除向量"""
+        if not self._connected:
+            try:
+                self._connect()
+                self._ensure_collection()
+                self._connected = True
+            except Exception as e:
+                raise ValueError(f"Milvus未连接: {e}")
+
         if not self._collection:
             raise ValueError("集合未初始化")
         
@@ -178,6 +186,25 @@ class MilvusService:
         self._collection.delete(expr)
         self._collection.flush()
         app_logger.info(f"删除了文档 {document_id} 的所有向量")
+    
+    def health_check(self) -> bool:
+        """健康检查"""
+        if not self._connected:
+            try:
+                self._connect()
+                self._ensure_collection()
+                self._connected = True
+            except Exception:
+                return False
+        
+        if not self._collection:
+            return False
+            
+        try:
+            # 简单检查：获取集合统计信息
+            return self._collection.num_entities >= 0
+        except Exception:
+            return False
 
 
 # 全局Milvus实例（延迟初始化）

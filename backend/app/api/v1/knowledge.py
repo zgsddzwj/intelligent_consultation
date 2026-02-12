@@ -235,11 +235,9 @@ async def delete_document(
         if delete_vectors:
             try:
                 milvus = get_milvus_service()
-                if milvus._connected and milvus._collection:
-                    milvus.delete_by_document_id(doc.id)
-                    app_logger.info(f"已删除文档 {doc.id} 在 Milvus 中的向量")
-                else:
-                    app_logger.debug(f"Milvus 未连接，跳过向量删除: document_id={doc.id}")
+                # 尝试删除向量，服务内部会自动处理重连
+                milvus.delete_by_document_id(doc.id)
+                app_logger.info(f"已删除文档 {doc.id} 在 Milvus 中的向量")
             except Exception as e:
                 app_logger.warning(f"删除向量失败（文档仍会从库中删除）: {e}")
         

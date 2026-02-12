@@ -13,9 +13,10 @@ class RedisService:
     
     def __init__(self):
         self.client = None
-        self.enabled = False
+        self._init_client()
         
-        # 如果REDIS_URL未配置或为空，使用默认本地Redis
+    def _init_client(self):
+        """初始化Redis客户端"""
         redis_url = settings.REDIS_URL or "redis://localhost:6379/0"
         
         try:
@@ -25,29 +26,39 @@ class RedisService:
                 encoding="utf-8",
                 socket_connect_timeout=2,
                 socket_timeout=2,
-                retry_on_timeout=False
+                retry_on_timeout=False  # 我们自己处理重试
             )
             # 测试连接
             self.client.ping()
-            self.enabled = True
             app_logger.info(f"Redis连接成功: {redis_url}")
-        except redis.ConnectionError as e:
-            app_logger.warning(f"Redis连接失败: {e}，限流和缓存功能将不可用")
-            self.enabled = False
-            self.client = None
-        except redis.AuthenticationError as e:
-            app_logger.warning(f"Redis认证失败: {e}，请检查REDIS_URL中的密码配置")
-            self.enabled = False
-            self.client = None
         except Exception as e:
-            app_logger.warning(f"Redis初始化失败: {e}，限流和缓存功能将不可用")
-            self.enabled = False
-            self.client = None
+            app_logger.warning(f"Redis连接失败: {e}，将在使用时尝试重连")
+            # 即使连接失败，我们也保留client对象（如果是连接错误），
+            # 但如果from_url失败（如配置错误），client可能是None
+            # 这里我们不置为None，依赖redis-py的重试机制（如果是连接问题）
+            # 或者在方法中重新检查
+    
+    def _ensure_connection(self) -> bool:
+        """确保连接可用"""
+        if self.client:
+            try:
+                self.client.ping()
+                return True
+            except Exception:
+                pass
+        
+        # 尝试重新初始化
+        self._init_client()
+        return self.client is not None
     
     def get(self, key: str) -> Optional[str]:
         """获取值"""
-        if not self.enabled or not self.client:
+        if not self.client:
+            self._init_client()
+            
+        if not self.client:
             return None
+            
         try:
             return self.client.get(key)
         except Exception as e:
@@ -56,8 +67,12 @@ class RedisService:
     
     def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
         """设置值"""
-        if not self.enabled or not self.client:
+        if not self.client:
+            self._init_client()
+            
+        if not self.client:
             return False
+            
         try:
             if isinstance(value, (dict, list)):
                 value = json.dumps(value, ensure_ascii=False)
@@ -69,8 +84,12 @@ class RedisService:
     
     def delete(self, key: str) -> bool:
         """删除键"""
-        if not self.enabled or not self.client:
+        if not self.client:
+            self._init_client()
+            
+        if not self.client:
             return False
+            
         try:
             return bool(self.client.delete(key))
         except Exception as e:
@@ -79,8 +98,12 @@ class RedisService:
     
     def exists(self, key: str) -> bool:
         """检查键是否存在"""
-        if not self.enabled or not self.client:
+        if not self.client:
+            self._init_client()
+            
+        if not self.client:
             return False
+            
         try:
             return bool(self.client.exists(key))
         except Exception as e:
@@ -89,8 +112,6 @@ class RedisService:
     
     def get_json(self, key: str) -> Optional[dict]:
         """获取JSON值"""
-        if not self.enabled:
-            return None
         value = self.get(key)
         if value:
             try:
@@ -101,9 +122,20 @@ class RedisService:
     
     def set_json(self, key: str, value: dict, ttl: Optional[int] = None) -> bool:
         """设置JSON值"""
-        if not self.enabled:
-            return False
         return self.set(key, value, ttl)
+    
+    def health_check(self) -> bool:
+        """健康检查"""
+        if not self.client:
+            self._init_client()
+        
+        if not self.client:
+            return False
+            
+        try:
+            return self.client.ping()
+        except Exception:
+            return False
 
 
 # 全局Redis实例

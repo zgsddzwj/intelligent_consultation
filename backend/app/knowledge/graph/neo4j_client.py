@@ -42,6 +42,11 @@ class Neo4jClient:
         # 如果未连接，尝试重新连接
         if not self._connected or not self.driver:
             try:
+                if self.driver:
+                    try:
+                        self.driver.close()
+                    except Exception:
+                        pass
                 self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
                 self.driver.verify_connectivity()
                 self._connected = True
@@ -65,6 +70,11 @@ class Neo4jClient:
         # 如果未连接，尝试重新连接
         if not self._connected or not self.driver:
             try:
+                if self.driver:
+                    try:
+                        self.driver.close()
+                    except Exception:
+                        pass
                 self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
                 self.driver.verify_connectivity()
                 self._connected = True
@@ -115,14 +125,19 @@ class Neo4jClient:
             return False
 
 
+import threading
+
 # 全局Neo4j客户端实例（延迟初始化）
 _neo4j_client: Optional[Neo4jClient] = None
+_neo4j_lock = threading.Lock()
 
 def get_neo4j_client() -> Neo4jClient:
-    """获取Neo4j客户端实例（单例模式）"""
+    """获取Neo4j客户端实例（单例模式，线程安全）"""
     global _neo4j_client
     if _neo4j_client is None:
-        _neo4j_client = Neo4jClient()
+        with _neo4j_lock:
+            if _neo4j_client is None:
+                _neo4j_client = Neo4jClient()
     return _neo4j_client
 
 # 为了向后兼容

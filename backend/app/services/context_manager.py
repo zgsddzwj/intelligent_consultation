@@ -145,10 +145,29 @@ class ContextManager:
         return context_compressor.compress(context, current_query)
     
     def _estimate_tokens(self, text: str) -> int:
-        """估算token数量（粗略）"""
-        # 中文大约1.5字符=1token，英文大约4字符=1token
-        # 这里简化处理，使用平均2字符=1token
-        return len(text) // 2
+        """
+        估算token数量（优化版）
+        
+        策略：
+        1. 尝试使用 tiktoken (如果可用)
+        2. 回退到启发式算法：
+           - ASCII字符（英文/数字）：约 4 char = 1 token
+           - 非ASCII字符（中文等）：约 1 char = 1 token (保守估计)
+        """
+        try:
+            import tiktoken
+            # 使用 cl100k_base (GPT-4/3.5, Qwen等常用编码)
+            encoding = tiktoken.get_encoding("cl100k_base")
+            return len(encoding.encode(text))
+        except ImportError:
+            # 启发式计算
+            token_count = 0
+            for char in text:
+                if ord(char) < 128:
+                    token_count += 0.25
+                else:
+                    token_count += 1.0  # 中文通常 0.7~1.5 token/char，取 1 保守
+            return int(token_count)
     
     def retrieve_relevant_history(self, current_query: str, 
                                   all_messages: List[Dict],
