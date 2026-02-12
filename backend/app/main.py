@@ -97,12 +97,6 @@ async def root():
     }
 
 
-@app.get("/health")
-async def health_check():
-    """健康检查"""
-    return {"status": "healthy"}
-
-
 @app.get("/metrics")
 async def metrics():
     """Prometheus指标端点"""
@@ -118,10 +112,19 @@ async def favicon():
 
 
 # 导入路由
-from app.api.v1 import consultation, agents, knowledge, users, image_analysis
+from app.api.v1 import consultation, agents, knowledge, users, image_analysis, health
 app.include_router(consultation.router, prefix=f"{settings.API_V1_PREFIX}/consultation", tags=["咨询"])
 app.include_router(agents.router, prefix=f"{settings.API_V1_PREFIX}/agents", tags=["Agent"])
 app.include_router(knowledge.router, prefix=f"{settings.API_V1_PREFIX}/knowledge", tags=["知识库"])
 app.include_router(users.router, prefix=f"{settings.API_V1_PREFIX}/users", tags=["用户"])
 app.include_router(image_analysis.router, prefix=f"{settings.API_V1_PREFIX}/image", tags=["图片分析"])
+app.include_router(health.router, prefix=f"{settings.API_V1_PREFIX}", tags=["监控"])  # /api/v1/health
+
+# 覆盖根路径 /health
+@app.get("/health", tags=["监控"])
+async def root_health_check():
+    """根健康检查（重定向到API v1）"""
+    # 这里可以直接调用逻辑，或者返回简单的 healthy
+    # 为了兼容 K8s probes，通常根路径 /health 应该尽量简单
+    return {"status": "healthy", "detail_url": f"{settings.API_V1_PREFIX}/health"}
 
