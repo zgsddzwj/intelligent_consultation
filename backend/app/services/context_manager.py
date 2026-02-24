@@ -1,4 +1,5 @@
 """上下文管理服务 - 对话历史、分层上下文和智能压缩"""
+import math
 from typing import List, Dict, Any, Optional
 from app.config import get_settings
 from app.utils.logger import app_logger
@@ -160,14 +161,20 @@ class ContextManager:
             encoding = tiktoken.get_encoding("cl100k_base")
             return len(encoding.encode(text))
         except ImportError:
-            # 启发式计算
-            token_count = 0
+            # 启发式计算: 向上取整以避免低估
+            ascii_chars = 0
+            other_chars = 0
             for char in text:
                 if ord(char) < 128:
-                    token_count += 0.25
+                    ascii_chars += 1
                 else:
-                    token_count += 1.0  # 中文通常 0.7~1.5 token/char，取 1 保守
-            return int(token_count)
+                    other_chars += 1
+            
+            # 向上取整，确保估算值不小于实际可能值
+            ascii_tokens = math.ceil(ascii_chars / 4.0)
+            other_tokens = math.ceil(other_chars / 1.5) # 1.5为中文平均值
+            
+            return ascii_tokens + other_tokens
     
     def retrieve_relevant_history(self, current_query: str, 
                                   all_messages: List[Dict],
