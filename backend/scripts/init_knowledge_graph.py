@@ -115,6 +115,7 @@ def init_knowledge_graph():
         ("益脑胶囊", "Yinao Capsule", "胶囊", "用于神经衰弱的治疗", "对本品过敏者禁用"),
     ]
     
+    app_logger.info(f"正在创建 {len(drugs)} 种药物...")
     for name, generic, form, indication, contraindication in drugs:
         try:
             builder.create_entity("Drug", name, {
