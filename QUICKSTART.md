@@ -3,8 +3,8 @@
 ## 1. 环境准备
 
 确保已安装：
-- Docker 和 Docker Compose
-- Python 3.11+（用于运行初始化脚本）
+1. Docker 和 Docker Compose
+2. Python 3.11+（用于运行初始化脚本）
 
 ## 2. 验证系统设置
 
