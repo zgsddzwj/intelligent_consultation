@@ -136,6 +136,7 @@ def init_knowledge_graph():
         ("血常规", "实验室检查", "各项指标正常范围", "检测血液成分"),
     ]
     
+    app_logger.info(f"正在创建 {len(examinations)} 种检查...")
     for name, type_name, ref_range, desc in examinations:
         try:
             builder.create_entity("Examination", name, {
@@ -203,6 +204,7 @@ def init_knowledge_graph():
         ("Symptom", "干咳", "BELONGS_TO", "Department", "呼吸内科", {}),
     ]
     
+    app_logger.info(f"正在创建 {len(relationships)} 条关系...")
     for from_type, from_name, rel_type, to_type, to_name, props in relationships:
         try:
             builder.create_relationship(from_type, from_name, rel_type, to_type, to_name, props)
