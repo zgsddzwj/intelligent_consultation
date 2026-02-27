@@ -91,6 +91,7 @@ def init_knowledge_graph():
         ("干咳", "中等", "无痰或少痰的咳嗽。"),
     ]
     
+    app_logger.info(f"正在创建 {len(symptoms)} 种症状...")
     for name, severity, desc in symptoms:
         try:
             builder.create_entity("Symptom", name, {
