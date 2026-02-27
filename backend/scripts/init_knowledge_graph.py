@@ -31,6 +31,7 @@ def init_knowledge_graph():
         ("产科", "产科疾病诊疗", "流产、早孕反应等"),
     ]
     
+    app_logger.info(f"正在创建 {len(departments)} 个科室...")
     for name, desc, scope in departments:
         try:
             builder.create_entity("Department", name, {
