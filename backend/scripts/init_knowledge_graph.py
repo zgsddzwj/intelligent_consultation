@@ -58,6 +58,7 @@ def init_knowledge_graph():
         ("腹膜炎", "K65", "腹膜炎症性疾病。", "细菌感染、化学刺激等"),
     ]
     
+    app_logger.info(f"正在创建 {len(diseases)} 种疾病...")
     for name, icd10, desc, etiology in diseases:
         try:
             builder.create_entity("Disease", name, {
