@@ -123,7 +123,7 @@ class ContextManager:
         # 中期上下文（会话摘要）
         if medium_term:
             context_parts.append(f"本次会话摘要：\n{medium_term}\n")
-        
+
         # 短期上下文（最近对话）
         if short_term:
             context_parts.append("最近对话：\n")
