@@ -25,6 +25,12 @@ class LLMService:
     """LLM服务类 - 支持Qwen和DeepSeek动态切换"""
     
     def __init__(self):
+        """
+        初始化LLM服务。
+
+        根据配置（`LLM_PROVIDER`）动态选择并初始化LLM客户端。
+        目前支持 'qwen' 和 'deepseek'。
+        """
         self.provider = settings.LLM_PROVIDER.lower()
         self.prompt_version = settings.PROMPT_VERSION
         
