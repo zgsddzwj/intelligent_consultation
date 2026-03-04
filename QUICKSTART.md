@@ -9,7 +9,9 @@
 ## 2. 验证系统设置
 
 ```bash
+# 首先，进入后端目录
 cd backend
+# 然后，运行验证脚本
 python scripts/verify_setup.py
 ```
 
