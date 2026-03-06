@@ -2,6 +2,8 @@
 
 本文档目录包含项目的核心架构文档、技术指南和开发规范。
 
+快速跳转： [架构](ARCHITECTURE.md) | [RAG 指南](RAG_GUIDE.md) | [知识图谱](KNOWLEDGE_GRAPH_GUIDE.md) | [部署](../DEPLOYMENT.md)
+
 ## 📚 核心文档
 
 ### 架构设计
