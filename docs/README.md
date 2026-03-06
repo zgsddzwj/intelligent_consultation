@@ -47,3 +47,4 @@
 - [项目主页](../README.md) - 项目概述与快速开始
 - [脚本说明](../backend/scripts/README.md) - 数据处理脚本使用说明
 - [测试指南](../backend/tests/README.md) - 单元测试与集成测试
+- [日志指南](../LOGGING.md) - 如何查看与排查日志
