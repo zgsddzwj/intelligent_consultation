@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     
     # Application
     APP_NAME: str = "智能医疗管家平台"
-    APP_VERSION: str = "0.1.0"
+    APP_VERSION: str = "0.1.1"
     DEBUG: bool = True
     ENVIRONMENT: str = "development"
     
