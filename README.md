@@ -54,7 +54,7 @@ intelligent_consultation/
 ### 最小可运行环境
 - **仅后端 + LLM**：可只启动后端并配置 `QWEN_API_KEY`，问答可用（无 RAG/知识图谱时会有提示）。
 - **完整能力**：需同时运行 **Neo4j**（知识图谱）、**Milvus**（向量检索）、**Redis**（缓存/限流）、**PostgreSQL**（业务库）。详见 `docker-compose.yml` 或 [QUICKSTART.md](QUICKSTART.md)。
-- **知识图谱**：首次使用前**必须**执行一次 `python scripts/init_knowledge_graph.py`（或 `init_all.py`）以导入图谱数据，否则知识图谱检索为空。
+- **知识图谱**：首次使用前**必须**执行一次 `python scripts/init_knowledge_graph.py`（或 `init_all.py`）以导入图谱数据，否则知识图谱检索为空。建议定期检查知识图谱状态以确保数据完整性。
 
 ### 一键启动（推荐）
 
