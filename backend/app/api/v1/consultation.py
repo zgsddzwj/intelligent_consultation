@@ -140,10 +140,18 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        app_logger.error(f"咨询处理失败: {e}")
-        # 即使出错也返回基本响应
+        app_logger.error(f"咨询处理失败: {e}", exc_info=True)
+        # 即使出错也返回基本响应，隐藏具体错误细节以提高安全性
+        error_msg = "抱歉，处理您的咨询时遇到技术问题。"
+        if "rate limit" in str(e).lower():
+            error_msg = "当前访问量较大，请稍后重试。"
+        elif "timeout" in str(e).lower():
+            error_msg = "请求处理超时，请重新发送您的问题。"
+        elif "connection" in str(e).lower():
+            error_msg = "服务暂时不可用，请稍后重试。"
+        
         return ChatResponse(
-            answer=f"处理您的咨询时遇到错误: {str(e)}。请稍后重试或联系客服。",
+            answer=f"{error_msg}请稍后重试或联系客服。",
             consultation_id=consultation_id,
             sources=[],
             risk_level=None
