@@ -20,6 +20,24 @@ async def health_check(db: Session = Depends(get_db)):
     - redis: Redis缓存服务
     - milvus: 向量数据库
     - neo4j: 知识图谱数据库
+    
+    状态说明：
+    - healthy: 所有核心服务正常
+    - degraded: 部分可选服务异常，系统降级运行
+    - unhealthy: 核心服务异常，系统不可用
+    
+    返回格式：
+    ```json
+    {
+      "status": "healthy",
+      "components": {
+        "database": "healthy",
+        "redis": "healthy", 
+        "milvus": "healthy",
+        "neo4j": "healthy"
+      }
+    }
+    ```
     """
     health_status = {
         "status": "healthy",
