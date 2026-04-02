@@ -12,7 +12,13 @@ export default function DoctorDashboard() {
       <Content style={{ padding: '24px' }}>
         <Card>
           <Title level={2}>医生工作台</Title>
-          <p>医生端功能开发中...</p>
+          <p>医生端功能开发中，敬请期待更多专业功能...</p>
+          <ul style={{ color: '#666', marginTop: '16px' }}>
+            <li>患者咨询管理</li>
+            <li>医疗知识库查询</li>
+            <li>诊断辅助工具</li>
+            <li>用药指导系统</li>
+          </ul>
         </Card>
       </Content>
     </Layout>
