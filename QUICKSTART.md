@@ -135,14 +135,17 @@ curl -X POST http://localhost:8000/api/v1/knowledge/graph/visualization \
 ### Neo4j连接失败
 - 检查Neo4j服务是否启动：`docker-compose ps neo4j`
 - 检查连接配置：`backend/.env` 中的 `NEO4J_URI`
+- 重置Neo4j密码：`docker-compose exec neo4j bin/cypher-shell -u neo4j -p "password" "CALL dbms.changePassword('new_password')"`
 
 ### Milvus连接失败
 - 确保etcd和minio服务已启动
 - 检查Milvus健康状态：`docker-compose logs milvus`
+- 重启Milvus相关服务：`docker-compose restart milvus etcd minio`
 
 ### API密钥错误
 - 确认 `QWEN_API_KEY` 在 `.env` 文件中正确配置
 - 检查API密钥是否有效
+- 获取新API密钥：访问阿里云百炼控制台重新生成
 
 ## 10. 下一步
 
