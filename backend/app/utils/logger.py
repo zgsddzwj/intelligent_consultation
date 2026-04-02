@@ -74,10 +74,25 @@ def setup_logger():
         str(log_file),
         format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
         level=settings.LOG_LEVEL,
-        rotation="10 MB",
-        retention="7 days",
+        rotation="50 MB",
+        retention="14 days",
         compression="zip",
-        encoding="utf-8"
+        encoding="utf-8",
+        backtrace=True,
+        diagnose=True
+    )
+    
+    # 单独的错误日志文件
+    error_log_file = log_file.parent / "error.log"
+    logger.add(
+        str(error_log_file),
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+        level="ERROR",
+        rotation="20 MB", 
+        retention="30 days",
+        compression="zip",
+        encoding="utf-8",
+        filter=lambda record: record["level"].name == "ERROR"
     )
     
     return logger
