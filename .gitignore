@@ -41,6 +41,7 @@ ENV/
 # Logs
 *.log
 logs/
+backend/logs/*.zip  # 压缩的日志文件
 
 # Database
 *.db
@@ -68,6 +69,10 @@ htmlcov/
 frontend/dist/
 frontend/build/
 
+# ML Models (训练生成的模型文件)
+backend/models/*/
+!backend/models/.gitkeep
+
 # Data files (keep structure, ignore content)
 # 注意：data目录仅用于本地开发，生产环境使用对象存储
 data/documents/**/*
@@ -94,3 +99,11 @@ Thumbs.db
 .DS_Store
 
 data/external/
+
+# 截屏文件
+截屏*.png
+截图*.png
+*.png
+
+# 可执行文件（本地编译）
+main

@@ -1,47 +1,85 @@
-# 智能医疗管家平台
+# 🏥 智能医疗管家平台
 
-一个以AI医生Agent为核心的智能医疗管家平台，集成多Agent协同系统、高级RAG检索、Neo4j知识图谱、MCP服务器和React前端。
+<p align="center">
+  <strong>一个以AI医生Agent为核心的智能医疗管家平台</strong><br>
+  集成多Agent协同系统、高级RAG检索、Neo4j知识图谱、MCP服务器和React前端
+</p>
 
-## 项目概述
+---
 
-本平台旨在为用户提供精准、可靠、个性化的健康服务，通过整合多种AI Agent（医学诊断、健康管家、客户服务、运营分析），利用最新的LLM技术与医疗知识图谱，构建智能医疗咨询系统。
+## ✨ 项目概述
 
-主要特性：
-- **多Agent协同**：基于LangGraph编排的专业分工Agent系统。
-- **高级RAG**：混合检索（BM25+向量）、多路召回、重排序（BGE-Reranker）、结构化文档解析（MinerU/PDFPlumber）。
-- **医疗知识图谱**：基于Neo4j构建的专业医疗图谱，支持实体识别与意图分类。
-- **全链路监控**：集成Langfuse进行LLM可观测性监控。
+本平台旨在为用户提供**精准、可靠、个性化**的健康服务，通过整合多种AI Agent（医学诊断、健康管家、客户服务、运营分析），利用最新的LLM技术与医疗知识图谱，构建智能医疗咨询系统。
 
-## 技术栈
+### 🎯 主要特性
+
+| 特性 | 描述 |
+|------|------|
+| **🤖 多Agent协同** | 基于LangGraph编排的专业分工Agent系统（医生/健康管家/客服/运营） |
+| **🔍 高级RAG** | 混合检索（BM25+向量）、多路召回、重排序（BGE-Reranker）、结构化文档解析 |
+| **📊 医疗知识图谱** | 基于Neo4j构建的专业医疗图谱，支持实体识别与意图分类 |
+| **👁️ 全链路监控** | 集成Langfuse进行LLM可观测性监控和Prometheus指标采集 |
+| **🔐 安全可靠** | JWT认证、RBAC权限控制、数据加密、限流保护 |
+
+## 🛠️ 技术栈
 
 ### 后端
-- **核心框架**: Python 3.11+, FastAPI
-- **AI/LLM**: LangChain, LangGraph, Qwen/Qwen-Med (DashScope)
-- **RAG & 搜索**: Milvus (向量库), BM25, FlagEmbedding (Reranker), Jieba
-- **知识图谱**: Neo4j
-- **数据存储**: PostgreSQL (业务), Redis (缓存), MinIO (对象存储)
-- **文档处理**: PDFPlumber, Mineru, PaddleOCR
-- **监控**: Langfuse, Prometheus
+- **核心框架**: Python 3.11+, FastAPI, Uvicorn
+- **AI/LLM**: LangChain, LangGraph, Qwen/Qwen-Med (DashScope), DeepSeek
+- **RAG & 搜索**: Milvus (向量库), BM25, FlagEmbedding (Reranker), Jieba分词
+- **知识图谱**: Neo4j (含APOC插件)
+- **数据存储**: PostgreSQL 15 (业务), Redis 7 (缓存), MinIO (对象存储)
+- **文档处理**: PDFPlumber, MinerU, PaddleOCR
+- **机器学习**: Scikit-learn (SVM意图分类、相关性评分)
+- **监控**: Langfuse, Prometheus Client
 
 ### 前端
-- **框架**: React 18 + TypeScript + Vite
-- **UI组件**: Ant Design
-- **状态管理**: Zustand, React Query
-- **可视化**: 知识图谱可视化组件
+- **框架**: React 18 + TypeScript 5 + Vite 5
+- **UI组件**: Ant Design 5
+- **状态管理**: Zustand 4, @tanstack/react-query 5
+- **可视化**: react-force-graph-2d (知识图谱)
+- **路由**: React Router DOM 6
 
-### 部署
-- Docker + Docker Compose (本地开发)
-- Kubernetes (云部署)
+### 部署 & 基础设施
+- **容器化**: Docker + Docker Compose
+- **编排**: Kubernetes (完整K8s配置)
+- **CI/CD**: 可扩展的GitOps工作流
 
-## 项目结构
+## 📁 项目结构
 
 ```
 intelligent_consultation/
-├── backend/          # 后端服务
-├── frontend/         # 前端应用
-├── data/             # 数据目录
-├── docs/             # 文档
-└── k8s/              # Kubernetes配置
+├── backend/                 # 后端服务 (FastAPI)
+│   ├── app/
+│   │   ├── agents/         # 多Agent系统 (LangGraph编排)
+│   │   │   ├── orchestrator.py    # Agent编排器
+│   │   │   ├── doctor_agent.py    # 医生Agent
+│   │   │   └── tools/             # Agent工具集
+│   │   ├── api/            # API路由和中间件
+│   │   ├── common/         # 公共模块 (异常、加密、追踪)
+│   │   ├── database/       # 数据库 (PostgreSQL + Alembic)
+│   │   ├── infrastructure/ # 基础设施 (缓存、监控、限流)
+│   │   ├── knowledge/      # 知识层 (RAG + 知识图谱 + ML)
+│   │   │   ├── rag/        # 高级RAG系统
+│   │   │   ├── graph/      # Neo4j知识图谱
+│   │   │   └── ml/         # ML模型 (意图分类等)
+│   │   ├── models/         # SQLAlchemy数据模型
+│   │   ├── services/       # 业务服务层
+│   │   └── utils/          # 工具类
+│   ├── scripts/            # 管理脚本
+│   ├── tests/              # 测试套件
+│   └── requirements.txt    # Python依赖
+├── frontend/               # 前端应用 (React + Vite)
+│   ├── src/
+│   │   ├── pages/         # 页面组件
+│   │   ├── services/      # API服务
+│   │   └── stores/        # 状态管理
+│   └── package.json
+├── data/                   # 数据目录 (本地开发用)
+├── docs/                   # 详细文档
+├── k8s/                    # Kubernetes部署配置
+├── docker-compose.yml      # Docker Compose编排
+└── start.sh                # 一键启动脚本
 ```
 
 ## 快速开始
