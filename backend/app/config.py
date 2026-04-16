@@ -1,11 +1,13 @@
 """应用配置管理"""
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List, Optional
 from functools import lru_cache
 
 
 class Settings(BaseSettings):
     """应用配置"""
+
+    model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
     
     # Application
     APP_NAME: str = "智能医疗管家平台"
@@ -170,11 +172,6 @@ class Settings(BaseSettings):
     PROMPT_VERSION: str = "v1.0"
     ENABLE_PROMPT_AB_TEST: bool = False
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
-
-
 @lru_cache()
 def get_settings() -> Settings:
     """获取配置实例（单例模式）"""
