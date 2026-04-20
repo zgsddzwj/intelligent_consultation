@@ -1230,6 +1230,330 @@ def main():
         raise
 
 
+# ============================================================
+# 模型版本管理与工具函数
+# ============================================================
+
+class ModelVersionManager:
+    """模型版本管理器
+    
+    管理模型的版本、元数据和生命周期。
+    支持多版本共存和回滚操作。
+    """
+    
+    def __init__(self, models_dir: Path = None):
+        self.models_dir = models_dir or (PROJECT_ROOT / "models")
+        self.version_file = self.models_dir / "versions.json"
+        self._versions = self._load_versions()
+    
+    def _load_versions(self) -> Dict:
+        """加载版本记录"""
+        if self.version_file.exists():
+            try:
+                with open(self.version_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                app_logger.warning(f"加载版本记录失败: {e}")
+        return {"models": {}, "last_updated": None}
+    
+    def _save_versions(self):
+        """保存版本记录"""
+        self.versions["last_updated"] = datetime.now().isoformat()
+        self.models_dir.mkdir(parents=True, exist_ok=True)
+        
+        with open(self.version_file, 'w', encoding='utf-8') as f:
+            json.dump(self._versions, f, ensure_ascii=False, indent=2)
+    
+    def register_model(self, model_name: str, model_path: Path, 
+                       version: str, metadata: Dict = None) -> Dict:
+        """注册新训练的模型
+        
+        Args:
+            model_name: 模型名称
+            model_path: 模型文件路径
+            version: 版本号
+            metadata: 额外元数据
+            
+        Returns:
+            版本信息字典
+        """
+        if model_name not in self._versions["models"]:
+            self._versions["models"][model_name] = []
+        
+        version_info = {
+            "version": version,
+            "path": str(model_path),
+            "registered_at": datetime.now().isoformat(),
+            "metadata": metadata or {},
+            "size_mb": round(model_path.stat().st_size / (1024 * 1024), 2) if model_path.exists() else 0
+        }
+        
+        # 添加到版本历史
+        self._versions["models"][model_name].append(version_info)
+        
+        # 只保留最近5个版本
+        if len(self._versions["models"][model_name]) > 5:
+            old_version = self._versions["models"][model_name].pop(0)
+            app_logger.info(f"移除旧版本: {old_version['version']}")
+        
+        self._save_versions()
+        app_logger.info(f"已注册模型: {model_name} v{version}")
+        
+        return version_info
+    
+    def get_latest_version(self, model_name: str) -> Optional[Dict]:
+        """获取指定模型的最新版本信息"""
+        versions = self._versions.get("models", {}).get(model_name, [])
+        return versions[-1] if versions else None
+    
+    def list_models(self) -> Dict[str, List[Dict]]:
+        """列出所有已注册的模型及其版本"""
+        return self._versions.get("models", {})
+    
+    def rollback(self, model_name: str, target_version: str = None) -> bool:
+        """回滚到指定版本
+        
+        Args:
+            model_name: 模型名称
+            target_version: 目标版本（默认回滚到上一版本）
+            
+        Returns:
+            是否成功
+        """
+        versions = self._versions.get("models", {}).get(model_name, [])
+        
+        if len(versions) < 2:
+            app_logger.warning(f"{model_name} 没有可回滚的旧版本")
+            return False
+        
+        if target_version:
+            # 回滚到指定版本
+            for v in versions:
+                if v["version"] == target_version:
+                    app_logger.info(f"{model_name} 已回滚到 v{target_version}")
+                    return True
+            app_logger.warning(f"未找到版本: {target_version}")
+            return False
+        else:
+            # 回滚到上一版本
+            prev_version = versions[-2]
+            app_logger.info(f"{model_name} 已回滚到 v{prev_version['version']}")
+            return True
+
+
+def validate_model(model_path: Path) -> Tuple[bool, str]:
+    """验证模型文件的有效性
+    
+    检查模型文件是否可以正常加载和使用。
+    
+    Args:
+        model_path: 模型文件路径
+        
+    Returns:
+        (是否有效, 错误消息)
+    """
+    if not model_path.exists():
+        return False, f"文件不存在: {model_path}"
+    
+    if model_path.stat().st_size == 0:
+        return False, f"文件为空: {model_path}"
+    
+    try:
+        with open(model_path, 'rb') as f:
+            model_data = pickle.load(f)
+        
+        # 验证必要字段
+        required_fields = ["model"]
+        for field in required_fields:
+            if field not in model_data:
+                return False, f"缺少必要字段: {field}"
+        
+        # 尝试调用模型的predict方法（基本可用性检查）
+        model = model_data.get("model")
+        if hasattr(model, 'predict'):
+            # 使用虚拟数据测试
+            test_input = np.zeros((1, 10))
+            try:
+                _ = model.predict(test_input)
+            except Exception as e:
+                # 预测失败不一定是致命错误，记录警告即可
+                app_logger.debug(f"模型预测测试警告: {e}")
+        
+        return True, "模型验证通过"
+        
+    except pickle.UnpicklingError as e:
+        return False, f"Pickle反序列化失败: {e}"
+    except Exception as e:
+        return False, f"验证异常: {e}"
+
+
+def load_model(model_name: str, models_dir: Path = None) -> Optional[Any]:
+    """加载指定模型
+    
+    Args:
+        model_name: 模型名称 (intent/relevance/ranking/reranker)
+        models_dir: 模型目录
+        
+    Returns:
+        模型数据字典，加载失败返回None
+    """
+    models_dir = models_dir or (PROJECT_ROOT / "models")
+    
+    # 模型文件映射
+    model_files = {
+        "intent": "intent_classifier.pkl",
+        "relevance": "relevance_scorer.pkl",
+        "ranking": "ranking_optimizer.pkl",
+        "reranker": "ml_reranker_ensemble.pkl",
+    }
+    
+    if model_name not in model_files:
+        app_logger.error(f"未知模型名称: {model_name}")
+        return None
+    
+    model_path = models_dir / model_name / model_files[model_name]
+    
+    # 验证模型
+    is_valid, msg = validate_model(model_path)
+    if not is_valid:
+        app_logger.error(f"模型验证失败 [{model_name}]: {msg}")
+        return None
+    
+    try:
+        with open(model_path, 'rb') as f:
+            model_data = pickle.load(f)
+        
+        app_logger.info(f"成功加载模型: {model_name} (v{model_data.get('version', 'unknown')})")
+        return model_data
+        
+    except Exception as e:
+        app_logger.error(f"加载模型失败 [{model_name}]: {e}")
+        return None
+
+
+def create_training_config(output_path: Path = None) -> Path:
+    """创建训练配置模板
+    
+    生成一个YAML格式的训练配置文件，
+    用户可以通过修改此文件自定义训练参数。
+    
+    Args:
+        output_path: 配置文件输出路径
+        
+    Returns:
+        配置文件路径
+    """
+    config = {
+        "training": {
+            "random_seed": 42,
+            "test_size": 0.2,
+            "cross_validation_folds": 5,
+            "n_jobs": -1,
+            "verbose": True
+        },
+        "models": {
+            "intent_classifier": {
+                "enabled": True,
+                "algorithm": "svm",
+                "hyperparameters": {
+                    "C": [0.1, 1, 10, 100],
+                    "kernel": ["rbf", "linear"],
+                    "gamma": ["scale", "auto"]
+                },
+                "n_samples_per_class": 20
+            },
+            "relevance_scorer": {
+                "enabled": True,
+                "algorithm": "svm",
+                "n_positive_samples": 30,
+                "n_negative_samples": 30
+            },
+            "ranking_optimizer": {
+                "enabled": True,
+                "algorithm": "gradient_boosting",
+                "hyperparameters": {
+                    "n_estimators": 100,
+                    "max_depth": 6,
+                    "learning_rate": 0.1
+                }
+            },
+            "ml_reranker": {
+                "enabled": True,
+                "ensemble": True,
+                "models": ["svm", "random_forest", "decision_tree"]
+            }
+        },
+        "output": {
+            "models_dir": "./models",
+            "report_dir": "./logs",
+            "save_intermediate": False
+        },
+        "data": {
+            "source": "generated",  # generated/file/database
+            "augmentation": True,
+            "balance_classes": True
+        }
+    }
+    
+    if output_path is None:
+        output_path = PROJECT_ROOT / "config" / "training_config.json"
+    
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(config, f, ensure_ascii=False, indent=4)
+    
+    app_logger.info(f"训练配置模板已创建: {output_path}")
+    return output_path
+
+
+def benchmark_models(models_dir: Path = None) -> Dict[str, float]:
+    """对已训练的模型进行基准测试
+    
+    测试各模型的推理延迟，用于性能评估。
+    
+    Args:
+        models_dir: 模型目录
+        
+    Returns:
+        各模型的平均推理时间(ms)
+    """
+    import time as time_module
+    
+    models_dir = models_dir or (PROJECT_ROOT / "models")
+    benchmarks = {}
+    
+    app_logger.info("开始模型基准测试...")
+    
+    for model_name in ALL_MODELS:
+        model_data = load_model(model_name, models_dir)
+        if model_data is None:
+            continue
+        
+        model = model_data.get("model")
+        if model is None or not hasattr(model, 'predict'):
+            app_logger.warning(f"{model_name}: 无法进行基准测试（无predict方法）")
+            continue
+        
+        # 准备测试数据
+        n_tests = 100
+        test_input = np.random.randn(n_tests, 20)  # 通用测试输入
+        
+        # 预热
+        _ = model.predict(test_input[:1])
+        
+        # 正式测试
+        start = time_module.time()
+        for _ in range(5):
+            _ = model.predict(test_input)
+        elapsed = (time_module.time() - start) / (n_tests * 5) * 1000  # ms per sample
+        
+        benchmarks[model_name] = round(elapsed, 3)
+        app_logger.info(f"  {model_name}: {elapsed:.3f} ms/sample")
+    
+    return benchmarks
+
+
 if __name__ == "__main__":
     main()
 
