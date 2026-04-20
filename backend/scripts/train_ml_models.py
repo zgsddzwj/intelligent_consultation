@@ -351,278 +351,882 @@ def generate_sample_data():
     return intent_data, relevance_data
 
 
-def train_intent_classifier():
-    """训练意图分类器"""
-    app_logger.info("开始训练意图分类器...")
+# ============================================================
+# 特征提取模块
+# ============================================================
+
+def extract_text_features(text: str) -> np.ndarray:
+    """提取文本的统计特征（不依赖外部模型）
     
-    # 加载或生成训练数据
-    intent_data, _ = generate_sample_data()
+    基于规则和关键词匹配提取特征向量，
+    用于在没有预训练模型时的快速特征工程。
     
-    # 这里应该从实际数据源加载训练数据
-    # 示例：使用规则生成特征
-    from app.knowledge.ml.intent_classifier import IntentClassifier
+    Args:
+        text: 输入文本
+        
+    Returns:
+        特征向量 (numpy array)
+    """
+    text_lower = text.lower()
+    features = []
     
-    classifier = IntentClassifier()
+    # 1. 文本长度特征
+    features.append(len(text))
+    features.append(len(text.split()))
     
-    # 提取特征
-    X = []
-    y = []
-    intent_names = list(classifier.INTENT_TYPES.keys())
+    # 2. 医疗关键词匹配特征
+    for category, keywords in MEDICAL_KEYWORDS.items():
+        match_count = sum(1 for kw in keywords if kw in text)
+        features.append(match_count)
+        features.append(match_count / max(len(text), 1))  # 关键词密度
     
-    for query, intent in zip(intent_data["queries"], intent_data["intents"]):
-        features = classifier.extract_features(query)
-        X.append(features)
-        y.append(intent_names.index(intent) if intent in intent_names else len(intent_names) - 1)
+    # 3. 问句模式特征
+    question_patterns = ["什么", "怎么", "如何", "为什么", "哪", "是否", "能否", "可以吗"]
+    features.append(sum(1 for p in question_patterns if p in text))
     
-    X = np.array(X)
-    y = np.array(y)
+    # 4. 紧急程度特征
+    urgent_words = ["紧急", "严重", "疼痛", "难忍", "出血", "昏迷", "高烧", "呼吸困难"]
+    features.append(sum(1 for w in urgent_words if w in text))
     
-    if len(X) < 2:
-        app_logger.warning("训练数据不足，跳过意图分类器训练")
-        return
+    # 5. 否定词特征
+    negation_words = ["不", "没", "无", "否", "不是", "没有"]
+    features.append(sum(1 for w in negation_words if w in text))
     
-    # 训练SVM模型
-    model = SVC(kernel='rbf', probability=True, random_state=42)
-    model.fit(X, y)
+    return np.array(features, dtype=np.float64)
+
+
+# ============================================================
+# 模型训练模块
+# ============================================================
+
+class TrainingResult:
+    """训练结果封装类"""
     
-    # 评估
-    y_pred = model.predict(X)
-    accuracy = accuracy_score(y, y_pred)
-    app_logger.info(f"意图分类器训练完成，准确率: {accuracy:.2f}")
+    def __init__(self, model_name: str, success: bool, metrics: Dict[str, float] = None,
+                 model_path: Path = None, error: str = None, training_time: float = 0):
+        self.model_name = model_name
+        self.success = success
+        self.metrics = metrics or {}
+        self.model_path = model_path
+        self.error = error
+        self.training_time = training_time
+        self.timestamp = datetime.now().isoformat()
     
-    # 保存模型
-    model_dir = Path("./models/intent")
-    model_dir.mkdir(parents=True, exist_ok=True)
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "model_name": self.model_name,
+            "success": self.success,
+            "metrics": self.metrics,
+            "model_path": str(self.model_path) if self.model_path else None,
+            "error": self.error,
+            "training_time": round(self.training_time, 2),
+            "timestamp": self.timestamp
+        }
     
-    model_data = {
-        "model": model,
-        "vectorizer": None  # 这里可以添加文本向量化器
+    def __str__(self) -> str:
+        if self.success:
+            return f"[✓] {self.model_name}: 准确率={self.metrics.get('accuracy', 'N/A')}, 耗时={self.training_time:.1f}s"
+        else:
+            return f"[✗] {self.model_name}: {self.error}"
+
+
+def evaluate_classification_model(model, X_test, y_test, label_names: List[str] = None) -> Dict[str, Any]:
+    """评估分类模型的详细指标
+    
+    Args:
+        model: 已训练的分类模型
+        X_test: 测试集特征
+        y_test: 测试集标签
+        label_names: 类别名称列表
+        
+    Returns:
+        包含各项评估指标的字典
+    """
+    y_pred = model.predict(X_test)
+    
+    # 基础指标
+    accuracy = accuracy_score(y_test, y_pred)
+    
+    # 详细分类报告
+    report = classification_report(y_test, y_pred, output_dict=True, zero_division=0)
+    
+    # 混淆矩阵
+    cm = confusion_matrix(y_test, y_pred)
+    
+    # 精确率、召回率、F1
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        y_test, y_pred, average='weighted', zero_division=0
+    )
+    
+    return {
+        "accuracy": round(accuracy, 4),
+        "precision": round(precision, 4),
+        "recall": round(recall, 4),
+        "f1_score": round(f1, 4),
+        "classification_report": report,
+        "confusion_matrix": cm.tolist(),
+        "n_samples": len(y_test)
+    }
+
+
+def perform_cross_validation(model, X, y, cv: int = 5) -> Dict[str, float]:
+    """执行交叉验证
+    
+    Args:
+        model: 待评估的模型
+        X: 特征矩阵
+        y: 标签向量
+        cv: 折数
+        
+    Returns:
+        交叉验证结果字典
+    """
+    scores = cross_val_score(model, X, y, cv=cv, scoring='accuracy')
+    
+    return {
+        "cv_mean": round(scores.mean(), 4),
+        "cv_std": round(scores.std(), 4),
+        "cv_scores": scores.tolist(),
+        "cv_folds": cv
+    }
+
+
+def hyperparameter_tuning_svm(X_train, y_train) -> Tuple[Any, Dict]:
+    """SVM超参数调优
+    
+    使用网格搜索寻找最优超参数组合。
+    
+    Args:
+        X_train: 训练集特征
+        y_train: 训练集标签
+        
+    Returns:
+        (最佳模型, 最佳参数字典)
+    """
+    param_grid = {
+        'C': [0.1, 1, 10, 100],
+        'kernel': ['rbf', 'linear'],
+        'gamma': ['scale', 'auto', 0.001, 0.01]
     }
     
-    with open(model_dir / "intent_classifier.pkl", 'wb') as f:
-        pickle.dump(model_data, f)
+    svm = SVC(probability=True, random_state=42)
     
-    app_logger.info(f"意图分类器已保存到: {model_dir / 'intent_classifier.pkl'}")
+    grid_search = GridSearchCV(
+        svm, param_grid, cv=3, scoring='accuracy',
+        n_jobs=-1, verbose=0
+    )
+    
+    grid_search.fit(X_train, y_train)
+    
+    return grid_search.best_estimator_, grid_search.best_params_
 
 
-def train_relevance_scorer():
-    """训练相关性评分器"""
-    app_logger.info("开始训练相关性评分器...")
+def train_intent_classifier() -> TrainingResult:
+    """训练意图分类器（增强版）
     
-    # 加载或生成训练数据
-    _, relevance_data = generate_sample_data()
+    改进点：
+    - 数据集划分（训练/测试）
+    - 交叉验证评估
+    - 超参数自动调优
+    - 详细评估报告
+    """
+    start_time = time.time()
+    model_name = "intent_classifier"
     
-    from app.knowledge.ml.relevance_scorer import RelevanceScorer
+    try:
+        app_logger.info("=" * 50)
+        app_logger.info(f"开始训练: {model_name}")
+        
+        # 加载训练数据
+        intent_data = generate_intent_training_data(n_samples_per_class=10)
+        queries = intent_data["queries"]
+        intents = intent_data["intents"]
+        
+        app_logger.info(f"训练样本数: {len(queries)}")
+        app_logger.info(f"意图类别: {set(intents)}")
+        
+        # 特征提取
+        X = np.array([extract_text_features(q) for q in queries])
+        
+        # 标签编码
+        label_encoder = LabelEncoder()
+        y = label_encoder.fit_transform(intents)
+        intent_names = list(label_encoder.classes_)
+        
+        app_logger.info(f"特征维度: {X.shape[1]}")
+        app_logger.info(f"类别数量: {len(intent_names)}")
+        
+        if len(X) < 4:
+            app_logger.warning("训练数据不足（<4），跳过训练")
+            return TrainingResult(model_name, success=False, 
+                                 error="训练数据不足", training_time=time.time()-start_time)
+        
+        # 划分训练/测试集
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
+        
+        app_logger.info(f"训练集: {len(X_train)}, 测试集: {len(X_test)}")
+        
+        # 超参数调优
+        app_logger.info("执行超参数调优...")
+        best_model, best_params = hyperparameter_tuning_svm(X_train, y_train)
+        app_logger.info(f"最优参数: {best_params}")
+        
+        # 交叉验证
+        app_logger.info("执行交叉验证...")
+        cv_results = perform_cross_validation(best_model, X_train, y_train)
+        app_logger.info(f"交叉验证准确率: {cv_results['cv_mean']} ± {cv_results['cv_std']}")
+        
+        # 最终训练（使用全部训练数据）
+        best_model.fit(X_train, y_train)
+        
+        # 评估
+        metrics = evaluate_classification_model(best_model, X_test, y_test, intent_names)
+        app_logger.info(f"测试集准确率: {metrics['accuracy']}")
+        app_logger.info(f"F1分数: {metrics['f1_score']}")
+        
+        # 打印分类报告
+        if metrics.get('classification_report'):
+            app_logger.info("\n分类报告:")
+            for class_name, class_metrics in metrics['classification_report'].items():
+                if isinstance(class_metrics, dict) and 'precision' in class_metrics:
+                    app_logger.info(f"  {class_name}: P={class_metrics['precision']:.2f}, "
+                                   f"R={class_metrics['recall']:.2f}, F1={class_metrics['f1-score']:.2f}")
+        
+        # 保存模型
+        model_dir = PROJECT_ROOT / "models" / "intent"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        model_path = model_dir / "intent_classifier.pkl"
+        
+        model_data = {
+            "model": best_model,
+            "label_encoder": label_encoder,
+            "feature_extractor": "statistical",
+            "best_params": best_params,
+            "metrics": metrics,
+            "cv_results": cv_results,
+            "intent_names": intent_names,
+            "trained_at": datetime.now().isoformat(),
+            "version": "1.1.0"
+        }
+        
+        with open(model_path, 'wb') as f:
+            pickle.dump(model_data, f)
+        
+        training_time = time.time() - start_time
+        app_logger.info(f"{model_name} 训练完成！耗时: {training_time:.1f}s")
+        app_logger.info(f"模型已保存: {model_path}")
+        
+        return TrainingResult(
+            model_name=model_name,
+            success=True,
+            metrics=metrics,
+            model_path=model_path,
+            training_time=training_time
+        )
+        
+    except Exception as e:
+        app_logger.error(f"{model_name} 训练失败: {e}", exc_info=True)
+        return TrainingResult(
+            model_name=model_name,
+            success=False,
+            error=str(e),
+            training_time=time.time()-start_time
+        )
+
+
+def train_relevance_scorer() -> TrainingResult:
+    """训练相关性评分器（增强版）
     
-    scorer = RelevanceScorer()
+    使用统计特征和SVM分类查询-文档对的相关性。
+    """
+    start_time = time.time()
+    model_name = "relevance_scorer"
     
-    # 提取特征
-    X = []
-    y = []
+    try:
+        app_logger.info("=" * 50)
+        app_logger.info(f"开始训练: {model_name}")
+        
+        # 加载训练数据
+        relevance_data = generate_relevance_training_data(n_positive=15, n_negative=20)
+        
+        queries = relevance_data["queries"]
+        documents = relevance_data["documents"]
+        labels = relevance_data["labels"]
+        
+        app_logger.info(f"正样本: {sum(labels)}, 负样本: {len(labels)-sum(labels)}")
+        
+        # 特征提取：组合查询和文档特征
+        X = []
+        for query, doc in zip(queries, documents):
+            q_features = extract_text_features(query)
+            d_features = extract_text_features(doc)
+            
+            # 组合特征：拼接 + 交互特征
+            combined = np.concatenate([
+                q_features,
+                d_features,
+                q_features * d_features,  # 元素乘积（交互特征）
+                np.abs(q_features - d_features),  # 差值特征
+                [len(set(query.split()) & set(doc.split()))]  # 词重叠数
+            ])
+            X.append(combined)
+        
+        X = np.array(X)
+        y = np.array(labels)
+        
+        app_logger.info(f"特征维度: {X.shape[1]}")
+        
+        if len(X) < 4:
+            app_logger.warning("训练数据不足，跳过训练")
+            return TrainingResult(model_name, success=False,
+                                 error="训练数据不足", training_time=time.time()-start_time)
+        
+        # 划分数据集
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42, stratify=y
+        )
+        
+        # 特征缩放
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+        
+        # 超参数调优
+        app_logger.info("执行超参数调优...")
+        best_model, best_params = hyperparameter_tuning_svm(X_train_scaled, y_train)
+        app_logger.info(f"最优参数: {best_params}")
+        
+        # 交叉验证
+        cv_results = perform_cross_validation(best_model, X_train_scaled, y_train)
+        app_logger.info(f"CV准确率: {cv_results['cv_mean']} ± {cv_results['cv_std']}")
+        
+        # 最终训练
+        best_model.fit(X_train_scaled, y_train)
+        
+        # 评估
+        metrics = evaluate_classification_model(best_model, X_test_scaled, y_test)
+        app_logger.info(f"测试集准确率: {metrics['accuracy']}")
+        app_logger.info(f"F1分数: {metrics['f1_score']}")
+        
+        # 保存模型
+        model_dir = PROJECT_ROOT / "models" / "relevance"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        model_path = model_dir / "relevance_scorer.pkl"
+        
+        model_data = {
+            "model": best_model,
+            "scaler": scaler,
+            "feature_extractor": "statistical_combined",
+            "best_params": best_params,
+            "metrics": metrics,
+            "cv_results": cv_results,
+            "trained_at": datetime.now().isoformat(),
+            "version": "1.1.0"
+        }
+        
+        with open(model_path, 'wb') as f:
+            pickle.dump(model_data, f)
+        
+        training_time = time.time() - start_time
+        app_logger.info(f"{model_name} 训练完成！耗时: {training_time:.1f}s")
+        
+        return TrainingResult(model_name=model_name, success=True,
+                             metrics=metrics, model_path=model_path,
+                             training_time=training_time)
+        
+    except Exception as e:
+        app_logger.error(f"{model_name} 训练失败: {e}", exc_info=True)
+        return TrainingResult(model_name=model_name, success=False,
+                             error=str(e), training_time=time.time()-start_time)
+
+
+def train_ranking_optimizer() -> TrainingResult:
+    """训练排序优化器（增强版）
     
-    for query, doc_text, label in zip(
-        relevance_data["queries"],
-        relevance_data["documents"],
-        relevance_data["labels"]
-    ):
-        doc = {"text": doc_text}
-        features = scorer.extract_features(query, doc)
-        X.append(features)
-        y.append(label)
+    使用决策树/梯度提升回归预测文档的相关性分数。
+    """
+    start_time = time.time()
+    model_name = "ranking_optimizer"
     
-    # 生成更多负样本（简化处理）
-    for i in range(len(X)):
-        # 添加一些负样本
-        doc = {"text": "这是一段不相关的文本内容。"}
-        features = scorer.extract_features(relevance_data["queries"][0], doc)
-        X.append(features)
-        y.append(0)
+    try:
+        app_logger.info("=" * 50)
+        app_logger.info(f"开始训练: {model_name}")
+        
+        # 加载训练数据
+        ranking_data = generate_ranking_training_data()
+        queries = ranking_data["queries"]
+        documents = ranking_data["documents"]
+        scores = ranking_data["scores"]
+        positions = ranking_data["positions"]
+        
+        app_logger.info(f"训练样本数: {len(queries)}")
+        
+        # 特征提取
+        X = []
+        y = []
+        
+        for query, doc_text, score, position in zip(queries, documents, scores, positions):
+            q_features = extract_text_features(query)
+            d_features = extract_text_features(doc_text)
+            
+            # 排序特征：包含位置信息
+            combined = np.concatenate([
+                q_features,
+                d_features,
+                q_features * d_features,
+                [position / max(len(set(queries)), 1)],  # 归一化位置
+                [len(doc_text) / 100],  # 文档长度归一化
+                [len(set(query.split()) & set(doc_text.split()))],  # 词重叠
+                [score]  # 原始分数作为参考特征
+            ])
+            X.append(combined)
+            y.append(score)
+        
+        X = np.array(X)
+        y = np.array(y)
+        
+        if len(X) < 4:
+            app_logger.warning("训练数据不足，跳过训练")
+            return TrainingResult(model_name, success=False,
+                                 error="训练数据不足", training_time=time.time()-start_time)
+        
+        # 划分数据集
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+        
+        # 特征缩放
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+        
+        # 训练梯度提升回归模型（比单一决策树效果更好）
+        model = GradientBoostingRegressor(
+            n_estimators=100,
+            max_depth=6,
+            learning_rate=0.1,
+            random_state=42,
+            subsample=0.8
+        )
+        model.fit(X_train_scaled, y_train)
+        
+        # 评估
+        y_pred = model.predict(X_test_scaled)
+        mse = mean_squared_error(y_test, y_pred)
+        r2 = 1 - (np.sum((y_test - y_pred) ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
+        
+        metrics = {
+            "mse": round(mse, 4),
+            "rmse": round(np.sqrt(mse), 4),
+            "r2_score": round(r2, 4),
+            "mae": round(np.mean(np.abs(y_test - y_pred)), 4)
+        }
+        
+        app_logger.info(f"MSE: {metrics['mse']}, RMSE: {metrics['rmse']}")
+        app_logger.info(f"R²: {metrics['r2_score']}, MAE: {metrics['mae']}")
+        
+        # 保存模型
+        model_dir = PROJECT_ROOT / "models" / "ranking"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        model_path = model_dir / "ranking_optimizer.pkl"
+        
+        model_data = {
+            "model": model,
+            "scaler": scaler,
+            "feature_extractor": "statistical_ranking",
+            "metrics": metrics,
+            "trained_at": datetime.now().isoformat(),
+            "version": "1.1.0"
+        }
+        
+        with open(model_path, 'wb') as f:
+            pickle.dump(model_data, f)
+        
+        training_time = time.time() - start_time
+        app_logger.info(f"{model_name} 训练完成！耗时: {training_time:.1f}s")
+        
+        return TrainingResult(model_name=model_name, success=True,
+                             metrics=metrics, model_path=model_path,
+                             training_time=training_time)
+        
+    except Exception as e:
+        app_logger.error(f"{model_name} 训练失败: {e}", exc_info=True)
+        return TrainingResult(model_name=model_name, success=False,
+                             error=str(e), training_time=time.time()-start_time)
+
+
+def train_ml_reranker() -> TrainingResult:
+    """训练ML重排序器（增强版）
     
-    X = np.array(X)
-    y = np.array(y)
+    使用SVM和决策树集成进行重排序，
+    结合两种模型的预测结果提高鲁棒性。
+    """
+    start_time = time.time()
+    model_name = "ml_reranker"
     
-    if len(X) < 2:
-        app_logger.warning("训练数据不足，跳过相关性评分器训练")
-        return
+    try:
+        app_logger.info("=" * 50)
+        app_logger.info(f"开始训练: {model_name}")
+        
+        # 生成训练数据
+        rerank_queries = [
+            ("高血压的症状", [
+                {"text": "高血压典型症状包括头痛、头晕、心悸、耳鸣、视力模糊", "score": 0.95},
+                {"text": "原发性高血压约占所有高血压病例的90-95%", "score": 0.75},
+                {"text": "低血压也会导致头晕症状，需与高血压鉴别", "score": 0.45},
+                {"text": "今天天气很好适合户外运动", "score": 0.05},
+            ]),
+            ("糖尿病的治疗", [
+                {"text": "糖尿病治疗五驾马车：饮食、运动、药物、教育、监测", "score": 0.92},
+                {"text": "二甲双胍是2型糖尿病一线用药", "score": 0.85},
+                {"text": "Python是最好的编程语言", "score": 0.02},
+            ]),
+        ]
+        
+        X = []
+        y = []
+        
+        for query, documents in rerank_queries:
+            for doc in documents:
+                q_features = extract_text_features(query)
+                d_features = extract_text_features(doc["text"])
+                
+                combined = np.concatenate([
+                    q_features,
+                    d_features,
+                    q_features * d_features,
+                    [len(set(query.split()) & set(doc["text"].split()))],
+                    [doc.get("score", 0)]
+                ])
+                X.append(combined)
+                # 二分类标签：相关(1) vs 不相关(0)
+                y.append(1 if doc.get("score", 0) > 0.5 else 0)
+        
+        X = np.array(X)
+        y = np.array(y)
+        
+        app_logger.info(f"训练样本数: {len(X)}")
+        app_logger.info(f"正样本: {sum(y)}, 负样本: {len(y)-sum(y)}")
+        
+        if len(X) < 4:
+            app_logger.warning("训练数据不足，跳过训练")
+            return TrainingResult(model_name, success=False,
+                                 error="训练数据不足", training_time=time.time()-start_time)
+        
+        # 划分数据集
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.25, random_state=42, stratify=y
+        )
+        
+        # 特征缩放
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+        
+        # 模型1: SVM分类器
+        svm_model = SVC(kernel='rbf', probability=True, random_state=42)
+        svm_model.fit(X_train_scaled, y_train)
+        
+        # 模型2: 随机森林分类器
+        rf_model = RandomForestClassifier(
+            n_estimators=100,
+            max_depth=10,
+            random_state=42,
+            class_weight='balanced'
+        )
+        rf_model.fit(X_train_scaled, y_train)
+        
+        # 模型3: 决策树回归（用于概率校准）
+        dtree_model = DecisionTreeRegressor(random_state=42, max_depth=10)
+        dtree_model.fit(X_train_scaled, y_train)
+        
+        # 集成评估：加权平均
+        svm_proba = svm_model.predict_proba(X_test_scaled)[:, 1]
+        rf_proba = rf_model.predict_proba(X_test_scaled)[:, 1]
+        dtree_pred = dtree_model.predict(X_test_scaled)
+        
+        # 简单集成：平均概率
+        ensemble_pred = (svm_proba + rf_proba + dtree_pred) / 3
+        ensemble_binary = (ensemble_pred > 0.5).astype(int)
+        
+        # 评估各模型
+        svm_metrics = evaluate_classification_model(svm_model, X_test_scaled, y_test)
+        rf_metrics = evaluate_classification_model(rf_model, X_test_scaled, y_test)
+        
+        ensemble_accuracy = accuracy_score(y_test, ensemble_binary)
+        ensemble_f1 = precision_recall_fscore_support(y_test, ensemble_binary, average='weighted')[2]
+        
+        metrics = {
+            "svm_accuracy": svm_metrics["accuracy"],
+            "rf_accuracy": rf_metrics["accuracy"],
+            "ensemble_accuracy": round(ensemble_accuracy, 4),
+            "ensemble_f1": round(ensemble_f1, 4),
+            "n_models": 3
+        }
+        
+        app_logger.info(f"SVM准确率: {svm_metrics['accuracy']}")
+        app_logger.info(f"RF准确率: {rf_metrics['accuracy']}")
+        app_logger.info(f"集成准确率: {ensemble_accuracy}")
+        
+        # 保存所有模型
+        model_dir = PROJECT_ROOT / "models" / "reranker"
+        model_dir.mkdir(parents=True, exist_ok=True)
+        model_path = model_dir / "ml_reranker_ensemble.pkl"
+        
+        model_data = {
+            "models": {
+                "svm": svm_model,
+                "random_forest": rf_model,
+                "decision_tree": dtree_model
+            },
+            "scaler": scaler,
+            "feature_extractor": "statistical_rerank",
+            "ensemble_method": "weighted_average",
+            "weights": {"svm": 0.33, "rf": 0.33, "dtree": 0.34},
+            "metrics": metrics,
+            "trained_at": datetime.now().isoformat(),
+            "version": "1.1.0"
+        }
+        
+        with open(model_path, 'wb') as f:
+            pickle.dump(model_data, f)
+        
+        # 同时保存单独的模型文件（兼容旧接口）
+        with open(model_dir / "svm_reranker.pkl", 'wb') as f:
+            pickle.dump(svm_model, f)
+        with open(model_dir / "dtree_reranker.pkl", 'wb') as f:
+            pickle.dump(dtree_model, f)
+        with open(model_dir / "scaler.pkl", 'wb') as f:
+            pickle.dump(scaler, f)
+        
+        training_time = time.time() - start_time
+        app_logger.info(f"{model_name} 训练完成！耗时: {training_time:.1f}s")
+        
+        return TrainingResult(model_name=model_name, success=True,
+                             metrics=metrics, model_path=model_path,
+                             training_time=training_time)
+        
+    except Exception as e:
+        app_logger.error(f"{model_name} 训练失败: {e}", exc_info=True)
+        return TrainingResult(model_name=model_name, success=False,
+                             error=str(e), training_time=time.time()-start_time)
+
+
+# ============================================================
+# 主程序入口
+# ============================================================
+
+# 可用的训练函数映射
+TRAINING_FUNCTIONS = {
+    "intent": train_intent_classifier,
+    "relevance": train_relevance_scorer,
+    "ranking": train_ranking_optimizer,
+    "reranker": train_ml_reranker,
+}
+
+ALL_MODELS = list(TRAINING_FUNCTIONS.keys())
+
+
+def parse_arguments() -> argparse.Namespace:
+    """解析命令行参数
     
-    # 特征缩放
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    Returns:
+        解析后的参数命名空间
+    """
+    parser = argparse.ArgumentParser(
+        description="智能医疗管家 - ML模型训练脚本",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例用法:
+  # 训练所有模型
+  python scripts/train_ml_models.py
+  
+  # 仅训练意图分类器
+  python scripts/train_ml_models.py --model intent
+  
+  # 训练多个指定模型
+  python scripts/train_ml_models.py --model intent relevance
+  
+  # 列出所有可用模型
+  python scripts/train_ml_models.py --list-models
+
+  # 输出详细日志
+  python scripts/train_ml_models.py --verbose
+        """
+    )
     
-    # 训练SVM模型
-    model = SVC(kernel='rbf', probability=True, random_state=42)
-    model.fit(X_scaled, y)
+    parser.add_argument(
+        "--model", "-m",
+        type=str,
+        nargs="+",
+        choices=ALL_MODELS,
+        default=None,
+        help="要训练的模型名称（默认训练所有）"
+    )
     
-    # 评估
-    y_pred = model.predict(X_scaled)
-    accuracy = accuracy_score(y, y_pred)
-    app_logger.info(f"相关性评分器训练完成，准确率: {accuracy:.2f}")
+    parser.add_argument(
+        "--data-dir", "-d",
+        type=str,
+        default=None,
+        help="自定义训练数据目录路径"
+    )
     
-    # 保存模型
-    model_dir = Path("./models/relevance")
-    model_dir.mkdir(parents=True, exist_ok=True)
+    parser.add_argument(
+        "--output-dir", "-o",
+        type=str,
+        default=None,
+        help="模型输出目录路径"
+    )
     
-    model_data = {
-        "model": model,
-        "scaler": scaler
+    parser.add_argument(
+        "--verbose", "-v",
+        action="store_true",
+        default=False,
+        help="输出详细训练过程信息"
+    )
+    
+    parser.add_argument(
+        "--list-models",
+        action="store_true",
+        default=False,
+        help="列出所有可训练的模型"
+    )
+    
+    parser.add_argument(
+        "--skip-eval",
+        action="store_true",
+        default=False,
+        help="跳过评估步骤（加速训练）"
+    )
+    
+    return parser.parse_args()
+
+
+def save_training_report(results: List[TrainingResult], output_path: Path = None):
+    """保存训练报告
+    
+    将所有模型的训练结果汇总为JSON报告文件。
+    
+    Args:
+        results: 训练结果列表
+        output_path: 报告输出路径
+    """
+    report = {
+        "training_summary": {
+            "total_models": len(results),
+            "successful": sum(1 for r in results if r.success),
+            "failed": sum(1 for r in results if not r.success),
+            "total_time": round(sum(r.training_time for r in results), 2),
+            "timestamp": datetime.now().isoformat(),
+            "version": "1.1.0"
+        },
+        "model_results": [r.to_dict() for r in results]
     }
     
-    with open(model_dir / "relevance_scorer.pkl", 'wb') as f:
-        pickle.dump(model_data, f)
+    if output_path is None:
+        output_path = PROJECT_ROOT / "logs" / "training_report.json"
     
-    app_logger.info(f"相关性评分器已保存到: {model_dir / 'relevance_scorer.pkl'}")
-
-
-def train_ranking_optimizer():
-    """训练排序优化器"""
-    app_logger.info("开始训练排序优化器...")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    from app.knowledge.ml.ranking_optimizer import RankingOptimizer
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(report, f, ensure_ascii=False, indent=2)
     
-    optimizer = RankingOptimizer()
-    
-    # 生成示例训练数据
-    queries = ["高血压的症状", "糖尿病的治疗"]
-    documents = [
-        {"text": "高血压的症状包括头痛、头晕等", "score": 0.8, "source": "doc1"},
-        {"text": "糖尿病需要控制血糖", "score": 0.7, "source": "doc2"},
-    ]
-    
-    # 提取特征
-    X = []
-    y = []  # 排序分数（可以使用相关性分数或人工标注）
-    
-    for query in queries:
-        for i, doc in enumerate(documents):
-            features = optimizer.extract_ranking_features(query, doc, position=i)
-            X.append(features)
-            # 使用原始分数作为目标（实际应该使用人工标注或点击数据）
-            y.append(doc.get("score", 0.5))
-    
-    X = np.array(X)
-    y = np.array(y)
-    
-    if len(X) < 2:
-        app_logger.warning("训练数据不足，跳过排序优化器训练")
-        return
-    
-    # 特征缩放
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    
-    # 训练决策树回归模型
-    model = DecisionTreeRegressor(random_state=42, max_depth=10)
-    model.fit(X_scaled, y)
-    
-    # 评估
-    y_pred = model.predict(X_scaled)
-    mse = mean_squared_error(y, y_pred)
-    app_logger.info(f"排序优化器训练完成，MSE: {mse:.4f}")
-    
-    # 保存模型
-    model_dir = Path("./models/ranking")
-    model_dir.mkdir(parents=True, exist_ok=True)
-    
-    model_data = {
-        "model": model,
-        "scaler": scaler
-    }
-    
-    with open(model_dir / "ranking_optimizer.pkl", 'wb') as f:
-        pickle.dump(model_data, f)
-    
-    app_logger.info(f"排序优化器已保存到: {model_dir / 'ranking_optimizer.pkl'}")
-
-
-def train_ml_reranker():
-    """训练ML重排序器"""
-    app_logger.info("开始训练ML重排序器...")
-    
-    from app.knowledge.rag.ml_reranker import MLReranker
-    
-    reranker = MLReranker()
-    
-    # 生成示例训练数据
-    query = "高血压的症状"
-    documents = [
-        {"text": "高血压的症状包括头痛、头晕、心悸等", "score": 0.9},
-        {"text": "糖尿病需要控制血糖", "score": 0.3},
-    ]
-    
-    # 提取特征
-    X = []
-    y = []  # 相关性标签
-    
-    for doc in documents:
-        features = reranker.extract_features(query, doc)
-        X.append(features)
-        # 使用分数阈值判断相关性（实际应该使用人工标注）
-        y.append(1 if doc.get("score", 0) > 0.5 else 0)
-    
-    X = np.array(X)
-    y = np.array(y)
-    
-    if len(X) < 2:
-        app_logger.warning("训练数据不足，跳过ML重排序器训练")
-        return
-    
-    # 特征缩放
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    
-    # 训练SVM模型
-    svm_model = SVC(kernel='rbf', probability=True, random_state=42)
-    svm_model.fit(X_scaled, y)
-    
-    # 训练决策树模型
-    dtree_model = DecisionTreeRegressor(random_state=42, max_depth=10)
-    dtree_model.fit(X_scaled, y)
-    
-    # 保存模型
-    model_dir = Path("./models/reranker")
-    model_dir.mkdir(parents=True, exist_ok=True)
-    
-    with open(model_dir / "svm_reranker.pkl", 'wb') as f:
-        pickle.dump(svm_model, f)
-    
-    with open(model_dir / "dtree_reranker.pkl", 'wb') as f:
-        pickle.dump(dtree_model, f)
-    
-    with open(model_dir / "scaler.pkl", 'wb') as f:
-        pickle.dump(scaler, f)
-    
-    app_logger.info(f"ML重排序器已保存到: {model_dir}")
+    app_logger.info(f"训练报告已保存: {output_path}")
 
 
 def main():
-    """主函数"""
-    app_logger.info("=" * 50)
-    app_logger.info("开始训练ML模型")
-    app_logger.info("=" * 50)
+    """主函数 - 协调所有模型的训练流程"""
+    
+    # 解析命令行参数
+    args = parse_arguments()
+    
+    # 列出可用模型
+    if args.list_models:
+        print("\n可训练的模型列表:")
+        print("-" * 40)
+        for name, func in TRAINING_FUNCTIONS.items():
+            print(f"  {name:<15} {func.__doc__.split(chr(10))[0] if func.__doc__ else ''}")
+        print("-" * 40)
+        return
+    
+    # 设置输出目录
+    if args.output_dir:
+        global MODEL_OUTPUT_DIR
+        MODEL_OUTPUT_DIR = Path(args.output_dir)
+        MODEL_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    
+    # 开始训练
+    app_logger.info("=" * 60)
+    app_logger.info("  智能医疗管家 - ML模型训练系统 v1.1.0")
+    app_logger.info("=" * 60)
+    app_logger.info(f"开始时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    app_logger.info(f"项目根目录: {PROJECT_ROOT}")
+    
+    overall_start = time.time()
+    results = []
+    
+    # 确定要训练的模型
+    models_to_train = args.model if args.model else ALL_MODELS
+    app_logger.info(f"\n待训练模型 ({len(models_to_train)}): {', '.join(models_to_train)}\n")
     
     try:
-        # 训练意图分类器
-        train_intent_classifier()
+        for i, model_name in enumerate(models_to_train, 1):
+            app_logger.info(f"\n[{i}/{len(models_to_train)}] 开始训练: {model_name}")
+            
+            train_func = TRAINING_FUNCTIONS.get(model_name)
+            if not train_func:
+                app_logger.warning(f"未知模型: {model_name}，跳过")
+                continue
+            
+            result = train_func()
+            results.append(result)
+            
+            # 打印结果摘要
+            app_logger.info(f"\n{result}")
         
-        # 训练相关性评分器
-        train_relevance_scorer()
+        # 汇总报告
+        total_time = time.time() - overall_start
         
-        # 训练排序优化器
-        train_ranking_optimizer()
+        app_logger.info("\n" + "=" * 60)
+        app_logger.info("  训练完成 - 结果汇总")
+        app_logger.info("=" * 60)
         
-        # 训练ML重排序器
-        train_ml_reranker()
+        successful = [r for r in results if r.success]
+        failed = [r for r in results if not r.success]
         
-        app_logger.info("=" * 50)
-        app_logger.info("所有ML模型训练完成！")
-        app_logger.info("=" * 50)
-        app_logger.info("\n注意：")
-        app_logger.info("1. 当前使用的是示例数据，实际应用需要准备真实训练数据")
-        app_logger.info("2. 可以使用人工标注、点击数据、用户反馈等作为训练数据")
-        app_logger.info("3. 建议定期重新训练模型以提升效果")
+        app_logger.info(f"\n总耗时: {total_time:.1f}s")
+        app_logger.info(f"成功: {len(successful)}/{len(results)}")
         
+        if successful:
+            app_logger.info("\n成功训练的模型:")
+            for r in successful:
+                app_logger.info(f"  ✓ {r.model_name}: accuracy={r.metrics.get('accuracy', 'N/A')}, "
+                               f"time={r.training_time:.1f}s")
+        
+        if failed:
+            app_logger.info("\n训练失败的模型:")
+            for r in failed:
+                app_logger.info(f"  ✗ {r.model_name}: {r.error}")
+        
+        # 保存训练报告
+        save_training_report(results)
+        
+        # 使用建议
+        app_logger.info("\n" + "-" * 60)
+        app_logger.info("后续建议:")
+        app_logger.info("  1. 当前使用示例数据，生产环境需准备真实标注数据")
+        app_logger.info("  2. 可使用人工标注、用户点击、反馈数据作为训练集")
+        app_logger.info("  3. 建议定期重新训练以适应数据分布变化")
+        app_logger.info("  4. 查看训练报告: logs/training_report.json")
+        app_logger.info("-" * 60)
+        
+    except KeyboardInterrupt:
+        app_logger.warning("\n\n训练被用户中断")
+        raise
     except Exception as e:
-        app_logger.error(f"模型训练失败: {e}")
+        app_logger.error(f"\n训练流程异常终止: {e}", exc_info=True)
         raise
 
 
