@@ -69,6 +69,10 @@ if settings.ENABLE_AUTH_MIDDLEWARE:
 @app.on_event("startup")
 async def startup_event():
     """应用启动事件"""
+    # 记录启动时间（用于健康检查的uptime计算）
+    from app.api.v1.health import set_start_time
+    set_start_time()
+    
     app_logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} 启动成功")
     app_logger.info(f"环境: {settings.ENVIRONMENT}")
     app_logger.info(f"调试模式: {settings.DEBUG}")
