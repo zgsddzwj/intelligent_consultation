@@ -4,7 +4,7 @@ import time
 import hashlib
 from typing import Optional, Any, Dict, Callable
 from functools import wraps
-from app.services.redis_service_optimized import redis_service
+from app.services.redis_service import redis_service
 from app.utils.logger import app_logger
 
 

@@ -1,11 +1,14 @@
 """FastAPI应用入口"""
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+
 from app.config import get_settings
 from app.utils.logger import app_logger
-from app.api.middleware import LoggingMiddleware  # 从文件导入
+from app.api.middleware import LoggingMiddleware
 from app.api.middleware.compression import CompressionMiddleware
 from app.common.exceptions import BaseAppException
 from app.common.error_handler import (
@@ -17,13 +20,104 @@ from app.common.error_handler import (
 
 settings = get_settings()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理（替代已废弃的 @app.on_event）"""
+    # ===== 启动阶段 =====
+    app_logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} 启动成功")
+    app_logger.info(f"环境: {settings.ENVIRONMENT}")
+    app_logger.info(f"调试模式: {settings.DEBUG}")
+
+    # 初始化数据库表（如果不存在）
+    try:
+        from app.database.init_db import init_db
+        init_db()
+    except Exception as e:
+        app_logger.warning(f"数据库表初始化警告: {e}")
+
+    # 依赖服务健康检查
+    await _check_dependencies()
+
+    yield
+
+    # ===== 关闭阶段 =====
+    app_logger.info(f"{settings.APP_NAME} 正在关闭...")
+    _shutdown_services()
+
+
+async def _check_dependencies():
+    """检查核心依赖服务状态"""
+    # PostgreSQL 检查
+    try:
+        from app.database.session import engine
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        app_logger.info("✓ PostgreSQL 连接正常")
+    except Exception as e:
+        app_logger.error(f"✗ PostgreSQL 连接失败: {e}")
+
+    # Redis 检查
+    try:
+        from app.services.redis_service import redis_service
+        if redis_service.health_check().get("status") == "healthy":
+            app_logger.info("✓ Redis 连接正常")
+        else:
+            app_logger.warning("⚠ Redis 健康检查未通过")
+    except Exception as e:
+        app_logger.warning(f"⚠ Redis 连接失败（将降级处理）: {e}")
+
+    # Neo4j 检查（弱依赖）
+    try:
+        from app.knowledge.graph.neo4j_client import get_neo4j_client
+        client = get_neo4j_client()
+        if client.health_check():
+            app_logger.info("✓ Neo4j 连接正常")
+        else:
+            app_logger.warning("⚠ Neo4j 健康检查未通过")
+    except Exception as e:
+        app_logger.warning(f"⚠ Neo4j 连接失败（知识图谱功能将降级）: {e}")
+
+    # Milvus 检查（弱依赖）
+    try:
+        from app.services.milvus_service import get_milvus_service
+        milvus = get_milvus_service()
+        stats = milvus.health_check()
+        if stats.get("status") == "healthy":
+            app_logger.info(f"✓ Milvus 连接正常，实体数: {stats.get('entity_count', 0)}")
+        else:
+            app_logger.warning("⚠ Milvus 健康检查未通过")
+    except Exception as e:
+        app_logger.warning(f"⚠ Milvus 连接失败（向量检索功能将降级）: {e}")
+
+
+def _shutdown_services():
+    """关闭各服务连接"""
+    # 关闭 Redis 连接池
+    try:
+        from app.services.redis_service import redis_service
+        redis_service.close()
+    except Exception as e:
+        app_logger.warning(f"关闭 Redis 连接时出错: {e}")
+
+    # 关闭 Milvus 连接
+    try:
+        from app.services.milvus_service import get_milvus_service
+        milvus = get_milvus_service()
+        milvus.close()
+    except Exception as e:
+        app_logger.warning(f"关闭 Milvus 连接时出错: {e}")
+
+
 # 创建FastAPI应用
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="智能医疗管家平台API",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # 注册全局异常处理器
@@ -66,27 +160,6 @@ if settings.ENABLE_AUTH_MIDDLEWARE:
     app.add_middleware(AuthMiddleware)
 
 
-@app.on_event("startup")
-async def startup_event():
-    """应用启动事件"""
-    app_logger.info(f"{settings.APP_NAME} v{settings.APP_VERSION} 启动成功")
-    app_logger.info(f"环境: {settings.ENVIRONMENT}")
-    app_logger.info(f"调试模式: {settings.DEBUG}")
-    
-    # 尝试初始化数据库表（如果不存在）
-    try:
-        from app.database.init_db import init_db
-        init_db()
-    except Exception as e:
-        app_logger.warning(f"数据库表初始化警告: {e}")
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """应用关闭事件"""
-    app_logger.info(f"{settings.APP_NAME} 正在关闭...")
-
-
 @app.get("/")
 async def root():
     """根路径"""
@@ -108,7 +181,7 @@ async def metrics():
 async def favicon():
     """Favicon图标（避免404错误）"""
     from starlette.responses import Response
-    return Response(status_code=204)  # No Content
+    return Response(status_code=204)
 
 
 # 导入路由
@@ -118,13 +191,10 @@ app.include_router(agents.router, prefix=f"{settings.API_V1_PREFIX}/agents", tag
 app.include_router(knowledge.router, prefix=f"{settings.API_V1_PREFIX}/knowledge", tags=["知识库"])
 app.include_router(users.router, prefix=f"{settings.API_V1_PREFIX}/users", tags=["用户"])
 app.include_router(image_analysis.router, prefix=f"{settings.API_V1_PREFIX}/image", tags=["图片分析"])
-app.include_router(health.router, prefix=f"{settings.API_V1_PREFIX}", tags=["监控"])  # /api/v1/health
+app.include_router(health.router, prefix=f"{settings.API_V1_PREFIX}", tags=["监控"])
 
 # 覆盖根路径 /health
 @app.get("/health", tags=["监控"])
 async def root_health_check():
-    """根健康检查（重定向到API v1）"""
-    # 这里可以直接调用逻辑，或者返回简单的 healthy
-    # 为了兼容 K8s probes，通常根路径 /health 应该尽量简单
+    """根健康检查（兼容 K8s probes）"""
     return {"status": "healthy", "detail_url": f"{settings.API_V1_PREFIX}/health"}
-
