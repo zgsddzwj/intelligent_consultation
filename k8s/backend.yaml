@@ -20,7 +20,6 @@ spec:
         ports:
         - containerPort: 8000
         env:
-        # 从ConfigMap读取配置
         - name: APP_NAME
           valueFrom:
             configMapKeyRef:
@@ -90,7 +89,6 @@ spec:
             secretKeyRef:
               name: medical-secrets
               key: LANGFUSE_SECRET_KEY
-        # 对象存储配置
         - name: OBJECT_STORAGE_TYPE
           valueFrom:
             configMapKeyRef:
@@ -141,18 +139,17 @@ spec:
           periodSeconds: 30
         readinessProbe:
           httpGet:
+            path: /api/v1/health/ready
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        startupProbe:
+          httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-        # 注意：生产环境不需要挂载data目录，文档存储在对象存储中
-        # volumeMounts:
-        # - name: data-volume
-        #   mountPath: /app/data
-      # volumes:
-      # - name: data-volume
-      #   persistentVolumeClaim:
-      #     claimName: data-pvc
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 30
 
 ---
 apiVersion: v1
@@ -194,18 +191,16 @@ spec:
       target:
         type: Utilization
         averageUtilization: 80
-
-# 注意：生产环境不需要data目录的PVC，文档存储在对象存储中
-# ---
-# apiVersion: v1
-# kind: PersistentVolumeClaim
-# metadata:
-#   name: data-pvc
-#   namespace: medical-consultation
-# spec:
-#   accessModes:
-#     - ReadWriteMany
-#   resources:
-#     requests:
-#       storage: 10Gi
-
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60

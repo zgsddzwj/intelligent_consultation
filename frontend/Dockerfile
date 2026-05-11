@@ -21,7 +21,7 @@ COPY . .
 RUN npm run build
 
 
-# ========== 生产运行阶段 ==========
+# ========== 生产运行阶段（默认） ==========
 FROM nginx:alpine AS production
 
 # 复制构建产物到nginx目录
@@ -61,9 +61,3 @@ EXPOSE 3000
 
 # 启动开发服务器
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
-
-# 默认使用开发环境
-# 生产构建: docker build --target production -t medical-frontend .
-# 开发环境: docker build --target development -t medical-frontend-dev .
-FROM development
-
