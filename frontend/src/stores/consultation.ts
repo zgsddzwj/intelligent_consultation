@@ -1,18 +1,11 @@
 import { create } from 'zustand'
-
-interface Message {
-  role: 'user' | 'assistant'
-  content: string
-  sources?: string[]
-  risk_level?: string
-  timestamp?: string
-}
+import type { Message } from '../types/chat'
 
 interface ConsultationState {
   messages: Message[]
   consultationId: number | null
   addMessage: (message: Message) => void
-  setConsultationId: (id: number) => void
+  setConsultationId: (id: number | null) => void
   clearMessages: () => void
 }
 
@@ -26,4 +19,3 @@ export const useConsultationStore = create<ConsultationState>((set) => ({
   setConsultationId: (id) => set({ consultationId: id }),
   clearMessages: () => set({ messages: [], consultationId: null }),
 }))
-

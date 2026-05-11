@@ -1,49 +1,44 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Layout, Select, Button, Card, Spin, message } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import ForceGraph2D from 'react-force-graph-2d'
 import { useQuery } from '@tanstack/react-query'
-import api from '../services/api'
+import { knowledgeApi } from '../services/knowledge'
+import type { GraphData, GraphNode } from '../services/knowledge'
 
 const { Header, Content } = Layout
 const { Option } = Select
 
-interface GraphNode {
-  id: string
-  label: string
-  type: string
-  properties?: any
-}
-
-interface GraphLink {
-  source: string
-  target: string
-  label?: string
-}
-
-interface GraphData {
-  nodes: GraphNode[]
-  links: GraphLink[]
+/** 根据节点类型返回对应颜色 */
+function getNodeColor(node: GraphNode): string {
+  const typeColors: Record<string, string> = {
+    Department: '#722ed1',
+    Disease: '#ff4d4f',
+    Symptom: '#fa8c16',
+    Drug: '#1890ff',
+    Examination: '#52c41a',
+  }
+  return typeColors[node.type] || '#8c8c8c'
 }
 
 export default function KnowledgeGraph() {
   const [selectedDepartment, setSelectedDepartment] = useState<string>('')
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] })
   const [loading, setLoading] = useState(false)
-  const fgRef = useRef<any>()
+  const fgRef = useRef<unknown>(null)
 
   // 获取科室列表
   const { data: departmentsData } = useQuery({
     queryKey: ['departments'],
-    queryFn: () => api.get('/knowledge/graph/departments'),
+    queryFn: () => knowledgeApi.getDepartments(),
   })
 
   // 获取图谱数据
-  const fetchGraphData = async (department?: string) => {
+  const fetchGraphData = useCallback(async (department?: string) => {
     setLoading(true)
     try {
-      const response = await api.post('/knowledge/graph/visualization', {
-        department: department || null,
+      const response = await knowledgeApi.getGraphVisualization({
+        department: department || undefined,
         depth: 2,
       })
       setGraphData(response)
@@ -52,30 +47,14 @@ export default function KnowledgeGraph() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchGraphData()
-  }, [])
+  }, [fetchGraphData])
 
   const handleSearch = () => {
-    if (selectedDepartment) {
-      fetchGraphData(selectedDepartment)
-    } else {
-      fetchGraphData()
-    }
-  }
-
-  // 根据节点类型设置颜色
-  const getNodeColor = (node: GraphNode) => {
-    const typeColors: Record<string, string> = {
-      Department: '#722ed1', // 紫色
-      Disease: '#ff4d4f',    // 红色
-      Symptom: '#fa8c16',    // 橙色
-      Drug: '#1890ff',       // 蓝色
-      Examination: '#52c41a', // 绿色
-    }
-    return typeColors[node.type] || '#8c8c8c'
+    fetchGraphData(selectedDepartment)
   }
 
   return (
@@ -96,7 +75,7 @@ export default function KnowledgeGraph() {
               onChange={setSelectedDepartment}
               allowClear
             >
-              {departmentsData?.departments?.map((dept: any) => (
+              {departmentsData?.departments?.map((dept) => (
                 <Option key={dept.name} value={dept.name}>
                   {dept.name}
                 </Option>
@@ -119,16 +98,16 @@ export default function KnowledgeGraph() {
               </div>
             ) : (
               <ForceGraph2D
-                ref={fgRef}
+                ref={fgRef as React.RefObject<never>}
                 graphData={graphData}
-                nodeLabel={(node: any) => `${node.label} (${node.type})`}
-                nodeColor={(node: any) => getNodeColor(node)}
-                linkLabel={(link: any) => link.label || ''}
-                nodeVal={(node: any) => Math.sqrt(node.properties?.length || 1) * 10}
+                nodeLabel={(node: GraphNode) => `${node.label} (${node.type})`}
+                nodeColor={(node: GraphNode) => getNodeColor(node)}
+                linkLabel={(link: { label?: string }) => link.label || ''}
+                nodeVal={(node: GraphNode) => Math.sqrt((node.properties?.length as number) || 1) * 10}
                 linkDirectionalArrowLength={6}
                 linkDirectionalArrowRelPos={1}
                 linkCurvature={0.25}
-                onNodeClick={(node: any) => {
+                onNodeClick={(node: GraphNode) => {
                   message.info(`节点: ${node.label}, 类型: ${node.type}`)
                 }}
               />
@@ -150,4 +129,3 @@ export default function KnowledgeGraph() {
     </Layout>
   )
 }
-
