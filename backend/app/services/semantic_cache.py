@@ -127,10 +127,11 @@ class SemanticCache:
             return None
     
     def _get_from_redis(self, query: str, query_embedding: List[float], top_k: int) -> Optional[Dict[str, Any]]:
-        """从Redis获取缓存（降级方案）"""
+        """从Redis获取缓存（降级方案，使用SCAN避免阻塞）"""
         try:
-            # 获取所有缓存键
-            cache_keys = redis_service.client.keys("semantic_cache:*")
+            # 使用SCAN命令获取所有缓存键（避免KEYS命令阻塞Redis）
+            from app.infrastructure.cache import _scan_keys
+            cache_keys = _scan_keys("semantic_cache:*", count=200)
             
             best_match = None
             best_similarity = 0.0
@@ -261,7 +262,7 @@ class SemanticCache:
             return 0.0
     
     def clear(self, older_than_days: int = 30):
-        """清理旧缓存"""
+        """清理旧缓存（使用SCAN避免阻塞）"""
         try:
             import time
             cutoff_timestamp = int(time.time()) - (older_than_days * 24 * 3600)
@@ -275,8 +276,9 @@ class SemanticCache:
                 except Exception as e:
                     app_logger.warning(f"Milvus 缓存清理失败: {e}")
             else:
-                # Redis清理
-                cache_keys = redis_service.client.keys("semantic_cache:*")
+                # Redis清理 - 使用SCAN替代KEYS
+                from app.infrastructure.cache import _scan_keys
+                cache_keys = _scan_keys("semantic_cache:*", count=200)
                 cleared = 0
                 for key in cache_keys:
                     try:
