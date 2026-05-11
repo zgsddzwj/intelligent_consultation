@@ -1,10 +1,10 @@
+import React from 'react'
 import { Avatar } from 'antd'
 import { UserOutlined, RobotOutlined } from '@ant-design/icons'
 import type { Message, RiskLevel } from '../../types/chat'
 
 interface ChatMessageProps {
   message: Message
-  index: number
 }
 
 /** 根据风险等级返回中文标签 */
@@ -17,12 +17,11 @@ function getRiskLabel(level: RiskLevel): string {
   return map[level] || level
 }
 
-export default function ChatMessage({ message, index }: ChatMessageProps) {
+function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === 'user'
 
   return (
     <div
-      key={index}
       style={{
         display: 'flex',
         justifyContent: isUser ? 'flex-end' : 'flex-start',
@@ -125,3 +124,5 @@ export default function ChatMessage({ message, index }: ChatMessageProps) {
     </div>
   )
 }
+
+export default React.memo(ChatMessage)

@@ -1,9 +1,15 @@
 import { useState, useCallback } from 'react'
 import { Input, Button, Upload, Tooltip } from 'antd'
 import { SendOutlined, UploadOutlined } from '@ant-design/icons'
-import type { UploadRequestOption } from 'rc-upload/lib/interface'
 
 const { TextArea } = Input
+
+/** 最大输入长度 */
+const MAX_INPUT_LENGTH = 2000
+/** 图片文件大小限制：5MB */
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+/** 允许的图片类型 */
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 interface ChatInputProps {
   onSend: (message: string) => void
@@ -33,6 +39,15 @@ export default function ChatInput({ onSend, onImageUpload, loading = false }: Ch
 
   const handleBeforeUpload = useCallback(
     (file: File) => {
+      // 图片类型校验
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        // 通过 antd Upload 的错误提示
+        return Upload.LIST_IGNORE
+      }
+      // 图片大小校验
+      if (file.size > MAX_IMAGE_SIZE) {
+        return Upload.LIST_IGNORE
+      }
       onImageUpload(file)
       return false // 阻止默认上传行为，手动处理
     },
@@ -60,11 +75,18 @@ export default function ChatInput({ onSend, onImageUpload, loading = false }: Ch
         <div style={{ flex: 1 }}>
           <TextArea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              const val = e.target.value
+              if (val.length <= MAX_INPUT_LENGTH) {
+                setInput(val)
+              }
+            }}
             onKeyDown={handleKeyDown}
             placeholder="请描述您的症状或健康问题，我会为您提供专业的医疗建议..."
             rows={3}
             disabled={loading}
+            maxLength={MAX_INPUT_LENGTH}
+            showCount
             style={{
               borderRadius: '16px',
               border: '2px solid rgba(102, 126, 234, 0.2)',
@@ -94,22 +116,17 @@ export default function ChatInput({ onSend, onImageUpload, loading = false }: Ch
             }}
           >
             <span>💡 按 Enter 发送消息，Shift + Enter 换行</span>
-            {input.length > 0 && (
-              <span style={{ color: '#667eea', fontWeight: '500' }}>
-                {input.length} 字符
-              </span>
-            )}
           </div>
         </div>
 
         {/* 操作按钮 */}
         <div style={{ display: 'flex', gap: '12px' }}>
           {/* 图片上传 */}
-          <Tooltip title="上传图片进行医疗术语识别">
+          <Tooltip title="上传图片进行医疗术语识别（支持 JPG/PNG/GIF/WebP，最大5MB）">
             <Upload
               beforeUpload={handleBeforeUpload}
               showUploadList={false}
-              accept="image/*"
+              accept="image/jpeg,image/png,image/gif,image/webp"
             >
               <Button
                 icon={<UploadOutlined />}

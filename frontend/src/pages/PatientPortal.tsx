@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { Layout, message, Tag, Space } from 'antd'
 import { MedicineBoxOutlined } from '@ant-design/icons'
 import { useMutation } from '@tanstack/react-query'
@@ -14,6 +14,11 @@ import {
 import type { ChatRequest, ImageAnalysisResponse } from '../types/chat'
 
 const { Header, Content } = Layout
+
+/** 图片文件大小限制：5MB */
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+/** 允许的图片类型 */
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 export default function PatientPortal() {
   const messages = useConsultationStore((state) => state.messages)
@@ -73,6 +78,17 @@ export default function PatientPortal() {
 
   const handleImageUpload = useCallback(
     async (file: File) => {
+      // 图片类型校验
+      if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+        message.error('仅支持 JPG、PNG、GIF、WebP 格式的图片')
+        return
+      }
+      // 图片大小校验
+      if (file.size > MAX_IMAGE_SIZE) {
+        message.error(`图片大小不能超过 ${MAX_IMAGE_SIZE / 1024 / 1024}MB`)
+        return
+      }
+
       try {
         const formData = new FormData()
         formData.append('file', file)
@@ -110,6 +126,23 @@ export default function PatientPortal() {
     [addMessage]
   )
 
+  // 使用useMemo缓存头部样式，避免重复创建对象
+  const headerStyle = useMemo(() => ({
+    background: 'rgba(255, 255, 255, 0.95)',
+    backdropFilter: 'blur(20px)',
+    padding: '12px 32px',
+    borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
+    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    position: 'relative' as const,
+    zIndex: 10,
+    height: 'auto',
+    minHeight: '80px',
+    lineHeight: 'normal',
+  }), [])
+
   return (
     <Layout
       style={{
@@ -136,23 +169,7 @@ export default function PatientPortal() {
       />
 
       {/* 顶部导航栏 */}
-      <Header
-        style={{
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(20px)',
-          padding: '12px 32px',
-          borderBottom: '1px solid rgba(0, 0, 0, 0.08)',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          position: 'relative',
-          zIndex: 10,
-          height: 'auto',
-          minHeight: '80px',
-          lineHeight: 'normal',
-        }}
-      >
+      <Header style={headerStyle}>
         <div
           style={{
             display: 'flex',
@@ -261,8 +278,8 @@ export default function PatientPortal() {
               <WelcomeScreen />
             ) : (
               <>
-                {messages.map((msg, index) => (
-                  <ChatMessage key={index} message={msg} index={index} />
+                {messages.map((msg) => (
+                  <ChatMessage key={msg.id} message={msg} />
                 ))}
                 {isTyping && <TypingIndicator />}
               </>

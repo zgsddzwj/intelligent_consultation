@@ -3,6 +3,7 @@ export type MessageRole = 'user' | 'assistant'
 
 /** 单条聊天消息 */
 export interface Message {
+  id: string
   role: MessageRole
   content: string
   sources?: string[]

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Layout, Select, Button, Card, Spin, message } from 'antd'
 import { SearchOutlined } from '@ant-design/icons'
 import ForceGraph2D from 'react-force-graph-2d'
@@ -31,6 +31,7 @@ export default function KnowledgeGraph() {
   const { data: departmentsData } = useQuery({
     queryKey: ['departments'],
     queryFn: () => knowledgeApi.getDepartments(),
+    staleTime: 5 * 60 * 1000, // 5分钟缓存
   })
 
   // 获取图谱数据
@@ -53,9 +54,18 @@ export default function KnowledgeGraph() {
     fetchGraphData()
   }, [fetchGraphData])
 
-  const handleSearch = () => {
+  const handleSearch = useCallback(() => {
     fetchGraphData(selectedDepartment)
-  }
+  }, [fetchGraphData, selectedDepartment])
+
+  // 缓存图例数据，避免重复创建
+  const legendItems = useMemo(() => [
+    { color: '#722ed1', label: '科室' },
+    { color: '#ff4d4f', label: '疾病' },
+    { color: '#fa8c16', label: '症状' },
+    { color: '#1890ff', label: '药物' },
+    { color: '#52c41a', label: '检查' },
+  ], [])
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -110,6 +120,9 @@ export default function KnowledgeGraph() {
                 onNodeClick={(node: GraphNode) => {
                   message.info(`节点: ${node.label}, 类型: ${node.type}`)
                 }}
+                // 性能优化：限制节点和边的绘制质量以提升大数据量性能
+                warmupTicks={10}
+                cooldownTicks={50}
               />
             )}
           </div>
@@ -117,11 +130,11 @@ export default function KnowledgeGraph() {
           <div style={{ marginTop: '16px', fontSize: '12px', color: '#8c8c8c' }}>
             <div>图例:</div>
             <div style={{ display: 'flex', gap: '16px', marginTop: '8px' }}>
-              <span><span style={{ color: '#722ed1' }}>■</span> 科室</span>
-              <span><span style={{ color: '#ff4d4f' }}>■</span> 疾病</span>
-              <span><span style={{ color: '#fa8c16' }}>■</span> 症状</span>
-              <span><span style={{ color: '#1890ff' }}>■</span> 药物</span>
-              <span><span style={{ color: '#52c41a' }}>■</span> 检查</span>
+              {legendItems.map((item) => (
+                <span key={item.label}>
+                  <span style={{ color: item.color }}>■</span> {item.label}
+                </span>
+              ))}
             </div>
           </div>
         </Card>

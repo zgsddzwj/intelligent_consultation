@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Layout, Spin } from 'antd'
+import { ErrorBoundary } from './components/ErrorBoundary'
 
 // 使用 React.lazy 实现路由级代码分割，减少首屏加载时间
 const PatientPortal = lazy(() => import('./pages/PatientPortal'))
@@ -30,12 +31,14 @@ function App() {
       <Layout style={{ minHeight: '100vh' }}>
         <Content>
           <Suspense fallback={<PageLoading />}>
-            <Routes>
-              <Route path="/" element={<PatientPortal />} />
-              <Route path="/doctor" element={<DoctorDashboard />} />
-              <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/knowledge-graph" element={<KnowledgeGraph />} />
-            </Routes>
+            <ErrorBoundary>
+              <Routes>
+                <Route path="/" element={<PatientPortal />} />
+                <Route path="/doctor" element={<DoctorDashboard />} />
+                <Route path="/admin" element={<AdminPanel />} />
+                <Route path="/knowledge-graph" element={<KnowledgeGraph />} />
+              </Routes>
+            </ErrorBoundary>
           </Suspense>
         </Content>
       </Layout>
