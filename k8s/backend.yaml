@@ -3,8 +3,16 @@ kind: Deployment
 metadata:
   name: backend
   namespace: medical-consultation
+  labels:
+    app: backend
+    version: v1
 spec:
   replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: backend
@@ -12,13 +20,27 @@ spec:
     metadata:
       labels:
         app: backend
+        version: v1
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - backend
+              topologyKey: kubernetes.io/hostname
       containers:
       - name: backend
         image: your-registry/medical-backend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
+          name: http
         env:
         - name: APP_NAME
           valueFrom:
@@ -137,19 +159,32 @@ spec:
             port: 8000
           initialDelaySeconds: 60
           periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /api/v1/health/ready
             port: 8000
           initialDelaySeconds: 10
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
         startupProbe:
           httpGet:
             path: /health
             port: 8000
           initialDelaySeconds: 10
           periodSeconds: 5
+          timeoutSeconds: 5
           failureThreshold: 30
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 999
+          capabilities:
+            drop:
+            - ALL
 
 ---
 apiVersion: v1
@@ -163,7 +198,20 @@ spec:
   ports:
   - port: 8000
     targetPort: 8000
+    name: http
   type: ClusterIP
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: medical-consultation
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: backend
 
 ---
 apiVersion: autoscaling/v2

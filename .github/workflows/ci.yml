@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main, develop]
 
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository }}/backend
+  FRONTEND_IMAGE: ${{ github.repository }}/frontend
+
 jobs:
   test-backend:
     runs-on: ubuntu-latest
@@ -59,6 +64,13 @@ jobs:
           isort --check-only app/
           flake8 app/ --max-line-length=120 --ignore=E501,W503
 
+      - name: Run security scan (bandit)
+        working-directory: ./backend
+        run: |
+          pip install bandit
+          bandit -r app/ -f json -o bandit-report.json || true
+          bandit -r app/ -ll
+
       - name: Run tests
         working-directory: ./backend
         env:
@@ -75,6 +87,14 @@ jobs:
           flags: unittests
           name: backend-coverage
           fail_ci_if_error: false
+
+      - name: Upload bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-security-report
+          path: ./backend/bandit-report.json
+          if-no-files-found: ignore
 
   test-frontend:
     runs-on: ubuntu-latest
@@ -97,14 +117,25 @@ jobs:
         working-directory: ./frontend
         run: npm run lint
 
+      - name: Run type check
+        working-directory: ./frontend
+        run: npx tsc --noEmit
+
       - name: Build production
         working-directory: ./frontend
         run: npm run build
+
+      - name: Run security audit
+        working-directory: ./frontend
+        run: npm audit --audit-level=moderate || true
 
   build-images:
     needs: [test-backend, test-frontend]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
@@ -112,21 +143,71 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build backend image
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (backend)
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Extract metadata (frontend)
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push backend image
         uses: docker/build-push-action@v5
         with:
           context: ./backend
-          push: false
-          tags: intelligent-consultation-backend:latest
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Build frontend image
+      - name: Build and push frontend image
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
           target: production
-          push: false
-          tags: intelligent-consultation-frontend:latest
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Run Trivy vulnerability scanner (backend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-backend-results.sarif'
+
+      - name: Run Trivy vulnerability scanner (frontend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+
+      - name: Upload Trivy scan results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-scan-results
+          path: trivy-*.sarif

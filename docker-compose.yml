@@ -8,29 +8,33 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: medical_consultation
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 10s
     deploy:
       resources:
         limits:
           memory: 1G
         reservations:
           memory: 256M
+    networks:
+      - medical-network
 
   # Redis缓存
   redis:
     image: redis:7-alpine
     container_name: medical_redis
     restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
     volumes:
@@ -40,12 +44,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 5s
     deploy:
       resources:
         limits:
           memory: 512M
         reservations:
           memory: 128M
+    networks:
+      - medical-network
 
   # Neo4j知识图谱
   neo4j:
@@ -53,8 +60,9 @@ services:
     container_name: medical_neo4j
     restart: unless-stopped
     environment:
-      NEO4J_AUTH: neo4j/medical123
-      NEO4J_PLUGINS: '["apoc"]'\n      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-medical123}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
     ports:
       - "7474:7474"
       - "7687:7687"
@@ -66,12 +74,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+      start_period: 30s
     deploy:
       resources:
         limits:
           memory: 2G
         reservations:
           memory: 512M
+    networks:
+      - medical-network
 
   # Milvus依赖：etcd
   etcd:
@@ -90,6 +101,8 @@ services:
       resources:
         limits:
           memory: 512M
+    networks:
+      - medical-network
 
   # MinIO对象存储
   minio:
@@ -97,8 +110,8 @@ services:
     container_name: medical_minio
     restart: unless-stopped
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
       - "9001:9001"
       - "9000:9000"
@@ -110,12 +123,15 @@ services:
       interval: 30s
       timeout: 20s
       retries: 3
+      start_period: 10s
     deploy:
       resources:
         limits:
           memory: 1G
         reservations:
           memory: 256M
+    networks:
+      - medical-network
 
   # Milvus向量数据库
   milvus:
@@ -145,6 +161,8 @@ services:
           memory: 4G
         reservations:
           memory: 1G
+    networks:
+      - medical-network
 
   # 后端API
   backend:
@@ -154,21 +172,22 @@ services:
     container_name: medical_backend
     restart: unless-stopped
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/medical_consultation
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/medical_consultation
       - REDIS_URL=redis://redis:6379/0
       - NEO4J_URI=bolt://neo4j:7687
       - NEO4J_USER=neo4j
-      - NEO4J_PASSWORD=medical123
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-medical123}
       - MILVUS_HOST=milvus
       - MILVUS_PORT=19530
       - OBJECT_STORAGE_TYPE=minio
       - OBJECT_STORAGE_ENDPOINT=minio:9000
-      - OBJECT_STORAGE_ACCESS_KEY=minioadmin
-      - OBJECT_STORAGE_SECRET_KEY=minioadmin
+      - OBJECT_STORAGE_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - OBJECT_STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - OBJECT_STORAGE_BUCKET=medical-documents
       - OBJECT_STORAGE_USE_SSL=false
       - ENVIRONMENT=production
       - DEBUG=false
+      - LOG_LEVEL=INFO
     ports:
       - "8000:8000"
     depends_on:
@@ -196,6 +215,8 @@ services:
         reservations:
           memory: 512M
           cpus: '0.5'
+    networks:
+      - medical-network
 
   # 前端
   frontend:
@@ -223,6 +244,8 @@ services:
         reservations:
           memory: 64M
           cpus: '0.1'
+    networks:
+      - medical-network
 
 volumes:
   postgres_data:
@@ -232,3 +255,7 @@ volumes:
   etcd_data:
   minio_data:
   milvus_data:
+
+networks:
+  medical-network:
+    driver: bridge

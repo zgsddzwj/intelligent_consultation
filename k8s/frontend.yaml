@@ -3,8 +3,16 @@ kind: Deployment
 metadata:
   name: frontend
   namespace: medical-consultation
+  labels:
+    app: frontend
+    version: v1
 spec:
   replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: frontend
@@ -12,19 +20,33 @@ spec:
     metadata:
       labels:
         app: frontend
+        version: v1
     spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - frontend
+              topologyKey: kubernetes.io/hostname
       containers:
       - name: frontend
         image: your-registry/medical-frontend:latest
         imagePullPolicy: Always
         ports:
-        - containerPort: 3000
+        - containerPort: 80
+          name: http
         env:
         - name: REACT_APP_API_URL
           value: "http://backend-service:8000"
         resources:
           requests:
-            memory: "256Mi"
+            memory: "128Mi"
             cpu: "100m"
           limits:
             memory: "512Mi"
@@ -32,15 +54,27 @@ spec:
         livenessProbe:
           httpGet:
             path: /
-            port: 3000
-          initialDelaySeconds: 30
+            port: 80
+          initialDelaySeconds: 10
           periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /
-            port: 3000
-          initialDelaySeconds: 10
+            port: 80
+          initialDelaySeconds: 5
           periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 101
+          capabilities:
+            drop:
+            - ALL
 
 ---
 apiVersion: v1
@@ -52,9 +86,22 @@ spec:
   selector:
     app: frontend
   ports:
-  - port: 3000
-    targetPort: 3000
+  - port: 80
+    targetPort: 80
+    name: http
   type: ClusterIP
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: medical-consultation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: frontend
 
 ---
 apiVersion: autoscaling/v2
@@ -76,4 +123,16 @@ spec:
       target:
         type: Utilization
         averageUtilization: 70
-
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
