@@ -3,12 +3,52 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="description" content="智能医疗管家平台 - 专业的AI医疗咨询助手，基于多Agent协同、高级RAG检索和医疗知识图谱提供精准健康服务。" />
+    <meta name="keywords" content="智能医疗,AI医疗,健康咨询,医疗知识图谱,RAG检索" />
+    <meta name="theme-color" content="#667eea" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    
+    <!-- DNS 预解析和预连接，加速后端 API 请求 -->
+    <link rel="dns-prefetch" href="//localhost:8000" />
+    <link rel="preconnect" href="http://localhost:8000" crossorigin />
+    
+    <!-- 预加载关键字体（如有自定义字体可在此添加） -->
+    <!-- <link rel="preload" href="/fonts/CustomFont.woff2" as="font" type="font/woff2" crossorigin /> -->
+    
     <title>智能医疗管家平台</title>
+    
+    <!-- 内联关键 CSS，避免渲染阻塞 -->
+    <style>
+      /* 防止页面加载时的闪烁（FOUC） */
+      html { background-color: #f5f5f5; }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      #root {
+        min-height: 100vh;
+      }
+      /* 加载动画占位 */
+      .initial-loading {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        color: #667eea;
+        font-size: 14px;
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- 首屏加载占位，React 挂载后会替换此处内容 -->
+      <div class="initial-loading">智能医疗管家平台加载中...</div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-
