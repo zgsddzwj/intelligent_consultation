@@ -3,13 +3,11 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from app.utils.logger import app_logger
-import base64
-import dashscope
-from dashscope import MultiModalConversation
+from app.utils.validators import validate_image_file
 from app.config import get_settings
+import base64
 
 settings = get_settings()
-dashscope.api_key = settings.QWEN_API_KEY
 
 router = APIRouter()
 
@@ -34,8 +32,19 @@ async def analyze_medical_image(
 ):
     """分析医疗图片，提取医疗术语"""
     try:
-        # 读取图片
+        # 读取图片内容
         image_content = await file.read()
+        
+        # 验证文件类型和大小（最大5MB）
+        content_type = file.content_type or "application/octet-stream"
+        is_valid, error_msg = validate_image_file(
+            content_type=content_type,
+            file_size=len(image_content),
+            max_size=5 * 1024 * 1024
+        )
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_msg)
+        
         image_base64 = base64.b64encode(image_content).decode('utf-8')
         
         # 使用Qwen-VL进行图片分析
@@ -53,6 +62,10 @@ async def analyze_medical_image(
                 ]
             }
         ]
+        
+        import dashscope
+        from dashscope import MultiModalConversation
+        dashscope.api_key = settings.QWEN_API_KEY
         
         response = MultiModalConversation.call(
             model="qwen-vl-max",
@@ -95,9 +108,11 @@ async def analyze_medical_image(
             analysis_result=extraction_result
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
         app_logger.error(f"图片分析失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="图片分析服务暂时不可用，请稍后重试")
 
 
 @router.post("/extract-terms")
@@ -136,7 +151,8 @@ async def extract_medical_terms_from_image(
             "graph_results": graph_results
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         app_logger.error(f"提取医疗术语失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
+        raise HTTPException(status_code=500, detail="提取医疗术语失败，请稍后重试")

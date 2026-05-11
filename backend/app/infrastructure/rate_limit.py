@@ -26,7 +26,7 @@ def get_client_identifier(request: Request) -> str:
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """限流中间件"""
+    """限流中间件（基于Redis原子操作，防止竞态条件）"""
     
     def __init__(
         self,
@@ -46,7 +46,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         
         # 如果Redis不可用，跳过限流检查（降级策略）
-        if not redis_service.enabled:
+        if not redis_service.enabled or not redis_service.client:
             return await call_next(request)
         
         # 获取客户端标识
@@ -54,12 +54,42 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         cache_key = f"rate_limit:{identifier}"
         
         try:
-            # 获取当前计数
-            current = redis_service.get(cache_key)
-            current_count = int(current) if current else 0
+            # 使用Redis Lua脚本实现原子化的限流检查
+            # 脚本逻辑：
+            # 1. 获取当前计数
+            # 2. 如果计数为0，初始化并设置过期时间
+            # 3. 否则增加计数
+            # 4. 返回当前计数
+            lua_script = """
+                local key = KEYS[1]
+                local limit = tonumber(ARGV[1])
+                local window = tonumber(ARGV[2])
+                local current = redis.call('GET', key)
+                
+                if current == false then
+                    redis.call('SET', key, 1, 'EX', window)
+                    return 1
+                end
+                
+                current = tonumber(current)
+                if current >= limit then
+                    return current
+                end
+                
+                redis.call('INCR', key)
+                return current + 1
+            """
+            
+            current_count = redis_service.client.eval(
+                lua_script,
+                1,  # numkeys
+                cache_key,
+                self.calls,
+                self.period
+            )
             
             # 检查是否超过限制
-            if current_count >= self.calls:
+            if current_count > self.calls:
                 app_logger.warning(f"限流触发: {identifier}, 当前计数: {current_count}")
                 raise RateLimitException(
                     f"请求过于频繁，请稍后再试。限制: {self.calls} 次/{self.period}秒",
@@ -71,19 +101,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     }
                 )
             
-            # 增加计数
-            if current_count == 0:
-                # 第一次请求，设置过期时间
-                redis_service.set(cache_key, "1", ttl=self.period)
-            else:
-                # 增加计数，保持原有TTL
-                redis_service.client.incr(cache_key)
-            
             # 处理请求
             response = await call_next(request)
             
             # 添加限流头信息
-            remaining = self.calls - (current_count + 1)
+            remaining = self.calls - current_count
             response.headers["X-RateLimit-Limit"] = str(self.calls)
             response.headers["X-RateLimit-Remaining"] = str(max(0, remaining))
             response.headers["X-RateLimit-Reset"] = str(int(time.time()) + self.period)
@@ -112,27 +134,47 @@ def rate_limit(calls: int = 100, period: int = 60, key_func: Optional[Callable[[
         @wraps(func)
         async def wrapper(request: Request, *args, **kwargs):
             # 如果Redis不可用，跳过限流检查
-            if not redis_service.enabled:
+            if not redis_service.enabled or not redis_service.client:
                 return await func(request, *args, **kwargs)
             
             identifier = (key_func or get_client_identifier)(request)
             cache_key = f"rate_limit:{identifier}:{func.__name__}"
             
             try:
-                current = redis_service.get(cache_key)
-                current_count = int(current) if current else 0
+                # 使用原子操作检查限流
+                lua_script = """
+                    local key = KEYS[1]
+                    local limit = tonumber(ARGV[1])
+                    local window = tonumber(ARGV[2])
+                    local current = redis.call('GET', key)
+                    
+                    if current == false then
+                        redis.call('SET', key, 1, 'EX', window)
+                        return 1
+                    end
+                    
+                    current = tonumber(current)
+                    if current >= limit then
+                        return current
+                    end
+                    
+                    redis.call('INCR', key)
+                    return current + 1
+                """
                 
-                if current_count >= calls:
+                current_count = redis_service.client.eval(
+                    lua_script,
+                    1,
+                    cache_key,
+                    calls,
+                    period
+                )
+                
+                if current_count > calls:
                     raise RateLimitException(
                         f"请求过于频繁，请稍后再试",
                         error_code=ErrorCode.RATE_LIMIT_EXCEEDED
                     )
-                
-                if current_count == 0:
-                    redis_service.set(cache_key, "1", ttl=period)
-                else:
-                    if redis_service.client:
-                        redis_service.client.incr(cache_key)
                 
                 return await func(request, *args, **kwargs)
             except RateLimitException:
@@ -144,4 +186,3 @@ def rate_limit(calls: int = 100, period: int = 60, key_func: Optional[Callable[[
         
         return wrapper
     return decorator
-

@@ -3,8 +3,10 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.responses import Response
 
 from app.config import get_settings
 from app.utils.logger import app_logger
@@ -131,9 +133,17 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    max_age=600,
 )
+
+# 添加可信主机中间件（生产环境）
+if settings.ENVIRONMENT == "production":
+    app.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=["*"]  # 可配置为具体域名
+    )
 
 # 添加追踪中间件（最外层，最先执行）
 from app.common.tracing import TracingMiddleware
@@ -160,6 +170,25 @@ if settings.ENABLE_AUTH_MIDDLEWARE:
     app.add_middleware(AuthMiddleware)
 
 
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """添加安全响应头"""
+    response = await call_next(request)
+    
+    # 安全头配置
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    
+    # 仅在HTTPS环境下启用HSTS
+    if settings.ENVIRONMENT == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    
+    return response
+
+
 @app.get("/")
 async def root():
     """根路径"""
@@ -180,7 +209,6 @@ async def metrics():
 @app.get("/favicon.ico")
 async def favicon():
     """Favicon图标（避免404错误）"""
-    from starlette.responses import Response
     return Response(status_code=204)
 
 

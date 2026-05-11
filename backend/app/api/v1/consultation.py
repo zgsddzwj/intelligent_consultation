@@ -1,7 +1,7 @@
 """咨询API"""
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, AsyncGenerator
 import json
 import asyncio
@@ -14,17 +14,19 @@ from app.utils.logger import app_logger
 from app.utils.validators import validate_consultation_input, detect_high_risk_content, sanitize_user_input
 from app.utils.security import DISCLAIMER
 from app.services.llm_service import llm_service
+from app.config import get_settings
 
+settings = get_settings()
 router = APIRouter()
 orchestrator = AgentOrchestrator()
 
 
 class ChatRequest(BaseModel):
     """聊天请求"""
-    message: str
-    consultation_id: Optional[int] = None
-    context: Optional[Dict[str, Any]] = None
-    user_id: Optional[int] = None
+    message: str = Field(..., min_length=1, max_length=5000, description="用户消息内容")
+    consultation_id: Optional[int] = Field(None, ge=1, description="咨询记录ID")
+    context: Optional[Dict[str, Any]] = Field(None, description="上下文信息")
+    user_id: Optional[int] = Field(None, ge=1, description="用户ID")
 
 
 class ChatResponse(BaseModel):
@@ -88,6 +90,8 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
                 db.commit()
                 db.refresh(consultation)
                 consultation_id = consultation.id
+        except HTTPException:
+            raise
         except Exception as db_error:
             app_logger.warning(f"数据库操作失败，继续处理咨询: {db_error}")
             consultation = None
@@ -98,11 +102,24 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
             # 获取最近10条历史记录作为上下文
             context_data["history"] = consultation.messages[-10:]
             
-        # 使用编排器处理消息
-        result = orchestrator.process(
-            user_input=sanitized_message,
-            context=context_data
-        )
+        # 使用编排器处理消息（添加整体超时）
+        try:
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    orchestrator.process,
+                    user_input=sanitized_message,
+                    context=context_data
+                ),
+                timeout=60.0  # 整体处理超时60秒
+            )
+        except asyncio.TimeoutError:
+            app_logger.warning(f"咨询处理超时: consultation_id={consultation_id}")
+            return ChatResponse(
+                answer=f"请求处理超时，请重新发送您的问题。\n\n{DISCLAIMER}",
+                consultation_id=consultation_id,
+                sources=[],
+                risk_level=None
+            )
         
         # 添加免责声明
         if result.get("answer"):
@@ -163,25 +180,29 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)) -> St
     """流式咨询接口（SSE）"""
     consultation_id = 0
     
+    # 验证输入
+    is_valid, error_msg = validate_consultation_input({"message": request.message})
+    if not is_valid:
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'error': error_msg, 'type': 'error'})}\n\n"]),
+            media_type="text/event-stream"
+        )
+    
+    # 清理和脱敏用户输入
+    sanitized_message = sanitize_user_input(request.message)
+    
+    # 检测高风险内容
+    risk_detection = detect_high_risk_content(sanitized_message)
+    if risk_detection["requires_immediate_attention"]:
+        return StreamingResponse(
+            iter([f"data: {json.dumps({'content': '检测到高风险关键词，建议立即就医或拨打急救电话。', 'type': 'message', 'done': True})}\n\n"]),
+            media_type="text/event-stream"
+        )
+    
     async def generate_stream() -> AsyncGenerator[str, None]:
         nonlocal consultation_id
         
         try:
-            # 验证输入
-            is_valid, error_msg = validate_consultation_input({"message": request.message})
-            if not is_valid:
-                yield f"data: {json.dumps({'error': error_msg, 'type': 'error'})}\n\n"
-                return
-            
-            # 清理和脱敏用户输入
-            sanitized_message = sanitize_user_input(request.message)
-            
-            # 检测高风险内容
-            risk_detection = detect_high_risk_content(sanitized_message)
-            if risk_detection["requires_immediate_attention"]:
-                yield f"data: {json.dumps({'content': '检测到高风险关键词，建议立即就医或拨打急救电话。', 'type': 'message', 'done': True})}\n\n"
-                return
-            
             # 创建或获取咨询记录
             consultation = None
             try:
@@ -208,22 +229,25 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)) -> St
             yield f"data: {json.dumps({'type': 'start', 'consultation_id': consultation_id})}\n\n"
             
             # 使用编排器获取上下文（同步执行，快速完成）
-            # 这样可以获得RAG检索和知识图谱查询的结果
             rag_context = ""
             sources = []
             try:
-                result = orchestrator.process(
-                    user_input=sanitized_message,
-                    context=request.context or {}
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(
+                        orchestrator.process,
+                        user_input=sanitized_message,
+                        context=request.context or {}
+                    ),
+                    timeout=30.0  # 上下文检索超时30秒
                 )
                 
-                # 获取检索到的上下文
                 rag_context = result.get("context_used", "")
                 sources = result.get("sources", [])
                 
-                # 发送检索完成信号和来源信息
                 if sources:
                     yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
+            except asyncio.TimeoutError:
+                app_logger.warning("获取上下文超时，使用基础prompt")
             except Exception as e:
                 app_logger.warning(f"获取上下文失败，使用基础prompt: {e}")
             
@@ -238,21 +262,24 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)) -> St
             full_answer = ""
             first_token_sent = False
             
-            # 流式生成
-            async for chunk in llm_service.stream_generate(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                user_id=str(request.user_id) if request.user_id else None,
-                session_id=str(consultation_id) if consultation_id else None
-            ):
-                if chunk:
-                    if not first_token_sent:
-                        # 记录首token时间
-                        yield f"data: {json.dumps({'type': 'first_token'})}\n\n"
-                        first_token_sent = True
-                    
-                    full_answer += chunk
-                    yield f"data: {json.dumps({'content': chunk, 'type': 'message'})}\n\n"
+            # 流式生成（带超时保护）
+            try:
+                async for chunk in llm_service.stream_generate(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    user_id=str(request.user_id) if request.user_id else None,
+                    session_id=str(consultation_id) if consultation_id else None
+                ):
+                    if chunk:
+                        if not first_token_sent:
+                            yield f"data: {json.dumps({'type': 'first_token'})}\n\n"
+                            first_token_sent = True
+                        
+                        full_answer += chunk
+                        yield f"data: {json.dumps({'content': chunk, 'type': 'message'})}\n\n"
+            except asyncio.TimeoutError:
+                app_logger.warning("流式生成超时")
+                yield f"data: {json.dumps({'type': 'error', 'error': '生成超时，请稍后重试'})}\n\n"
             
             # 添加免责声明
             disclaimer = f"\n\n{DISCLAIMER}"
@@ -284,7 +311,7 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)) -> St
             
         except Exception as e:
             app_logger.error(f"流式咨询处理失败: {e}")
-            yield f"data: {json.dumps({'error': str(e), 'type': 'error'})}\n\n"
+            yield f"data: {json.dumps({'error': '服务处理异常，请稍后重试', 'type': 'error'})}\n\n"
     
     return StreamingResponse(
         generate_stream(),
@@ -294,16 +321,16 @@ async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)) -> St
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no"  # 禁用nginx缓冲
         }
-        )
+    )
 
 
 class FeedbackRequest(BaseModel):
     """反馈请求"""
-    consultation_id: int
+    consultation_id: int = Field(..., ge=1)
     trace_id: Optional[str] = None
-    rating: int  # 1-5分
-    comment: Optional[str] = None
-    helpful: Optional[bool] = None  # 是否有帮助
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = Field(None, max_length=1000)
+    helpful: Optional[bool] = None
 
 
 @router.post("/feedback")
@@ -315,8 +342,7 @@ async def submit_feedback(request: FeedbackRequest, db: Session = Depends(get_db
         
         # 记录反馈到Langfuse
         if request.trace_id and langfuse_service.enabled:
-            # 将rating转换为0-1范围
-            score_value = (request.rating - 1) / 4.0  # 1->0, 5->1
+            score_value = (request.rating - 1) / 4.0
             langfuse_service.score(
                 trace_id=request.trace_id,
                 name="user_rating",
@@ -331,11 +357,6 @@ async def submit_feedback(request: FeedbackRequest, db: Session = Depends(get_db
             helpful=request.helpful
         )
         
-        # 可以存储到数据库
-        # feedback_record = Feedback(...)
-        # db.add(feedback_record)
-        # db.commit()
-        
         return {
             "success": True,
             "message": "反馈已提交",
@@ -344,7 +365,7 @@ async def submit_feedback(request: FeedbackRequest, db: Session = Depends(get_db
         
     except Exception as e:
         app_logger.error(f"提交反馈失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="提交反馈失败，请稍后重试")
 
 
 @router.get("/history", response_model=List[ConsultationHistoryResponse])
@@ -374,7 +395,7 @@ async def get_consultation_history(
         ]
     except Exception as e:
         app_logger.error(f"获取咨询历史失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="获取咨询历史失败")
 
 
 @router.get("/{consultation_id}", response_model=ConsultationHistoryResponse)
@@ -394,4 +415,3 @@ async def get_consultation(
         created_at=consultation.created_at.isoformat() if consultation.created_at else "",
         updated_at=consultation.updated_at.isoformat() if consultation.updated_at else ""
     )
-
