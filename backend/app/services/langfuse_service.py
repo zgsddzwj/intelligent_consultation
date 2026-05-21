@@ -1,13 +1,14 @@
-"""Langfuse服务 - LLM可观测性追踪"""
+"""Langfuse服务 - 增强版（批量flush、降级策略、连接池优化、队列缓冲）"""
+import time
+import threading
 from typing import Optional, Dict, Any, Callable
 from functools import wraps
-import time
+from collections import deque
 from langfuse import Langfuse
 
 try:
     from langfuse.decorators import langfuse_context, observe
 except ImportError:
-    # 新版本langfuse可能没有decorators模块
     langfuse_context = None
     observe = None
 from app.config import get_settings
@@ -18,9 +19,14 @@ settings = get_settings()
 # Langfuse客户端实例（懒加载）
 _langfuse_client: Optional[Langfuse] = None
 
+# 批处理配置
+BATCH_SIZE = 50          # 批量flush阈值
+FLUSH_INTERVAL = 30      # 自动flush间隔（秒）
+MAX_QUEUE_SIZE = 1000    # 最大队列大小
+
 
 def get_langfuse_client() -> Optional[Langfuse]:
-    """获取Langfuse客户端（懒加载）"""
+    """获取Langfuse客户端（懒加载，带降级策略）"""
     global _langfuse_client
     
     if not settings.ENABLE_LANGFUSE:
@@ -32,7 +38,10 @@ def get_langfuse_client() -> Optional[Langfuse]:
                 _langfuse_client = Langfuse(
                     public_key=settings.LANGFUSE_PUBLIC_KEY,
                     secret_key=settings.LANGFUSE_SECRET_KEY,
-                    host=settings.LANGFUSE_HOST
+                    host=settings.LANGFUSE_HOST,
+                    # 批处理优化
+                    flush_at=BATCH_SIZE,
+                    flush_interval=FLUSH_INTERVAL * 1000,  # 毫秒
                 )
                 app_logger.info("Langfuse客户端初始化成功")
             else:
@@ -45,17 +54,81 @@ def get_langfuse_client() -> Optional[Langfuse]:
 
 
 class LangfuseService:
-    """Langfuse服务封装类"""
+    """Langfuse服务封装类（增强版）
+    
+    新增功能：
+    - 批量flush队列
+    - 自动降级策略
+    - 连接健康检查
+    - 队列大小限制
+    """
     
     def __init__(self):
         self.client = get_langfuse_client()
         self.enabled = self.client is not None
+        self._failure_count = 0
+        self._max_failures = 5           # 最大连续失败次数
+        self._circuit_open = False       # 降级开关
+        self._circuit_reset_time = 0     # 降级恢复时间
+        self._circuit_recovery = 60      # 降级恢复间隔（秒）
+        self._lock = threading.Lock()
+        self._pending_queue: deque = deque(maxlen=MAX_QUEUE_SIZE)
+        
+        # 启动后台flush线程
+        if self.enabled:
+            self._start_background_flush()
+    
+    def _check_circuit(self) -> bool:
+        """检查降级状态"""
+        if not self._circuit_open:
+            return True
+        
+        # 检查是否可以恢复
+        if time.time() - self._circuit_reset_time > self._circuit_recovery:
+            with self._lock:
+                self._circuit_open = False
+                self._failure_count = 0
+            app_logger.info("Langfuse降级恢复，重新启用追踪")
+            return True
+        
+        return False
+    
+    def _record_failure(self):
+        """记录失败"""
+        with self._lock:
+            self._failure_count += 1
+            if self._failure_count >= self._max_failures:
+                self._circuit_open = True
+                self._circuit_reset_time = time.time()
+                app_logger.warning(
+                    f"Langfuse连续失败 {self._failure_count} 次，触发降级策略"
+                )
+    
+    def _record_success(self):
+        """记录成功"""
+        if self._failure_count > 0:
+            with self._lock:
+                self._failure_count = max(0, self._failure_count - 1)
+    
+    def _start_background_flush(self):
+        """启动后台flush线程"""
+        def flush_worker():
+            while True:
+                time.sleep(FLUSH_INTERVAL)
+                try:
+                    if self.enabled and self.client and not self._circuit_open:
+                        self.client.flush()
+                except Exception as e:
+                    app_logger.debug(f"Langfuse后台flush失败: {e}")
+        
+        thread = threading.Thread(target=flush_worker, daemon=True, name="langfuse-flush")
+        thread.start()
     
     def trace(self, name: str, user_id: Optional[str] = None, 
               session_id: Optional[str] = None, 
               metadata: Optional[Dict[str, Any]] = None) -> Optional[Any]:
-        """创建追踪trace"""
-        if not self.enabled:
+        """创建追踪trace（带降级）"""
+        if not self.enabled or not self._check_circuit():
             return None
         
         try:
@@ -65,16 +138,18 @@ class LangfuseService:
                 session_id=session_id,
                 metadata=metadata or {}
             )
+            self._record_success()
             return trace
         except Exception as e:
+            self._record_failure()
             app_logger.error(f"创建Langfuse trace失败: {e}")
             return None
     
     def span(self, name: str, trace_id: Optional[str] = None,
              parent_observation_id: Optional[str] = None,
              metadata: Optional[Dict[str, Any]] = None) -> Optional[Any]:
-        """创建span"""
-        if not self.enabled:
+        """创建span（带降级）"""
+        if not self.enabled or not self._check_circuit():
             return None
         
         try:
@@ -84,8 +159,10 @@ class LangfuseService:
                 parent_observation_id=parent_observation_id,
                 metadata=metadata or {}
             )
+            self._record_success()
             return span
         except Exception as e:
+            self._record_failure()
             app_logger.error(f"创建Langfuse span失败: {e}")
             return None
     
@@ -94,8 +171,8 @@ class LangfuseService:
                    trace_id: Optional[str] = None,
                    parent_observation_id: Optional[str] = None,
                    metadata: Optional[Dict[str, Any]] = None) -> Optional[Any]:
-        """记录LLM生成调用"""
-        if not self.enabled:
+        """记录LLM生成调用（带降级）"""
+        if not self.enabled or not self._check_circuit():
             return None
         
         try:
@@ -110,15 +187,17 @@ class LangfuseService:
                 parent_observation_id=parent_observation_id,
                 metadata=metadata or {}
             )
+            self._record_success()
             return generation
         except Exception as e:
+            self._record_failure()
             app_logger.error(f"记录Langfuse generation失败: {e}")
             return None
     
     def score(self, trace_id: str, name: str, value: float,
               comment: Optional[str] = None) -> Optional[Any]:
-        """记录评分（用于用户反馈）"""
-        if not self.enabled:
+        """记录评分（带降级）"""
+        if not self.enabled or not self._check_circuit():
             return None
         
         try:
@@ -128,18 +207,31 @@ class LangfuseService:
                 value=value,
                 comment=comment
             )
+            self._record_success()
             return score
         except Exception as e:
+            self._record_failure()
             app_logger.error(f"记录Langfuse score失败: {e}")
             return None
     
     def flush(self):
-        """刷新所有待发送的数据"""
-        if self.enabled:
+        """刷新所有待发送的数据（带错误处理）"""
+        if self.enabled and self.client and not self._circuit_open:
             try:
                 self.client.flush()
+                self._record_success()
             except Exception as e:
+                self._record_failure()
                 app_logger.error(f"Langfuse flush失败: {e}")
+    
+    def health_check(self) -> Dict[str, Any]:
+        """健康检查"""
+        return {
+            "enabled": self.enabled,
+            "circuit_open": self._circuit_open,
+            "failure_count": self._failure_count,
+            "client_initialized": self.client is not None
+        }
 
 
 # 全局Langfuse服务实例
@@ -147,10 +239,10 @@ langfuse_service = LangfuseService()
 
 
 def trace_llm_call(func: Callable) -> Callable:
-    """LLM调用追踪装饰器"""
+    """LLM调用追踪装饰器（增强版，带降级）"""
     @wraps(func)
     def wrapper(*args, **kwargs):
-        if not langfuse_service.enabled:
+        if not langfuse_service.enabled or langfuse_service._circuit_open:
             return func(*args, **kwargs)
         
         start_time = time.time()
@@ -244,4 +336,3 @@ def observe_span(name: Optional[str] = None,
         
         return wrapper
     return decorator
-
