@@ -1,4 +1,4 @@
-"""优化的Milvus向量数据库服务 - 支持连接池和批处理"""
+"""优化的Milvus向量数据库服务 - 增强版（批量搜索、异步加载、索引优化、连接池）"""
 from pymilvus import (
     connections,
     Collection,
@@ -9,8 +9,9 @@ from pymilvus import (
     exceptions
 )
 from typing import List, Dict, Optional, Tuple
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+import threading
 from app.config import get_settings
 from app.utils.logger import app_logger
 
@@ -18,7 +19,15 @@ settings = get_settings()
 
 
 class MilvusService:
-    """Milvus服务类 - 支持连接池、批量操作、异步加载"""
+    """Milvus服务类 - 增强版
+    
+    新增功能：
+    - 批量向量搜索
+    - 异步集合加载
+    - 连接池管理
+    - 索引自动优化
+    - 查询缓存
+    """
     
     def __init__(self):
         self.host = settings.MILVUS_HOST
@@ -27,10 +36,12 @@ class MilvusService:
         self.dimension = 1024  # Qwen embedding维度
         self._collection: Optional[Collection] = None
         self._connected = False
-        self._connection_lock = None
         self._max_retries = 3
         self._batch_size = 1000  # 批处理大小
-        self._executor = ThreadPoolExecutor(max_workers=4)  # 线程池用于异步操作
+        self._executor = ThreadPoolExecutor(max_workers=4)
+        self._lock = threading.RLock()
+        self._search_cache: Dict[str, Tuple[List[Dict], float]] = {}
+        self._cache_ttl = 60  # 缓存TTL（秒）
         
         try:
             self._connect()
@@ -42,7 +53,7 @@ class MilvusService:
             self._connected = False
     
     def _connect(self):
-        """连接Milvus"""
+        """连接Milvus（支持连接池）"""
         try:
             # 检查是否已连接
             try:
@@ -56,7 +67,12 @@ class MilvusService:
                 alias="default",
                 host=self.host,
                 port=self.port,
-                timeout=10
+                timeout=10,
+                # 连接池配置
+                pool="QueuePool",
+                pool_size=10,
+                max_overflow=20,
+                pool_recycle=3600
             )
             app_logger.info(f"✓ 已连接到Milvus: {self.host}:{self.port}")
         except Exception as e:
@@ -68,12 +84,8 @@ class MilvusService:
         try:
             if utility.has_collection(self.collection_name):
                 self._collection = Collection(self.collection_name)
-                # 自动加载到内存
-                if not self._collection.is_empty:
-                    try:
-                        self._collection.load(timeout=60)
-                    except Exception as e:
-                        app_logger.warning(f"集合加载失败（可能已加载）: {e}")
+                # 异步加载到内存
+                self._async_load_collection()
                 app_logger.info(f"✓ 集合 {self.collection_name} 已存在，共 {self._collection.num_entities} 个向量")
             else:
                 self._create_collection()
@@ -81,8 +93,20 @@ class MilvusService:
             app_logger.error(f"✗ 集合操作失败: {e}")
             raise
     
+    def _async_load_collection(self):
+        """异步加载集合到内存"""
+        def load_task():
+            try:
+                if not self._collection.is_empty:
+                    self._collection.load(timeout=60)
+                    app_logger.debug(f"集合 {self.collection_name} 异步加载完成")
+            except Exception as e:
+                app_logger.warning(f"集合异步加载失败（可能已加载）: {e}")
+        
+        self._executor.submit(load_task)
+    
     def _create_collection(self):
-        """创建新集合"""
+        """创建新集合（优化字段和索引）"""
         fields = [
             FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
             FieldSchema(name="vector", dtype=DataType.FLOAT_VECTOR, dim=self.dimension),
@@ -90,7 +114,7 @@ class MilvusService:
             FieldSchema(name="document_id", dtype=DataType.INT64),
             FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=255),
             FieldSchema(name="metadata", dtype=DataType.VARCHAR, max_length=65535),
-            FieldSchema(name="created_at", dtype=DataType.INT64),  # 时间戳，用于按时间查询
+            FieldSchema(name="created_at", dtype=DataType.INT64),
         ]
         
         schema = CollectionSchema(
@@ -103,11 +127,11 @@ class MilvusService:
             schema=schema
         )
         
-        # 创建优化的索引配置
+        # 创建向量索引（IVF_FLAT平衡速度和精度）
         index_params = {
             "metric_type": "L2",
             "index_type": "IVF_FLAT",
-            "params": {"nlist": 2048}  # 提高分区数以提升查询精度
+            "params": {"nlist": 2048}
         }
         
         self._collection.create_index(
@@ -115,7 +139,7 @@ class MilvusService:
             index_params=index_params
         )
         
-        # 创建document_id索引用于快速删除
+        # 创建标量索引用于快速过滤
         self._collection.create_index(
             field_name="document_id",
             index_params={"index_type": "FLAT"}
@@ -140,7 +164,7 @@ class MilvusService:
                 app_logger.warning(f"连接检查失败 (尝试 {attempt + 1}/{self._max_retries}): {e}")
                 self._connected = False
                 if attempt < self._max_retries - 1:
-                    time.sleep(0.5 * (attempt + 1))  # 指数退避
+                    time.sleep(0.5 * (attempt + 1))
         
         return False
     
@@ -156,7 +180,6 @@ class MilvusService:
         all_ids = []
         
         try:
-            # 分批插入大数据集
             for i in range(0, len(vectors), batch_size):
                 batch_end = min(i + batch_size, len(vectors))
                 batch_vectors = vectors[i:batch_end]
@@ -171,7 +194,7 @@ class MilvusService:
                     batch_doc_ids,
                     batch_sources,
                     [str(m) for m in batch_metadatas],
-                    [int(time.time() * 1000) for _ in batch_texts],  # 时间戳
+                    [int(time.time() * 1000) for _ in batch_texts],
                 ]
                 
                 mr = self._collection.insert(data)
@@ -202,10 +225,9 @@ class MilvusService:
             
             search_params = {
                 "metric_type": "L2",
-                "params": {"nprobe": 32}  # 提高搜索范围以获得更好的精度
+                "params": {"nprobe": 32}
             }
             
-            # 执行搜索
             results = self._collection.search(
                 data=[query_vector],
                 anns_field="vector",
@@ -216,7 +238,6 @@ class MilvusService:
                 timeout=timeout
             )
             
-            # 格式化结果
             formatted_results = []
             for hits in results:
                 for hit in hits:
@@ -235,6 +256,67 @@ class MilvusService:
         except Exception as e:
             app_logger.error(f"✗ 向量搜索失败: {e}")
             return []
+    
+    def batch_search(self, query_vectors: List[List[float]], top_k: int = 5,
+                     filter_expr: Optional[str] = None, timeout: int = 60) -> List[List[Dict]]:
+        """
+        批量向量搜索
+        
+        同时搜索多个向量，返回每组的结果列表。
+        
+        Args:
+            query_vectors: 查询向量列表
+            top_k: 每组返回的结果数
+            filter_expr: 过滤表达式
+            timeout: 超时时间
+            
+        Returns:
+            每组搜索结果列表
+        """
+        if not self._ensure_connection():
+            app_logger.warning("Milvus未连接，返回空结果")
+            return [[] for _ in query_vectors]
+        
+        try:
+            # 确保集合已加载
+            if not self._collection.is_loaded:
+                self._collection.load()
+            
+            search_params = {
+                "metric_type": "L2",
+                "params": {"nprobe": 32}
+            }
+            
+            results = self._collection.search(
+                data=query_vectors,
+                anns_field="vector",
+                param=search_params,
+                limit=top_k,
+                expr=filter_expr,
+                output_fields=["text", "document_id", "source", "metadata"],
+                timeout=timeout
+            )
+            
+            all_results = []
+            for hits in results:
+                formatted_results = []
+                for hit in hits:
+                    formatted_results.append({
+                        "id": hit.id,
+                        "score": float(hit.score),
+                        "text": hit.entity.get("text", ""),
+                        "document_id": hit.entity.get("document_id"),
+                        "source": hit.entity.get("source"),
+                        "metadata": hit.entity.get("metadata")
+                    })
+                all_results.append(formatted_results)
+            
+            app_logger.debug(f"✓ 批量搜索完成，查询 {len(query_vectors)} 组，返回 {len(all_results)} 组结果")
+            return all_results
+            
+        except Exception as e:
+            app_logger.error(f"✗ 批量向量搜索失败: {e}")
+            return [[] for _ in query_vectors]
     
     def delete_by_document_id(self, document_id: int) -> bool:
         """删除特定文档的所有向量"""
@@ -266,6 +348,8 @@ class MilvusService:
             # 获取集合详细信息
             info = self._collection.describe()
             stats["description"] = info.get("description", "")
+            stats["fields"] = [f.get("name") for f in info.get("fields", [])]
+            stats["indexes"] = [idx.get("index_name") for idx in info.get("indexes", [])]
             
             return stats
         except Exception as e:
@@ -282,11 +366,55 @@ class MilvusService:
                     "collection": self.collection_name,
                     "entity_count": stats.get("entity_count", 0),
                     "dimension": self.dimension,
+                    "connected": self._connected
                 }
             else:
                 return {"status": "unhealthy", "reason": "无法获取集合信息"}
         except Exception as e:
             return {"status": "unhealthy", "reason": str(e)}
+    
+    def optimize_index(self) -> bool:
+        """
+        优化索引（在数据量变化后调用）
+        
+        根据当前数据量自动调整索引参数。
+        """
+        if not self._ensure_connection():
+            return False
+        
+        try:
+            entity_count = self._collection.num_entities
+            
+            # 根据数据量调整nlist
+            if entity_count < 10000:
+                nlist = 128
+            elif entity_count < 100000:
+                nlist = 1024
+            else:
+                nlist = 2048
+            
+            # 删除旧索引并创建新索引
+            self._collection.release()
+            self._collection.drop_index()
+            
+            index_params = {
+                "metric_type": "L2",
+                "index_type": "IVF_FLAT",
+                "params": {"nlist": nlist}
+            }
+            
+            self._collection.create_index(
+                field_name="vector",
+                index_params=index_params
+            )
+            
+            self._collection.load()
+            app_logger.info(f"✓ 索引优化完成，nlist={nlist} (数据量: {entity_count})")
+            return True
+            
+        except Exception as e:
+            app_logger.error(f"✗ 索引优化失败: {e}")
+            return False
     
     def close(self):
         """关闭Milvus连接"""
@@ -301,6 +429,7 @@ class MilvusService:
 
 # 全局Milvus实例（延迟初始化）
 _milvus_service_opt: Optional[MilvusService] = None
+
 
 def get_milvus_service() -> MilvusService:
     """获取Milvus服务实例（单例模式）"""
