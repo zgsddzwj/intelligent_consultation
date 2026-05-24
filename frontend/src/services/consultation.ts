@@ -1,4 +1,5 @@
 import { post, get } from './api'
+import type { ApiResponse } from './api'
 
 /**
  * 聊天请求参数
@@ -33,6 +34,17 @@ export interface ChatResponse {
 }
 
 /**
+ * 流式聊天响应
+ */
+export interface ChatStreamEvent {
+  type: 'start' | 'first_token' | 'message' | 'sources' | 'done' | 'error'
+  content?: string
+  consultation_id?: number
+  sources?: string[]
+  error?: string
+}
+
+/**
  * 历史记录项
  */
 export interface ConsultationHistoryItem {
@@ -59,61 +71,73 @@ export interface ConsultationDetail {
 }
 
 /**
- * 咨询API服务
- * 
+ * 反馈请求
+ */
+export interface FeedbackRequest {
+  consultation_id: number
+  trace_id?: string
+  rating: number
+  comment?: string
+  helpful?: boolean
+}
+
+/**
+ * 咨询API服务 - 增强版
+ *
  * 封装所有与医疗咨询相关的API调用：
  * - 智能对话聊天
+ * - 流式对话
  * - 历史记录查询
  * - 会话详情获取
+ * - 用户反馈
  */
 export const consultationApi = {
   /**
    * 发送消息进行AI对话
-   * @param data 聊天请求参数
-   * @returns AI回复数据
    */
   chat: (data: ChatRequest) =>
-    api.post<ChatResponse>('/consultation/chat', data),
+    post<ChatResponse>('/consultation/chat', data),
+
+  /**
+   * 流式对话（SSE）
+   */
+  chatStream: (data: ChatRequest): EventSource => {
+    const params = new URLSearchParams()
+    params.append('message', data.message)
+    if (data.consultation_id) params.append('consultation_id', String(data.consultation_id))
+    if (data.user_id) params.append('user_id', String(data.user_id))
+
+    const token = localStorage.getItem('auth_token')
+    const url = `/api/v1/consultation/chat/stream?${params.toString()}`
+
+    return new EventSource(url, {
+      withCredentials: !!token,
+    })
+  },
 
   /**
    * 获取咨询历史记录列表
-   * @param userId 用户ID (可选)
-   * @param limit 返回数量限制，默认10
-   * @returns 历史记录列表
    */
   getHistory: (userId?: number, limit = 10) =>
-    api.get<ConsultationHistoryItem[]>('/consultation/history', {
+    get<ConsultationHistoryItem[]>('/consultation/history', {
       params: { user_id: userId, limit },
     }),
 
   /**
    * 获取单个会话详情
-   * @param id 会话ID
-   * @returns 会话详情（包含完整消息记录）
    */
   getDetail: (id: number) =>
-    api.get<ConsultationDetail>(`/consultation/${id}`),
+    get<ConsultationDetail>(`/consultation/${id}`),
 
   /**
    * 结束当前会话
-   * @param consultationId 会话ID
    */
   endSession: (consultationId: number) =>
-    api.post(`/consultation/${consultationId}/end`),
+    post(`/consultation/${consultationId}/end`),
 
   /**
-   * 对会话进行评分反馈
-   * @param consultationId 会话ID
-   * @param score 评分 (1-5)
-   * @param feedback 反馈文字 (可选)
+   * 提交用户反馈
    */
-  submitFeedback: (
-    consultationId: number,
-    score: number,
-    feedback?: string
-  ) =>
-    api.post(`/consultation/${consultationId}/feedback`, {
-      score,
-      feedback,
-    }),
+  submitFeedback: (data: FeedbackRequest) =>
+    post('/consultation/feedback', data),
 }

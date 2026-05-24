@@ -1,4 +1,38 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
+
+/**
+ * API响应统一格式
+ */
+export interface ApiResponse<T = any> {
+  success: boolean
+  data: T
+  message?: string
+  error?: {
+    code: string
+    message: string
+    details?: Record<string, any>
+    request_id?: string
+  }
+}
+
+/**
+ * API错误类型
+ */
+export class ApiError extends Error {
+  status: number
+  code: string
+  requestId?: string
+  details?: Record<string, any>
+
+  constructor(status: number, code: string, message: string, requestId?: string, details?: Record<string, any>) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+    this.requestId = requestId
+    this.details = details
+  }
+}
 
 /**
  * API客户端配置
@@ -10,7 +44,6 @@ const apiClient: AxiosInstance = axios.create({
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
-  // 启用凭证（跨域请求时携带cookie）
   withCredentials: false,
 })
 
@@ -22,16 +55,13 @@ const apiClient: AxiosInstance = axios.create({
  */
 apiClient.interceptors.request.use(
   (config) => {
-    // 附加认证Token
     const token = localStorage.getItem('auth_token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
 
-    // 添加请求元数据
     config.metadata = { startTime: new Date() } as any
 
-    // 开发环境请求日志
     if (import.meta.env.DEV) {
       console.log(
         `%c[API] ${config.method?.toUpperCase()} ${config.url}`,
@@ -50,13 +80,12 @@ apiClient.interceptors.request.use(
 
 /**
  * 响应拦截器
- * - 统一错误处理
+ * - 统一错误处理与ApiError转换
  * - 性能监控日志
  * - Token过期自动处理
  */
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
-    // 性能监控：计算请求耗时
     const startTime = (response.config as any).metadata?.startTime
     if (startTime && import.meta.env.DEV) {
       const duration = Date.now() - new Date(startTime).getTime()
@@ -67,55 +96,91 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // 直接返回data，简化调用方使用
-    return response.data
+    // 如果后端返回统一格式，提取data
+    const data = response.data
+    if (data && typeof data === 'object' && 'success' in data) {
+      if (!data.success) {
+        return Promise.reject(
+          new ApiError(
+            response.status,
+            data.error?.code || 'UNKNOWN_ERROR',
+            data.error?.message || '请求失败',
+            data.error?.request_id,
+            data.error?.details
+          )
+        )
+      }
+      return data.data
+    }
+
+    return data
   },
-  (error) => {
-    // 统一错误处理
+  (error: AxiosError<ApiResponse>) => {
     if (error.response) {
       const { status, data } = error.response
 
+      const apiError = new ApiError(
+        status,
+        data?.error?.code || `HTTP_${status}`,
+        data?.error?.message || error.message,
+        data?.error?.request_id,
+        data?.error?.details
+      )
+
       switch (status) {
         case 401:
-          // 未授权 - 清除token并提示重新登录
-          console.warn('[API] 认证失败(401)，已清除认证信息')
           localStorage.removeItem('auth_token')
-          // 可以在这里触发全局登出事件
+          window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'token_expired' } }))
           break
-
         case 403:
           console.error('[API] 权限不足(403)')
           break
-
         case 404:
           console.warn('[API] 资源不存在(404):', error.request?.responseURL)
           break
-
         case 429:
           console.warn('[API] 请求频率过高(429)，请稍后重试')
           break
-
         case 500:
         case 502:
         case 503:
         case 504:
           console.error(`[API] 服务器错误(${status})`)
           break
-
-        default:
-          console.error(`[API] HTTP错误(${status}):`, data)
       }
-    } else if (error.request) {
-      // 请求已发出但没有响应（网络问题）
-      console.error('[API] 网络错误: 无法连接到服务器', error.message)
-    } else {
-      // 请求配置出错
-      console.error('[API] 请求配置错误:', error.message)
-    }
 
-    return Promise.reject(error)
+      return Promise.reject(apiError)
+    } else if (error.request) {
+      const networkError = new ApiError(0, 'NETWORK_ERROR', '网络错误: 无法连接到服务器')
+      return Promise.reject(networkError)
+    } else {
+      const configError = new ApiError(0, 'CONFIG_ERROR', error.message)
+      return Promise.reject(configError)
+    }
   }
 )
+
+// ===== 便捷请求方法 =====
+
+export function get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  return apiClient.get(url, config)
+}
+
+export function post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  return apiClient.post(url, data, config)
+}
+
+export function put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  return apiClient.put(url, data, config)
+}
+
+export function del<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+  return apiClient.delete(url, config)
+}
+
+export function patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+  return apiClient.patch(url, data, config)
+}
 
 // 类型导出
 export type { AxiosRequestConfig, AxiosResponse }
