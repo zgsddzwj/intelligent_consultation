@@ -56,16 +56,17 @@ export function useInView(options?: IntersectionObserverInit) {
     const element = ref.current
     if (!element) return
 
-    const observer = new IntersectionObserver(([entry]) => {
-      if (entry.isIntersecting) {
-        setIsInView(true)
-        // 一旦进入视口后，停止观察（可选）
-        // observer.unobserve(element)
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsInView(true)
+        }
+      },
+      {
+        threshold: 0.1,
+        ...options,
       }
-    }, {
-      threshold: 0.1,
-      ...options,
-    })
+    )
 
     observer.observe(element)
 
@@ -76,7 +77,7 @@ export function useInView(options?: IntersectionObserverInit) {
 }
 
 /**
- * 滚动位置Hook
+ * 滚动位置Hook（增强版）
  */
 export function useScrollPosition() {
   const [scrollPosition, setScrollPosition] = useState(0)
@@ -132,28 +133,38 @@ export function useLocalStorage<T>(
 }
 
 /**
- * 复制到剪贴板Hook
+ * 复制到剪贴板Hook（增强版）
  */
-export function useCopyToClipboard() {
+export function useCopyToClipboard(timeout: number = 2000) {
   const [copiedText, setCopiedText] = useState<string>('')
   const [isCopied, setIsCopied] = useState(false)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout>>()
 
-  const copy = useCallback(async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopiedText(text)
-      setIsCopied(true)
-      
-      // 2秒后重置状态
-      setTimeout(() => {
-        setIsCopied(false)
-        setCopiedText('')
-      }, 2000)
-      
-      return true
-    } catch (error) {
-      console.warn('[useCopyToClipboard] 复制失败:', error)
-      return false
+  const copy = useCallback(
+    async (text: string) => {
+      try {
+        await navigator.clipboard.writeText(text)
+        setCopiedText(text)
+        setIsCopied(true)
+
+        if (timeoutRef.current) clearTimeout(timeoutRef.current)
+        timeoutRef.current = setTimeout(() => {
+          setIsCopied(false)
+          setCopiedText('')
+        }, timeout)
+
+        return true
+      } catch (error) {
+        console.warn('[useCopyToClipboard] 复制失败:', error)
+        return false
+      }
+    },
+    [timeout]
+  )
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
     }
   }, [])
 
@@ -171,10 +182,82 @@ export function useMediaQuery(query: string): boolean {
     setMatches(mediaQuery.matches)
 
     const handler = (event: MediaQueryListEvent) => setMatches(event.matches)
-    
+
     mediaQuery.addEventListener('change', handler)
     return () => mediaQuery.removeEventListener('change', handler)
   }, [query])
 
   return matches
+}
+
+/**
+ * 倒计时Hook
+ */
+export function useCountdown(initialSeconds: number = 60) {
+  const [seconds, setSeconds] = useState(initialSeconds)
+  const [isRunning, setIsRunning] = useState(false)
+  const intervalRef = useRef<ReturnType<typeof setInterval>>()
+
+  const start = useCallback(() => {
+    setIsRunning(true)
+    setSeconds(initialSeconds)
+    intervalRef.current = setInterval(() => {
+      setSeconds((prev) => {
+        if (prev <= 1) {
+          setIsRunning(false)
+          if (intervalRef.current) clearInterval(intervalRef.current)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+  }, [initialSeconds])
+
+  const stop = useCallback(() => {
+    setIsRunning(false)
+    if (intervalRef.current) clearInterval(intervalRef.current)
+  }, [])
+
+  const reset = useCallback(() => {
+    stop()
+    setSeconds(initialSeconds)
+  }, [initialSeconds, stop])
+
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [])
+
+  return { seconds, isRunning, start, stop, reset }
+}
+
+/**
+ * 键盘事件Hook
+ */
+export function useKeyPress(targetKey: string, callback: () => void) {
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === targetKey) {
+        callback()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [targetKey, callback])
+}
+
+/**
+ * 页面可见性Hook
+ */
+export function usePageVisibility() {
+  const [isVisible, setIsVisible] = useState(!document.hidden)
+
+  useEffect(() => {
+    const handler = () => setIsVisible(!document.hidden)
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [])
+
+  return isVisible
 }
