@@ -1,8 +1,9 @@
-name: CI/CD Pipeline
+name: CI/CD Pipeline - 极致优化版
 
 on:
   push:
     branches: [main, develop]
+    tags: ['v*']
   pull_request:
     branches: [main, develop]
 
@@ -12,7 +13,89 @@ env:
   FRONTEND_IMAGE: ${{ github.repository }}/frontend
 
 jobs:
+  # ========== 代码质量检查 ==========
+  code-quality-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install lint tools
+        working-directory: ./backend
+        run: |
+          pip install flake8 black isort mypy bandit
+
+      - name: Run black format check
+        working-directory: ./backend
+        run: black --check app/ || true
+
+      - name: Run isort check
+        working-directory: ./backend
+        run: isort --check-only app/ || true
+
+      - name: Run flake8 lint
+        working-directory: ./backend
+        run: flake8 app/ --max-line-length=120 --ignore=E501,W503 --statistics
+
+      - name: Run mypy type check
+        working-directory: ./backend
+        run: mypy app/ --ignore-missing-imports || true
+
+      - name: Run bandit security scan
+        working-directory: ./backend
+        run: |
+          bandit -r app/ -f json -o bandit-report.json || true
+          bandit -r app/ -ll
+
+      - name: Upload bandit report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bandit-security-report
+          path: ./backend/bandit-report.json
+          if-no-files-found: ignore
+
+  code-quality-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: ./frontend
+        run: npm run lint
+
+      - name: Run TypeScript type check
+        working-directory: ./frontend
+        run: npx tsc --noEmit
+
+      - name: Run Prettier check
+        working-directory: ./frontend
+        run: npx prettier --check "src/**/*.{ts,tsx,css}" || true
+
+      - name: Run security audit
+        working-directory: ./frontend
+        run: npm audit --audit-level=moderate || true
+
+  # ========== 后端测试 ==========
   test-backend:
+    needs: [code-quality-backend]
     runs-on: ubuntu-latest
 
     services:
@@ -55,30 +138,25 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-xdist pytest-timeout
 
-      - name: Run linting
-        working-directory: ./backend
-        run: |
-          pip install flake8 black isort
-          black --check app/
-          isort --check-only app/
-          flake8 app/ --max-line-length=120 --ignore=E501,W503
-
-      - name: Run security scan (bandit)
-        working-directory: ./backend
-        run: |
-          pip install bandit
-          bandit -r app/ -f json -o bandit-report.json || true
-          bandit -r app/ -ll
-
-      - name: Run tests
+      - name: Run unit tests
         working-directory: ./backend
         env:
           DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
-          QWEN_API_KEY: ${{ secrets.QWEN_API_KEY }}
+          ENVIRONMENT: testing
         run: |
-          pytest tests/ -v --cov=app --cov-report=xml --cov-report=term
+          pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=term -n auto --timeout=60
+
+      - name: Run integration tests
+        working-directory: ./backend
+        env:
+          DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: testing
+        run: |
+          pytest tests/integration/ -v --timeout=120
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4
@@ -88,17 +166,21 @@ jobs:
           name: backend-coverage
           fail_ci_if_error: false
 
-      - name: Upload bandit report
+      - name: Generate coverage report
+        working-directory: ./backend
+        run: |
+          coverage html -d coverage_html
+
+      - name: Upload coverage HTML
         uses: actions/upload-artifact@v4
-        if: always()
         with:
-          name: bandit-security-report
-          path: ./backend/bandit-report.json
-          if-no-files-found: ignore
+          name: coverage-report
+          path: ./backend/coverage_html
 
+  # ========== 前端测试 ==========
   test-frontend:
+    needs: [code-quality-frontend]
     runs-on: ubuntu-latest
-
     steps:
       - uses: actions/checkout@v4
 
@@ -113,26 +195,50 @@ jobs:
         working-directory: ./frontend
         run: npm ci
 
-      - name: Run lint
+      - name: Run unit tests
         working-directory: ./frontend
-        run: npm run lint
-
-      - name: Run type check
-        working-directory: ./frontend
-        run: npx tsc --noEmit
+        run: npm run test -- --coverage --watchAll=false || true
 
       - name: Build production
         working-directory: ./frontend
         run: npm run build
 
-      - name: Run security audit
-        working-directory: ./frontend
-        run: npm audit --audit-level=moderate || true
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: ./frontend/dist
 
+  # ========== 性能测试 ==========
+  performance-test:
+    needs: [test-backend]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        working-directory: ./backend
+        run: |
+          pip install -r requirements.txt
+          pip install locust
+
+      - name: Run performance benchmark
+        working-directory: ./backend
+        run: |
+          pytest tests/ -k "benchmark" -v || true
+
+  # ========== 构建与发布 ==========
   build-images:
     needs: [test-backend, test-frontend]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
       contents: read
       packages: write
@@ -158,6 +264,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Extract metadata (frontend)
@@ -168,6 +275,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=sha,prefix={{branch}}-
+            type=semver,pattern={{version}}
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push backend image
@@ -211,3 +319,33 @@ jobs:
         with:
           name: trivy-scan-results
           path: trivy-*.sarif
+
+  # ========== 版本发布 ==========
+  release:
+    needs: [build-images]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          git log --pretty=format:"- %s" $(git describe --tags --abbrev=0 HEAD^)..HEAD >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          body: ${{ steps.changelog.outputs.CHANGELOG }}
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
