@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { Suspense, lazy, useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useLocation, Link } from 'react-router-dom'
-import { Layout, Menu, Typography, Space, Avatar, Breadcrumb, Drawer, Button } from 'antd'
+import { Layout, Menu, Typography, Space, Avatar, Breadcrumb, Drawer, Button, Spin } from 'antd'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import {
   MedicineBoxOutlined,
@@ -13,10 +13,19 @@ import {
   HomeOutlined,
 } from '@ant-design/icons'
 import type { MenuProps } from 'antd'
-import DoctorDashboard from './pages/DoctorDashboard'
-import PatientPortal from './pages/PatientPortal'
-import AdminPanel from './pages/AdminPanel'
-import KnowledgeGraph from './pages/KnowledgeGraph'
+
+// ========== 代码分割 + 懒加载 ==========
+const DoctorDashboard = lazy(() => import('./pages/DoctorDashboard'))
+const PatientPortal = lazy(() => import('./pages/PatientPortal'))
+const AdminPanel = lazy(() => import('./pages/AdminPanel'))
+const KnowledgeGraph = lazy(() => import('./pages/KnowledgeGraph'))
+
+// 加载占位
+const PageLoader = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
+    <Spin size="large" tip="页面加载中..." />
+  </div>
+)
 
 const { Content, Footer, Sider } = Layout
 const { Text, Title } = Typography
@@ -326,12 +335,14 @@ function AppLayout() {
           {location.pathname !== '/' && <PageBreadcrumb />}
 
           <ErrorBoundary>
-            <Routes>
-              <Route path="/" element={<PatientPortal />} />
-              <Route path="/doctor" element={<DoctorDashboard />} />
-              <Route path="/admin" element={<AdminPanel />} />
-              <Route path="/knowledge-graph" element={<KnowledgeGraph />} />
-            </Routes>
+            <Suspense fallback={<PageLoader />}>
+              <Routes>
+                <Route path="/" element={<PatientPortal />} />
+                <Route path="/doctor" element={<DoctorDashboard />} />
+                <Route path="/admin" element={<AdminPanel />} />
+                <Route path="/knowledge-graph" element={<KnowledgeGraph />} />
+              </Routes>
+            </Suspense>
           </ErrorBoundary>
         </Content>
 
