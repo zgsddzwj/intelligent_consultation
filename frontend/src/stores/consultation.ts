@@ -1,63 +1,50 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, subscribeWithSelector } from 'zustand/middleware'
+import { devtools } from 'zustand/middleware'
 
 /**
  * 消息接口定义
  */
 export interface Message {
-  /** 消息角色 */
   role: 'user' | 'assistant' | 'system'
-  /** 消息内容 */
   content: string
-  /** 信息来源引用 */
   sources?: string[]
-  /** 风险等级: high | medium | low */
   risk_level?: string
-  /** 消息时间戳 (ISO格式) */
   timestamp?: string
-  /** 消息唯一ID */
   id?: string
-  /** 是否流式输出中 */
   isStreaming?: boolean
 }
 
 /**
- * 会话状态接口
+ * 会话状态接口 - 分层设计
  */
 interface ConsultationState {
-  /** 消息列表 */
+  // === 核心状态（持久化）===
   messages: Message[]
-  /** 当前会话ID */
   consultationId: number | null
-  /** 是否正在加载 */
+
+  // === UI状态（非持久化）===
   isLoading: boolean
-  /** 流式输出内容 */
   streamingContent: string
-  /** 错误信息 */
   error: string | null
 
-  // Actions
-  /** 添加消息 */
+  // === 派生状态（计算属性）===
+  messageCount: number
+  lastMessage: Message | null
+  hasError: boolean
+  isStreaming: boolean
+
+  // === Actions ===
   addMessage: (message: Message) => void
-  /** 更新最后一条消息 */
   updateLastMessage: (updates: Partial<Message>) => void
-  /** 设置会话ID */
   setConsultationId: (id: number | null) => void
-  /** 清空所有消息 */
   clearMessages: () => void
-  /** 删除指定消息 */
   removeMessage: (index: number) => void
-  /** 设置加载状态 */
   setLoading: (loading: boolean) => void
-  /** 设置流式内容 */
   setStreamingContent: (content: string) => void
-  /** 追加流式内容 */
   appendStreamingContent: (chunk: string) => void
-  /** 完成流式输出（将streamingContent转为正式消息） */
   finalizeStreaming: () => void
-  /** 设置错误 */
   setError: (error: string | null) => void
-  /** 重置整个状态 */
   reset: () => void
 }
 
@@ -71,95 +58,141 @@ const initialState = {
 }
 
 /**
- * 咨询会话状态管理Store - 增强版
+ * 咨询会话状态管理Store - 极致优化版
  *
- * 使用Zustand + persist中间件实现：
- * - 消息持久化（页面刷新不丢失）
- * - 流式输出状态管理
- * - 错误状态统一管理
- * - 轻量级、无Redux样板代码
- * - 完整的TypeScript类型支持
+ * 架构特点：
+ * - 全局状态分层（核心/UI/派生）
+ * - subscribeWithSelector 精确订阅
+ * - devtools 开发调试
+ * - persist 智能持久化
+ * - 派生状态自动计算
  */
 export const useConsultationStore = create<ConsultationState>()(
-  persist(
-    (set, get) => ({
-      ...initialState,
+  devtools(
+    subscribeWithSelector(
+      persist(
+        (set, get) => ({
+          ...initialState,
 
-      addMessage: (message) =>
-        set((state) => ({
-          messages: [
-            ...state.messages,
-            {
-              ...message,
-              id: message.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-              timestamp: message.timestamp || new Date().toISOString(),
-            },
-          ],
-          error: null,
-        })),
+          // === 派生状态（基于get实时计算）===
+          get messageCount() {
+            return get().messages.length
+          },
+          get lastMessage() {
+            const msgs = get().messages
+            return msgs.length > 0 ? msgs[msgs.length - 1] : null
+          },
+          get hasError() {
+            return get().error !== null
+          },
+          get isStreaming() {
+            return get().streamingContent.length > 0
+          },
 
-      updateLastMessage: (updates) =>
-        set((state) => {
-          if (state.messages.length === 0) return state
-          const newMessages = [...state.messages]
-          const lastIndex = newMessages.length - 1
-          newMessages[lastIndex] = { ...newMessages[lastIndex], ...updates }
-          return { messages: newMessages }
+          addMessage: (message) =>
+            set((state) => ({
+              messages: [
+                ...state.messages,
+                {
+                  ...message,
+                  id: message.id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                  timestamp: message.timestamp || new Date().toISOString(),
+                },
+              ],
+              error: null,
+            }), false, 'addMessage'),
+
+          updateLastMessage: (updates) =>
+            set((state) => {
+              if (state.messages.length === 0) return state
+              const newMessages = [...state.messages]
+              const lastIndex = newMessages.length - 1
+              newMessages[lastIndex] = { ...newMessages[lastIndex], ...updates }
+              return { messages: newMessages }
+            }, false, 'updateLastMessage'),
+
+          setConsultationId: (id) => set({ consultationId: id }, false, 'setConsultationId'),
+
+          clearMessages: () =>
+            set({
+              messages: [],
+              consultationId: null,
+              streamingContent: '',
+              error: null,
+            }, false, 'clearMessages'),
+
+          removeMessage: (index) =>
+            set((state) => ({
+              messages: state.messages.filter((_, i) => i !== index),
+            }), false, 'removeMessage'),
+
+          setLoading: (loading) => set({ isLoading: loading }, false, 'setLoading'),
+
+          setStreamingContent: (content) => set({ streamingContent: content }, false, 'setStreamingContent'),
+
+          appendStreamingContent: (chunk) =>
+            set((state) => ({
+              streamingContent: state.streamingContent + chunk,
+            }), false, 'appendStreamingContent'),
+
+          finalizeStreaming: () =>
+            set((state) => {
+              if (!state.streamingContent.trim()) return state
+              return {
+                messages: [
+                  ...state.messages,
+                  {
+                    role: 'assistant',
+                    content: state.streamingContent,
+                    id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                    timestamp: new Date().toISOString(),
+                  },
+                ],
+                streamingContent: '',
+                isLoading: false,
+              }
+            }, false, 'finalizeStreaming'),
+
+          setError: (error) => set({ error, isLoading: false }, false, 'setError'),
+
+          reset: () => set(initialState, false, 'reset'),
         }),
-
-      setConsultationId: (id) => set({ consultationId: id }),
-
-      clearMessages: () =>
-        set({
-          messages: [],
-          consultationId: null,
-          streamingContent: '',
-          error: null,
-        }),
-
-      removeMessage: (index) =>
-        set((state) => ({
-          messages: state.messages.filter((_, i) => i !== index),
-        })),
-
-      setLoading: (loading) => set({ isLoading: loading }),
-
-      setStreamingContent: (content) => set({ streamingContent: content }),
-
-      appendStreamingContent: (chunk) =>
-        set((state) => ({
-          streamingContent: state.streamingContent + chunk,
-        })),
-
-      finalizeStreaming: () =>
-        set((state) => {
-          if (!state.streamingContent.trim()) return state
-          return {
-            messages: [
-              ...state.messages,
-              {
-                role: 'assistant',
-                content: state.streamingContent,
-                id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-                timestamp: new Date().toISOString(),
-              },
-            ],
-            streamingContent: '',
-            isLoading: false,
-          }
-        }),
-
-      setError: (error) => set({ error, isLoading: false }),
-
-      reset: () => set(initialState),
-    }),
-    {
-      name: 'medical-consultation-storage',
-      // 只持久化消息和会话ID，不保存loading/streaming/error状态
-      partialize: (state) => ({
-        messages: state.messages,
-        consultationId: state.consultationId,
-      }),
-    }
+        {
+          name: 'medical-consultation-storage',
+          // 只持久化核心状态
+          partialize: (state) => ({
+            messages: state.messages,
+            consultationId: state.consultationId,
+          }),
+        }
+      )
+    ),
+    { name: 'ConsultationStore', enabled: process.env.NODE_ENV === 'development' }
   )
 )
+
+// === 选择器函数（精确订阅，避免不必要的重渲染）===
+
+export const selectMessages = (state: ConsultationState) => state.messages
+export const selectIsLoading = (state: ConsultationState) => state.isLoading
+export const selectError = (state: ConsultationState) => state.error
+export const selectStreamingContent = (state: ConsultationState) => state.streamingContent
+export const selectConsultationId = (state: ConsultationState) => state.consultationId
+export const selectMessageCount = (state: ConsultationState) => state.messageCount
+export const selectLastMessage = (state: ConsultationState) => state.lastMessage
+export const selectHasError = (state: ConsultationState) => state.hasError
+export const selectIsStreaming = (state: ConsultationState) => state.isStreaming
+
+// === 便捷Hook ===
+
+export function useMessages() {
+  return useConsultationStore(selectMessages)
+}
+
+export function useIsLoading() {
+  return useConsultationStore(selectIsLoading)
+}
+
+export function useLastMessage() {
+  return useConsultationStore(selectLastMessage)
+}
