@@ -316,13 +316,21 @@ app.add_middleware(CompressionMiddleware)
 # 日志中间件
 app.add_middleware(LoggingMiddleware)
 
-# 限流中间件
+# 请求校验中间件
+from app.api.middleware.request_validator import RequestValidatorMiddleware
+app.add_middleware(RequestValidatorMiddleware)
+
+# 统一响应包装中间件
+from app.api.middleware.response_wrapper import UnifiedResponseMiddleware
+app.add_middleware(UnifiedResponseMiddleware)
+
+# 增强版限流中间件
 if settings.RATE_LIMIT_ENABLED:
-    from app.infrastructure.rate_limit import RateLimitMiddleware
+    from app.api.middleware.rate_limit_enhanced import RateLimitEnhancedMiddleware
     app.add_middleware(
-        RateLimitMiddleware,
-        calls=settings.RATE_LIMIT_CALLS,
-        period=settings.RATE_LIMIT_PERIOD
+        RateLimitEnhancedMiddleware,
+        default_calls=settings.RATE_LIMIT_CALLS,
+        default_period=settings.RATE_LIMIT_PERIOD
     )
 
 # 认证中间件
