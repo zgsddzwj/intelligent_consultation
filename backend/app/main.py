@@ -246,30 +246,34 @@ async def lifespan(app: FastAPI):
 
     # ===== 关闭阶段 =====
     app_logger.info(f"🛑 {settings.APP_NAME} 正在优雅关闭...")
-    _shutdown_services()
+    await _shutdown_services_async()
     app_logger.info("✅ 应用已关闭")
 
 
-def _shutdown_services():
-    """关闭各服务连接"""
-    services = [
-        ("Redis", "app.services.redis_service", "redis_service"),
-        ("Milvus", "app.services.milvus_service", "get_milvus_service"),
-        ("Neo4j", "app.knowledge.graph.neo4j_client", "get_neo4j_client"),
-    ]
+async def _shutdown_services_async():
+    """异步关闭各服务连接"""
+    from app.infrastructure.graceful_shutdown import shutdown_manager
 
-    for name, module_path, attr_name in services:
-        try:
-            module = __import__(module_path, fromlist=[attr_name])
-            service = getattr(module, attr_name)
-            # 处理函数和实例的不同调用方式
-            if callable(service) and not hasattr(service, 'close'):
-                service = service()
-            if hasattr(service, 'close'):
-                service.close()
-                app_logger.info(f"✓ {name} 连接已关闭")
-        except Exception as e:
-            app_logger.warning(f"⚠ 关闭 {name} 连接时出错: {e}")
+    # 使用优雅关闭管理器
+    shutdown_manager.register(lambda: _close_service("Redis", "app.services.redis_service", "redis_service"), "Redis")
+    shutdown_manager.register(lambda: _close_service("Milvus", "app.services.milvus_service", "get_milvus_service"), "Milvus")
+    shutdown_manager.register(lambda: _close_service("Neo4j", "app.knowledge.graph.neo4j_client", "get_neo4j_client"), "Neo4j")
+
+    await shutdown_manager.shutdown()
+
+
+def _close_service(name: str, module_path: str, attr_name: str):
+    """关闭单个服务"""
+    try:
+        module = __import__(module_path, fromlist=[attr_name])
+        service = getattr(module, attr_name)
+        if callable(service) and not hasattr(service, 'close'):
+            service = service()
+        if hasattr(service, 'close'):
+            service.close()
+            app_logger.info(f"✓ {name} 连接已关闭")
+    except Exception as e:
+        app_logger.warning(f"⚠ 关闭 {name} 连接时出错: {e}")
 
 
 # 创建FastAPI应用
