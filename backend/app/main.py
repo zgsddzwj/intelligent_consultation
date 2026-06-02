@@ -230,6 +230,18 @@ async def lifespan(app: FastAPI):
     else:
         app_logger.info("✓ 所有必需依赖服务正常")
 
+    # 生产环境 fail-fast：配置错误或必需依赖不可用则拒绝启动
+    if settings.ENVIRONMENT == "production" and settings.STARTUP_FAIL_FAST:
+        blocking_errors = list(_startup_state["errors"])
+        if not settings.SECRET_KEY:
+            blocking_errors.append("SECRET_KEY: 生产环境必须配置 JWT 密钥")
+        if blocking_errors:
+            for err in blocking_errors:
+                app_logger.error(f"启动阻断: {err}")
+            raise RuntimeError(
+                f"生产环境启动失败，存在 {len(blocking_errors)} 项阻断错误"
+            )
+
     # 4. 服务预热
     await _warmup_services()
 
@@ -237,8 +249,8 @@ async def lifespan(app: FastAPI):
     from app.infrastructure.monitoring import init_app_info
     init_app_info(settings.APP_VERSION, settings.ENVIRONMENT)
 
-    # 6. 标记就绪
-    _startup_state["ready"] = True
+    # 6. 标记就绪（开发环境允许降级启动）
+    _startup_state["ready"] = all_required_healthy or settings.ENVIRONMENT != "production"
     startup_duration = time.time() - _startup_state["start_time"]
     app_logger.info(f"✅ 应用启动完成，耗时 {startup_duration:.2f}s")
 
@@ -253,6 +265,9 @@ async def lifespan(app: FastAPI):
 async def _shutdown_services_async():
     """异步关闭各服务连接"""
     from app.infrastructure.graceful_shutdown import shutdown_manager
+    from app.database.session import engine
+
+    shutdown_manager.register(lambda: engine.dispose(), "PostgreSQL")
 
     # 使用优雅关闭管理器
     shutdown_manager.register(lambda: _close_service("Redis", "app.services.redis_service", "redis_service"), "Redis")
@@ -307,7 +322,7 @@ app.add_middleware(
 if settings.ENVIRONMENT == "production":
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=["*"]  # 生产环境应配置具体域名
+        allowed_hosts=settings.TRUSTED_HOSTS,
     )
 
 # 追踪中间件
@@ -375,15 +390,15 @@ async def root():
 
 @app.get("/health", tags=["健康检查"])
 async def health_check():
-    """综合健康检查端点（K8s probes兼容）"""
+    """综合健康检查端点（K8s probes兼容，实时探测依赖）"""
     if not _startup_state["ready"]:
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             content={"status": "starting", "ready": False}
         )
 
-    # 快速检查必需依赖
-    deps = _startup_state.get("dependencies", {})
+    # 实时并行检查依赖（避免启动后依赖宕机仍报 healthy）
+    deps = await DependencyChecker.check_all()
     required_unhealthy = [
         name for name, result in deps.items()
         if result.get("required") and result.get("status") != "healthy"
@@ -396,6 +411,10 @@ async def health_check():
                 "status": "unhealthy",
                 "ready": True,
                 "unhealthy_dependencies": required_unhealthy,
+                "dependencies": {
+                    name: {"status": r["status"], "latency_ms": r.get("latency_ms")}
+                    for name, r in deps.items()
+                },
             }
         )
 
@@ -432,8 +451,15 @@ async def liveness_check():
 
 
 @app.get("/metrics", tags=["监控"])
-async def metrics():
-    """Prometheus指标端点"""
+async def metrics(request: Request):
+    """Prometheus指标端点（生产环境需 METRICS_ACCESS_TOKEN）"""
+    if settings.METRICS_ACCESS_TOKEN:
+        token = request.headers.get("X-Metrics-Token") or request.query_params.get("token")
+        if token != settings.METRICS_ACCESS_TOKEN:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"detail": "Invalid metrics token"},
+            )
     from app.infrastructure.monitoring import get_metrics
     return get_metrics()
 

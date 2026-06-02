@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_user_repository
 from app.infrastructure.repositories.user_repository import UserRepository
 from app.models.user import User, UserRole
-from app.utils.security import get_password_hash, verify_password
+from app.utils.security import get_password_hash, verify_password, create_access_token
+from app.common.exceptions import UnauthorizedException
 from app.utils.logger import app_logger
 from app.common.exceptions import NotFoundException, ValidationException, ErrorCode
 from app.common.transaction import transactional
@@ -20,6 +21,21 @@ class UserCreate(BaseModel):
     email: str
     password: str
     role: Optional[str] = "patient"
+
+
+class UserLogin(BaseModel):
+    """用户登录请求"""
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    """登录令牌响应"""
+    access_token: str
+    token_type: str = "bearer"
+    user_id: int
+    username: str
+    role: str
 
 
 class UserResponse(BaseModel):
@@ -66,6 +82,33 @@ async def register_user(
         email=new_user.email,
         role=new_user.role.value,
         full_name=new_user.full_name
+    )
+
+
+@router.post("/login", response_model=TokenResponse)
+async def login_user(
+    credentials: UserLogin,
+    user_repo: UserRepository = Depends(get_user_repository)
+):
+    """用户登录，返回 JWT 访问令牌"""
+    user = user_repo.get_by_username(credentials.username)
+    if not user or not verify_password(credentials.password, user.hashed_password):
+        raise UnauthorizedException("用户名或密码错误")
+
+    if str(user.is_active) not in ("1", "true", "True"):
+        raise UnauthorizedException("用户已被禁用")
+
+    access_token = create_access_token({
+        "sub": str(user.id),
+        "role": user.role.value,
+        "username": user.username,
+    })
+
+    return TokenResponse(
+        access_token=access_token,
+        user_id=user.id,
+        username=user.username,
+        role=user.role.value,
     )
 
 

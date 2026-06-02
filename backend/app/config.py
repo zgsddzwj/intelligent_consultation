@@ -64,6 +64,10 @@ class Settings(BaseSettings):
     ENABLE_RBAC: bool = True  # 启用RBAC
     ENABLE_DATA_ENCRYPTION: bool = False  # 启用数据加密（默认关闭，需要配置密钥）
     ENABLE_AUTH_MIDDLEWARE: bool = False  # 启用认证中间件（默认关闭，开发环境）
+    TRUSTED_HOSTS: List[str] = ["localhost", "127.0.0.1", "*.localhost"]
+    METRICS_ACCESS_TOKEN: Optional[str] = None  # 生产环境建议配置，保护 /metrics
+    STARTUP_FAIL_FAST: bool = True  # 生产环境：必需依赖或密钥异常时拒绝启动
+    RATE_LIMIT_FAIL_CLOSED: bool = False  # 生产环境建议 true：Redis 不可用时拒绝请求
     
     # Rate Limiting
     RATE_LIMIT_ENABLED: bool = True

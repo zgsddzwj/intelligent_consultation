@@ -133,26 +133,34 @@ class ServiceFactory:
 # ========== FastAPI依赖函数 ==========
 
 def get_current_user_id(request: Request) -> Optional[int]:
-    """从请求中获取当前用户ID（支持多种认证方式）"""
-    # 从请求头获取
-    user_id = request.headers.get("X-User-ID")
-    if user_id:
+    """从请求中获取当前用户ID（JWT 优先，开发环境可降级）"""
+    from app.config import get_settings
+    settings = get_settings()
+
+    # 认证中间件注入的 JWT 用户信息
+    jwt_user_id = getattr(request.state, "user_id", None)
+    if jwt_user_id is not None:
         try:
-            return int(user_id)
-        except ValueError:
+            return int(jwt_user_id)
+        except (TypeError, ValueError):
             pass
-    
-    # 从JWT token获取（如果实现了）
-    # TODO: 集成JWT认证
-    
-    # 从查询参数获取（开发环境）
-    user_id = request.query_params.get("user_id")
-    if user_id:
-        try:
-            return int(user_id)
-        except ValueError:
-            pass
-    
+
+    # 仅开发环境允许简易身份头/查询参数（生产应启用 ENABLE_AUTH_MIDDLEWARE）
+    if settings.ENVIRONMENT == "development":
+        user_id = request.headers.get("X-User-ID")
+        if user_id:
+            try:
+                return int(user_id)
+            except ValueError:
+                pass
+
+        user_id = request.query_params.get("user_id")
+        if user_id:
+            try:
+                return int(user_id)
+            except ValueError:
+                pass
+
     return None
 
 
