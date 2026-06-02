@@ -6,6 +6,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from app.services.redis_service import redis_service
 from app.utils.logger import app_logger
+from app.config import get_settings
+
+settings = get_settings()
 
 
 class RateLimitEnhancedMiddleware(BaseHTTPMiddleware):
@@ -107,6 +110,14 @@ class RateLimitEnhancedMiddleware(BaseHTTPMiddleware):
             }
 
         except Exception as e:
+            if settings.RATE_LIMIT_FAIL_CLOSED or settings.ENVIRONMENT == "production":
+                app_logger.warning(f"限流检查失败（拒绝请求）: {e}")
+                return False, {
+                    "limit": max_requests,
+                    "remaining": 0,
+                    "reset": int(now + window),
+                    "reason": "rate_limit_backend_unavailable",
+                }
             app_logger.warning(f"限流检查失败（允许通过）: {e}")
             return True, {"limit": max_requests, "remaining": max_requests, "reset": int(now + window)}
 

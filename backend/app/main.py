@@ -36,6 +36,8 @@ _startup_state = {
     "errors": [],
 }
 
+_metrics_task: asyncio.Task | None = None
+
 
 class DependencyChecker:
     """依赖服务检查器"""
@@ -246,8 +248,17 @@ async def lifespan(app: FastAPI):
     await _warmup_services()
 
     # 5. 初始化监控
-    from app.infrastructure.monitoring import init_app_info
+    from app.infrastructure.monitoring import init_app_info, update_system_metrics
     init_app_info(settings.APP_VERSION, settings.ENVIRONMENT)
+
+    global _metrics_task
+
+    async def _system_metrics_loop():
+        while True:
+            update_system_metrics()
+            await asyncio.sleep(30)
+
+    _metrics_task = asyncio.create_task(_system_metrics_loop())
 
     # 6. 标记就绪（开发环境允许降级启动）
     _startup_state["ready"] = all_required_healthy or settings.ENVIRONMENT != "production"
@@ -258,6 +269,14 @@ async def lifespan(app: FastAPI):
 
     # ===== 关闭阶段 =====
     app_logger.info(f"🛑 {settings.APP_NAME} 正在优雅关闭...")
+    global _metrics_task
+    if _metrics_task:
+        _metrics_task.cancel()
+        try:
+            await _metrics_task
+        except asyncio.CancelledError:
+            pass
+        _metrics_task = None
     await _shutdown_services_async()
     app_logger.info("✅ 应用已关闭")
 

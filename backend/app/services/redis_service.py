@@ -123,15 +123,21 @@ class RedisServiceOptimized:
             return False
     
     def delete_pattern(self, pattern: str) -> int:
-        """删除匹配模式的所有键"""
+        """删除匹配模式的所有键（SCAN 迭代，避免 KEYS 阻塞）"""
         if not self._ensure_connection():
             return 0
-        
+
         try:
-            keys = self.client.keys(pattern)
-            if keys:
-                return self.client.delete(*keys)
-            return 0
+            deleted = 0
+            batch: list = []
+            for key in self.client.scan_iter(match=pattern, count=200):
+                batch.append(key)
+                if len(batch) >= 200:
+                    deleted += self.client.delete(*batch)
+                    batch.clear()
+            if batch:
+                deleted += self.client.delete(*batch)
+            return deleted
         except redis.RedisError as e:
             app_logger.error(f"Redis PATTERN DELETE错误 [{pattern}]: {e}")
             return 0
