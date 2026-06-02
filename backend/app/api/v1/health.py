@@ -98,10 +98,12 @@ class HealthChecker:
 _health_checker = HealthChecker()
 
 
-async def _check_database(db: Session):
+async def _check_database():
     """数据库健康检查"""
+    from app.database.session import engine
     db_start = time.time()
-    db.execute(text("SELECT 1"))
+    with engine.connect() as conn:
+        conn.execute(text("SELECT 1"))
     return {
         "status": "healthy",
         "response_time_ms": round((time.time() - db_start) * 1000, 2),
@@ -141,12 +143,14 @@ async def _check_neo4j():
     """Neo4j健康检查"""
     neo4j_start = time.time()
     neo4j = get_neo4j_client()
-    if neo4j.health_check():
+    info = neo4j.health_check()
+    if info.get("status") == "healthy":
         return {
             "status": "healthy",
             "response_time_ms": round((time.time() - neo4j_start) * 1000, 2),
+            **{k: v for k, v in info.items() if k != "status"},
         }
-    raise Exception("健康检查返回False")
+    raise Exception(info.get("error", info.get("reason", "Neo4j 不可用")))
 
 
 async def _check_llm():

@@ -214,6 +214,24 @@ class MultiLayerCacheService:
             }
         }
     
+    def health_check(self) -> Dict[str, Any]:
+        """缓存服务健康检查"""
+        try:
+            probe_key = f"{self.prefix}__health_probe__"
+            self.set("__system__", probe_key, "ok", l1_ttl=10, l2_ttl=10)
+            value = self.get("__system__", probe_key)
+            self.delete("__system__", probe_key)
+            if value != "ok":
+                return {"status": "unhealthy", "reason": "读写探针失败"}
+            return {
+                "status": "healthy",
+                "l1_enabled": self.enable_l1,
+                "l2_enabled": self.enable_l2,
+                "stats": self.get_stats(),
+            }
+        except Exception as e:
+            return {"status": "unhealthy", "reason": str(e)[:200]}
+
     def warm_up(self, namespace: str, data: Dict[str, Any], ttl: int = 3600):
         """缓存预热 - 批量加载数据"""
         count = 0

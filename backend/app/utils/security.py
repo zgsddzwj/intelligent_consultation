@@ -93,6 +93,21 @@ def decode_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
+    """解码访问令牌（仅接受 access 类型）"""
+    payload = decode_token(token)
+    if payload and payload.get("type") == "access":
+        return payload
+    return None
+
+
+# 医疗咨询免责声明（API 响应附加）
+DISCLAIMER = (
+    "【免责声明】本回答由 AI 生成，仅供参考，不能替代专业医生的诊断与治疗建议。"
+    "如有不适或紧急情况，请立即就医或拨打急救电话。"
+)
+
+
 # ========== 防重放攻击 ==========
 
 class ReplayProtection:

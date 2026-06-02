@@ -1,6 +1,7 @@
 """数据库会话管理 - 极致优化版（查询优化器、索引监控、连接池动态调整、读写分离）"""
 import time
 import threading
+from typing import List
 from sqlalchemy import create_engine, event, text, inspect
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import QueuePool, NullPool

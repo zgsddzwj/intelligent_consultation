@@ -3,7 +3,7 @@ import time
 import os
 import threading
 import functools
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST, Info
 from starlette.responses import Response
 from app.utils.logger import app_logger
