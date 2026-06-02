@@ -184,6 +184,7 @@ async def _warmup_services():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理 - 极致优化版"""
+    global _metrics_task
     _startup_state["start_time"] = time.time()
 
     # ===== 启动阶段 =====
@@ -251,8 +252,6 @@ async def lifespan(app: FastAPI):
     from app.infrastructure.monitoring import init_app_info, update_system_metrics
     init_app_info(settings.APP_VERSION, settings.ENVIRONMENT)
 
-    global _metrics_task
-
     async def _system_metrics_loop():
         while True:
             update_system_metrics()
@@ -269,7 +268,6 @@ async def lifespan(app: FastAPI):
 
     # ===== 关闭阶段 =====
     app_logger.info(f"🛑 {settings.APP_NAME} 正在优雅关闭...")
-    global _metrics_task
     if _metrics_task:
         _metrics_task.cancel()
         try:
