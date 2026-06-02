@@ -1,8 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
-import { Layout, Input, Button, message, Upload, Avatar, Tag, Spin, Space, Tooltip, Badge, Typography, Card } from 'antd'
+import { Layout, Input, Button, message, Upload, Avatar, Tag, Space, Tooltip, Badge, Typography, Flex } from 'antd'
 import {
   SendOutlined,
-  UploadOutlined,
   UserOutlined,
   RobotOutlined,
   MedicineBoxOutlined,
@@ -17,13 +16,7 @@ import { useMutation } from '@tanstack/react-query'
 import { consultationApi } from '../services/consultation'
 import { useConsultationStore } from '../stores/consultation'
 import api from '../services/api'
-import {
-  ChatMessage,
-  ChatInput,
-  WelcomeScreen,
-  TypingIndicator,
-} from '../components/chat'
-import type { ChatRequest, ImageAnalysisResponse } from '../types/chat'
+import type { ChatRequest } from '../types/chat'
 
 const { Header, Content } = Layout
 const { TextArea } = Input
@@ -52,6 +45,27 @@ export default function PatientPortal() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [isTyping, setIsTyping] = useState(false)
+  const [input, setInput] = useState('')
+
+  const chatMutation = useMutation({
+    mutationFn: (req: ChatRequest) => consultationApi.chat(req),
+    onSuccess: (data) => {
+      addMessage({
+        role: 'assistant',
+        content: data.answer,
+        sources: data.sources,
+        risk_level: data.risk_level,
+      })
+      if (data.consultation_id) {
+        setConsultationId(data.consultation_id)
+      }
+      setIsTyping(false)
+    },
+    onError: (error: Error) => {
+      message.error('发送失败: ' + (error.message || '请稍后重试'))
+      setIsTyping(false)
+    },
+  })
 
   // 自动滚动到底部
   useEffect(() => {
@@ -355,7 +369,7 @@ export default function PatientPortal() {
         <Text type="secondary" style={{ fontSize: '13px', display: 'block', marginBottom: '14px', textAlign: 'center' }}>
           💡 常见问题快捷入口
         </Text>
-        <Space wrap size="middle" justify="center" style={{ width: '100%' }}>
+        <Flex wrap gap="middle" justify="center" style={{ width: '100%' }}>
           {quickSuggestions.map((item, idx) => (
             <div
               key={idx}
@@ -386,7 +400,7 @@ export default function PatientPortal() {
               <Text style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>{item.text}</Text>
             </div>
           ))}
-        </Space>
+        </Flex>
       </div>
 
       {/* 特性卡片 */}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Layout,
   Select,
@@ -20,7 +20,7 @@ import {
   ExperimentOutlined,
   ReloadOutlined,
   InfoCircleOutlined,
-  ApertureOutlined,
+  ApartmentOutlined,
   NodeIndexOutlined,
   TeamOutlined,
   MedicineBoxOutlined,
@@ -35,7 +35,7 @@ import type { GraphData, GraphNode } from '../services/knowledge'
 
 const { Header, Content } = Layout
 const { Option } = Select
-const { Title, Text, Paragraph } = Typography
+const { Title, Text } = Typography
 
 // 节点类型配置
 interface NodeTypeConfig {
@@ -46,23 +46,11 @@ interface NodeTypeConfig {
 }
 
 const nodeTypeConfigs: Record<string, NodeTypeConfig> = {
-  Department: { color: '#722ed1', icon: <ApertureOutlined />, label: '科室', description: '医疗科室分类' },
+  Department: { color: '#722ed1', icon: <ApartmentOutlined />, label: '科室', description: '医疗科室分类' },
   Disease: { color: '#ff4d4f', icon: <MedicineBoxOutlined />, label: '疾病', description: '疾病实体' },
   Symptom: { color: '#fa8c16', icon: <BugOutlined />, label: '症状', description: '症状表现' },
   Drug: { color: '#1890ff', icon: <MedicineBoxOutlined />, label: '药物', description: '药品信息' },
   Examination: { color: '#52c41a', icon: <FileSearchOutlined />, label: '检查', description: '检查项目' },
-}
-
-/** 根据节点类型返回对应颜色 */
-function getNodeColor(node: GraphNode): string {
-  const typeColors: Record<string, string> = {
-    Department: '#722ed1',
-    Disease: '#ff4d4f',
-    Symptom: '#fa8c16',
-    Drug: '#1890ff',
-    Examination: '#52c41a',
-  }
-  return typeColors[node.type] || '#8c8c8c'
 }
 
 // 统计卡片组件
@@ -106,7 +94,7 @@ export default function KnowledgeGraph() {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] })
   const [loading, setLoading] = useState(false)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
-  const fgRef = useRef<any>()
+  const fgRef = useRef<any>(undefined)
 
   // 获取科室列表
   const { data: departmentsData } = useQuery({
@@ -290,7 +278,7 @@ export default function KnowledgeGraph() {
           </Col>
           <Col xs={24} sm={8}>
             <StatCard
-              icon={<ApertureOutlined />}
+              icon={<NodeIndexOutlined />}
               title="类型种类"
               value={stats.types}
               color="#f59e0b"
@@ -357,7 +345,7 @@ export default function KnowledgeGraph() {
             {/* 力导向图 */}
             {!loading && graphData.nodes.length > 0 && (
               <ForceGraph2D
-                ref={fgRef as React.RefObject<never>}
+                ref={fgRef}
                 graphData={graphData}
                 nodeLabel={(node: any) => `${node.label}`}
                 nodeColor={(node: any) => getNodeColor(node)}
@@ -376,7 +364,6 @@ export default function KnowledgeGraph() {
                 cooldownTicks={100}
                 enableZoomInteraction={true}
                 enablePanInteraction={true}
-                enableDragInteraction={true}
                 backgroundColor="transparent"
                 width={undefined}
                 height={undefined}
@@ -463,9 +450,4 @@ export default function KnowledgeGraph() {
       </Content>
     </Layout>
   )
-}
-
-// 兼容性：Ant Design Apartment 图标
-function ApartmentOutlined(props: any) {
-  return <ApertureOutlined {...props} />
 }

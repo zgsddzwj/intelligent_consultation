@@ -1,5 +1,4 @@
 import { post, get } from './api'
-import type { ApiResponse } from './api'
 
 /**
  * 聊天请求参数

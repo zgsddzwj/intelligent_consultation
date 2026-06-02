@@ -45,7 +45,7 @@ class LocalCache:
         """删除缓存"""
         if key in self.cache:
             del self.cache[key]
-            del self.access_count.get(key, None)
+            self.access_count.pop(key, None)
             return True
         return False
     

@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useMemo } from 'react'
-import { Table, Pagination, Input, Space, Button, Empty } from 'antd'
+import { useState, useCallback, useMemo } from 'react'
+import { Table, Input, Button, Empty } from 'antd'
 import { SearchOutlined, ReloadOutlined } from '@ant-design/icons'
 import type { TableProps, TablePaginationConfig } from 'antd/es/table'
 

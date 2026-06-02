@@ -70,7 +70,9 @@ export function ResponsiveGrid({
         ...style,
       }}
       className="responsive-grid"
-    />
+    >
+      {children}
+    </div>
   )
 }
 

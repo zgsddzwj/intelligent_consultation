@@ -1,4 +1,4 @@
-import { Layout, Card, Typography, Row, Col, Statistic, Progress, Tag, Space, Avatar, List, Table, Switch, Button } from 'antd'
+import { Layout, Card, Typography, Row, Col, Progress, Tag, Space, List, Table, Button, Badge } from 'antd'
 import {
   SettingOutlined,
   UserOutlined,
@@ -9,12 +9,10 @@ import {
   ApiOutlined,
   MonitorOutlined,
   TeamOutlined,
-  FileTextOutlined,
   WarningOutlined,
   CheckCircleOutlined,
   SyncOutlined,
   ExportOutlined,
-  PlusOutlined,
 } from '@ant-design/icons'
 
 const { Header, Content } = Layout

@@ -143,7 +143,6 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
               {message.sources.map((s, i) => (
                 <Tag
                   key={i}
-                  size="small"
                   style={{
                     margin: '2px 4px 2px 0',
                     fontSize: '11px',

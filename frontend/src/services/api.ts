@@ -1,5 +1,11 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError } from 'axios'
 
+declare module 'axios' {
+  interface InternalAxiosRequestConfig {
+    metadata?: { startTime: Date }
+  }
+}
+
 /**
  * API响应统一格式
  */
@@ -60,7 +66,7 @@ apiClient.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
     }
 
-    config.metadata = { startTime: new Date() } as any
+    config.metadata = { startTime: new Date() }
 
     if (import.meta.env.DEV) {
       console.log(
@@ -86,7 +92,7 @@ apiClient.interceptors.request.use(
  */
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => {
-    const startTime = (response.config as any).metadata?.startTime
+    const startTime = response.config.metadata?.startTime
     if (startTime && import.meta.env.DEV) {
       const duration = Date.now() - new Date(startTime).getTime()
       if (duration > 1000) {

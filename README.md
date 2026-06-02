@@ -294,7 +294,7 @@ GitHub Actions 工作流 (`.github/workflows/ci.yml`)：
 ```bash
 cd frontend
 npm install
-npm run dev      # 开发模式 (http://localhost:5173)
+npm run dev      # 开发模式 (http://localhost:3000)
 npm run build    # 生产构建
 npm run preview  # 预览构建结果
 ```

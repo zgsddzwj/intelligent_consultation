@@ -82,14 +82,14 @@ export const knowledgeApi = {
    * @returns 图谱数据（节点+边）
    */
   getGraphVisualization: (params: GraphVisualizationRequest) =>
-    api.post<GraphData>('/knowledge/graph/visualization', params),
+    post<GraphData>('/knowledge/graph/visualization', params),
 
   /**
    * 获取科室列表
    * @returns 科室信息数组
    */
   getDepartments: () =>
-    api.get<DepartmentInfo[]>('/knowledge/graph/departments'),
+    get<{ departments: DepartmentInfo[] }>('/knowledge/graph/departments'),
 
   /**
    * 知识库全文搜索
@@ -98,7 +98,7 @@ export const knowledgeApi = {
    * @returns 搜索结果列表
    */
   search: (query: string, topK = 5) =>
-    api.post<SearchResult[]>('/knowledge/search', { query, top_k: topK }),
+    post<SearchResult[]>('/knowledge/search', { query, top_k: topK }),
 
   /**
    * 获取实体详情
@@ -106,7 +106,7 @@ export const knowledgeApi = {
    * @returns 完整实体信息及关联关系
    */
   getEntityDetail: (entityId: string) =>
-    api.get(`/knowledge/entity/${entityId}`),
+    get(`/knowledge/entity/${entityId}`),
 
   /**
    * 获取实体关联路径
@@ -120,7 +120,7 @@ export const knowledgeApi = {
     targetId: string,
     maxDepth = 3
   ) =>
-    api.post('/knowledge/path', {
+    post('/knowledge/path', {
       source_id: sourceId,
       target_id: targetId,
       max_depth: maxDepth,

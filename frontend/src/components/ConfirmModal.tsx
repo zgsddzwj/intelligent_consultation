@@ -1,5 +1,5 @@
 import React from 'react'
-import { Modal, Button, Space } from 'antd'
+import { Modal, Space } from 'antd'
 import { ExclamationCircleOutlined, CheckCircleOutlined, InfoCircleOutlined } from '@ant-design/icons'
 
 export type ConfirmType = 'warning' | 'info' | 'success' | 'error'
@@ -61,8 +61,6 @@ export function ConfirmModal({
       cancelText={cancelText}
       okButtonProps={config.okButtonProps}
       centered
-      role="alertdialog"
-      aria-modal="true"
       aria-labelledby="confirm-title"
       aria-describedby="confirm-content"
     >

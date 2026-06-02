@@ -1,4 +1,4 @@
-import { Layout, Card, Typography, Row, Col, Statistic, Progress, Tag, Space, Avatar, List, Badge } from 'antd'
+import { Layout, Card, Typography, Row, Col, Tag, Space, Avatar, List, Badge } from 'antd'
 import {
   MedicineBoxOutlined,
   UserOutlined,
@@ -9,7 +9,6 @@ import {
   CheckCircleOutlined,
   WarningOutlined,
   RiseOutlined,
-  HeartOutlined,
   ExperimentOutlined,
   SafetyCertificateOutlined,
   ThunderboltOutlined,

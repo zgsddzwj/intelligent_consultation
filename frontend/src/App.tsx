@@ -1,7 +1,7 @@
 import { Suspense, lazy, useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useLocation, Link } from 'react-router-dom'
 import { Layout, Menu, Typography, Space, Avatar, Breadcrumb, Drawer, Button, Spin } from 'antd'
-import { ErrorBoundary } from './components/ErrorBoundary'
+import ErrorBoundary from './components/ErrorBoundary'
 import {
   MedicineBoxOutlined,
   UserOutlined,

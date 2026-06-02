@@ -7,11 +7,11 @@
 
 export { DataTable } from './DataTable'
 export { ConfirmModal } from './ConfirmModal'
-export { EmptyState } from './EmptyState'
-export { ErrorBoundary } from './ErrorBoundary'
-export { PageLoading } from './PageLoading'
+export { default as EmptyState } from './EmptyState'
+export { default as ErrorBoundary } from './ErrorBoundary'
+export { default as PageLoading } from './PageLoading'
 export { ResponsiveContainer } from './ResponsiveContainer'
-export { SkeletonLoader } from './SkeletonLoader'
+export { default as SkeletonLoader } from './SkeletonLoader'
 
 // Chat组件
 export {
@@ -20,5 +20,3 @@ export {
   TypingIndicator,
   WelcomeScreen,
 } from './chat'
-
-export type { MessageStatus, ChatStreamEvent } from './chat'
