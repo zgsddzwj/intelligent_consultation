@@ -482,8 +482,22 @@ async def metrics(request: Request):
 
 
 @app.get("/startup", tags=["健康检查"])
-async def startup_info():
-    """启动信息 - 用于排查启动问题"""
+async def startup_info(request: Request):
+    """启动信息 - 用于排查启动问题（生产环境需 METRICS_ACCESS_TOKEN）"""
+    if settings.ENVIRONMENT == "production":
+        if settings.METRICS_ACCESS_TOKEN:
+            token = request.headers.get("X-Metrics-Token") or request.query_params.get("token")
+            if token != settings.METRICS_ACCESS_TOKEN:
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={"detail": "Invalid metrics token"},
+                )
+        else:
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"detail": "Not Found"},
+            )
+
     return {
         "ready": _startup_state["ready"],
         "start_time": _startup_state["start_time"],
