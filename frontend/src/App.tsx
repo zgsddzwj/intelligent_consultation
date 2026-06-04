@@ -12,6 +12,7 @@ import {
   MenuUnfoldOutlined,
   HomeOutlined,
 } from '@ant-design/icons'
+import { getAuthUser, clearAuthToken, isAuthenticated } from './services/auth'
 import type { MenuProps } from 'antd'
 
 // ========== 代码分割 + 懒加载 ==========
@@ -19,6 +20,7 @@ const DoctorDashboard = lazy(() => import('./pages/DoctorDashboard'))
 const PatientPortal = lazy(() => import('./pages/PatientPortal'))
 const AdminPanel = lazy(() => import('./pages/AdminPanel'))
 const KnowledgeGraph = lazy(() => import('./pages/KnowledgeGraph'))
+const Login = lazy(() => import('./pages/Login'))
 
 // 加载占位
 const PageLoader = () => (
@@ -103,6 +105,19 @@ function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
+
+  const [authUser, setAuthUser] = useState(getAuthUser())
+
+  useEffect(() => {
+    const onLogout = () => setAuthUser(null)
+    window.addEventListener('auth:logout', onLogout)
+    return () => window.removeEventListener('auth:logout', onLogout)
+  }, [])
+
+  const handleLogout = () => {
+    clearAuthToken()
+    setAuthUser(null)
+  }
 
   // 检测移动端
   useEffect(() => {
@@ -236,10 +251,18 @@ function AppLayout() {
                   lineHeight: 1.3,
                 }}
               >
-                访客用户
+                {authUser?.username || (isAuthenticated() ? '已登录用户' : '访客用户')}
               </Text>
               <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', display: 'block' }}>
-                v2.0 · 在线
+                {authUser ? (
+                  <a onClick={handleLogout} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}>
+                    退出登录
+                  </a>
+                ) : (
+                  <Link to="/login" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    登录 / 注册
+                  </Link>
+                )}
               </Text>
             </div>
           </div>
@@ -398,11 +421,30 @@ function AppLayout() {
 
 // 根组件
 function App() {
+  const location = useLocation()
+  const isLoginPage = location.pathname === '/login'
+
+  if (isLoginPage) {
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+          </Routes>
+        </Suspense>
+      </ErrorBoundary>
+    )
+  }
+
+  return <AppLayout />
+}
+
+function AppWithRouter() {
   return (
     <BrowserRouter>
-      <AppLayout />
+      <App />
     </BrowserRouter>
   )
 }
 
-export default App
+export default AppWithRouter

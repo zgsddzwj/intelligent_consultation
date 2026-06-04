@@ -136,6 +136,10 @@ apiClient.interceptors.response.use(
       switch (status) {
         case 401:
           localStorage.removeItem('auth_token')
+          localStorage.removeItem('auth_user')
+          if (!window.location.pathname.startsWith('/login')) {
+            window.location.href = '/login'
+          }
           window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'token_expired' } }))
           break
         case 403:
