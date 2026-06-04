@@ -10,7 +10,10 @@
 - repositories: 数据访问层
 """
 
-from .cache import MultiLevelCache
+from .cache import CacheManager
+
+# 向后兼容别名
+MultiLevelCache = CacheManager
 from .monitoring import init_app_info, get_metrics
 from .graceful_shutdown import shutdown_manager, GracefulShutdownManager
 from .resource_manager import ResourcePool, ResourceMonitor, resource_monitor

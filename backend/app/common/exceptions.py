@@ -9,16 +9,6 @@
 from typing import Optional, Dict, Any, Type
 
 
-# HTTP状态码映射
-HTTP_STATUS_MAP: Dict[Type[BaseAppException], int] = {
-    'ValidationException': 422,
-    'NotFoundException': 404,
-    'UnauthorizedException': 401,
-    'ForbiddenException': 403,
-    'RateLimitException': 429,
-}
-
-
 class BaseAppException(Exception):
     """应用基础异常类
     
@@ -245,4 +235,15 @@ class ErrorCode:
     CHUNK_ERROR = "6003"              # 文本分块错误
     PARSER_ERROR = "6004"             # 文档解析错误
     NO_RELEVANT_RESULTS = "6005"      # 无相关检索结果
+
+
+# HTTP状态码映射（供外部模块引用）
+HTTP_STATUS_MAP: Dict[Type[BaseAppException], int] = {
+    ValidationException: 422,
+    NotFoundException: 404,
+    UnauthorizedException: 401,
+    ForbiddenException: 403,
+    RateLimitException: 429,
+    BusinessException: 400,
+}
 

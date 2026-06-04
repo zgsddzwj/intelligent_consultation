@@ -10,6 +10,8 @@ from app.utils.logger import app_logger
 
 settings = get_settings()
 
+_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+
 _pool_stats = {
     "total_connections_created": 0,
     "total_connections_checked_out": 0,
@@ -50,18 +52,27 @@ def get_pool_stats() -> dict:
 
 
 # ===== 主库引擎（读写） =====
-engine = create_engine(
-    settings.DATABASE_URL,
-    poolclass=QueuePool,
-    pool_size=settings.DATABASE_POOL_SIZE,
-    max_overflow=settings.DATABASE_MAX_OVERFLOW,
-    pool_pre_ping=True,
-    pool_recycle=3600,
-    pool_timeout=30,
-    pool_use_lifo=True,
-    connect_args={"connect_timeout": 10},
-    echo=settings.DEBUG
-)
+_engine_kwargs = {
+    "pool_pre_ping": True,
+    "echo": settings.DEBUG,
+}
+if _is_sqlite:
+    _engine_kwargs.update({
+        "connect_args": {"check_same_thread": False},
+        "poolclass": NullPool,
+    })
+else:
+    _engine_kwargs.update({
+        "poolclass": QueuePool,
+        "pool_size": settings.DATABASE_POOL_SIZE,
+        "max_overflow": settings.DATABASE_MAX_OVERFLOW,
+        "pool_recycle": 3600,
+        "pool_timeout": 30,
+        "pool_use_lifo": True,
+        "connect_args": {"connect_timeout": 10},
+    })
+
+engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)
 
 # ===== 只读引擎（如果配置了只读库） =====
 read_engine = None
@@ -88,6 +99,8 @@ ReadSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=read_eng
 @event.listens_for(engine, "connect")
 def on_connect(dbapi_conn, connection_record):
     _record_pool_event("connect")
+    if _is_sqlite:
+        return
     try:
         cursor = dbapi_conn.cursor()
         cursor.execute("SET timezone = 'Asia/Shanghai'")

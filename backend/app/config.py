@@ -1,5 +1,6 @@
 """应用配置管理"""
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import model_validator
 from typing import List, Optional
 from functools import lru_cache
 
@@ -60,6 +61,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""  # JWT密钥，从.env读取
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ENCRYPTION_KEY: Optional[str] = None  # 数据加密密钥（Fernet格式）
     ENABLE_RBAC: bool = True  # 启用RBAC
     ENABLE_DATA_ENCRYPTION: bool = False  # 启用数据加密（默认关闭，需要配置密钥）
@@ -175,7 +177,15 @@ class Settings(BaseSettings):
     # Prompt Engineering
     PROMPT_VERSION: str = "v1.0"
     ENABLE_PROMPT_AB_TEST: bool = False
-    
+
+    @model_validator(mode='after')
+    def apply_environment_defaults(self) -> 'Settings':
+        """按环境应用安全默认值"""
+        if self.ENVIRONMENT == "production":
+            if not self.RATE_LIMIT_FAIL_CLOSED:
+                object.__setattr__(self, 'RATE_LIMIT_FAIL_CLOSED', True)
+        return self
+
 @lru_cache()
 def get_settings() -> Settings:
     """获取配置实例（单例模式）"""

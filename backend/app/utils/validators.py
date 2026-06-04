@@ -151,14 +151,18 @@ def validate_environment() -> Tuple[bool, List[str]]:
     """验证运行环境配置是否完整"""
     from app.config import get_settings
     settings = get_settings()
-    
+
     errors = []
     warnings = []
-    
+
+    # 测试环境跳过严格校验（CI/单元测试使用）
+    if settings.ENVIRONMENT in ("testing", "test"):
+        return True, warnings
+
     # 必需配置
     if not settings.DATABASE_URL:
         errors.append("DATABASE_URL: 数据库连接URL未配置")
-    
+
     if not settings.SECRET_KEY:
         errors.append("SECRET_KEY: JWT密钥未配置")
     
