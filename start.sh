@@ -16,8 +16,14 @@ fi
 
 # 检查.env文件
 if [ ! -f "backend/.env" ]; then
-    echo "警告: backend/.env 文件不存在，将使用默认配置"
-    echo "请确保已配置QWEN_API_KEY"
+    echo "警告: backend/.env 文件不存在"
+    if [ -f "backend/.env.example" ]; then
+        echo "正在从 backend/.env.example 创建 backend/.env ..."
+        cp backend/.env.example backend/.env
+        echo "请编辑 backend/.env，至少设置 SECRET_KEY 和 QWEN_API_KEY"
+    else
+        echo "请创建 backend/.env 并配置 SECRET_KEY、QWEN_API_KEY"
+    fi
 fi
 
 # 启动Docker服务

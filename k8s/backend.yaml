@@ -101,6 +101,32 @@ spec:
             secretKeyRef:
               name: medical-secrets
               key: QWEN_API_KEY
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: SECRET_KEY
+        - name: ENABLE_AUTH_MIDDLEWARE
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: ENABLE_AUTH_MIDDLEWARE
+        - name: RATE_LIMIT_FAIL_CLOSED
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: RATE_LIMIT_FAIL_CLOSED
+        - name: STARTUP_FAIL_FAST
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: STARTUP_FAIL_FAST
+        - name: METRICS_ACCESS_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: medical-secrets
+              key: METRICS_ACCESS_TOKEN
+              optional: true
         - name: LANGFUSE_PUBLIC_KEY
           valueFrom:
             secretKeyRef:
@@ -155,15 +181,15 @@ spec:
             cpu: "1000m"
         livenessProbe:
           httpGet:
-            path: /health
+            path: /live
             port: 8000
-          initialDelaySeconds: 60
+          initialDelaySeconds: 30
           periodSeconds: 30
           timeoutSeconds: 10
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /api/v1/health/ready
+            path: /ready
             port: 8000
           initialDelaySeconds: 10
           periodSeconds: 10
@@ -171,7 +197,7 @@ spec:
           failureThreshold: 3
         startupProbe:
           httpGet:
-            path: /health
+            path: /ready
             port: 8000
           initialDelaySeconds: 10
           periodSeconds: 5

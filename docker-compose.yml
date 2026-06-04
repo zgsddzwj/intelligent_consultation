@@ -171,6 +171,8 @@ services:
       dockerfile: Dockerfile
     container_name: medical_backend
     restart: unless-stopped
+    env_file:
+      - ./backend/.env
     environment:
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/medical_consultation
       - REDIS_URL=redis://redis:6379/0
@@ -185,9 +187,14 @@ services:
       - OBJECT_STORAGE_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - OBJECT_STORAGE_BUCKET=medical-documents
       - OBJECT_STORAGE_USE_SSL=false
-      - ENVIRONMENT=production
+      - ENVIRONMENT=${ENVIRONMENT:-production}
       - DEBUG=false
       - LOG_LEVEL=INFO
+      - SECRET_KEY=${SECRET_KEY:?请在 backend/.env 或环境变量中设置 SECRET_KEY}
+      - QWEN_API_KEY=${QWEN_API_KEY:?请在 backend/.env 或环境变量中设置 QWEN_API_KEY}
+      - ENABLE_AUTH_MIDDLEWARE=${ENABLE_AUTH_MIDDLEWARE:-false}
+      - RATE_LIMIT_FAIL_CLOSED=${RATE_LIMIT_FAIL_CLOSED:-true}
+      - STARTUP_FAIL_FAST=${STARTUP_FAIL_FAST:-true}
     ports:
       - "8000:8000"
     depends_on:

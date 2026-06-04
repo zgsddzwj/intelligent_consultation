@@ -6,9 +6,14 @@ metadata:
 data:
   # 应用配置
   APP_NAME: "智能医疗管家平台"
-  APP_VERSION: "0.1.0"
+  APP_VERSION: "0.1.1"
   ENVIRONMENT: "production"
   DEBUG: "false"
+
+  # 安全
+  ENABLE_AUTH_MIDDLEWARE: "true"
+  RATE_LIMIT_FAIL_CLOSED: "true"
+  STARTUP_FAIL_FAST: "true"
   
   # API配置
   API_V1_PREFIX: "/api/v1"
