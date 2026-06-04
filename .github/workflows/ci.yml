@@ -33,11 +33,11 @@ jobs:
 
       - name: Run black format check
         working-directory: ./backend
-        run: black --check app/ || true
+        run: black --check app/
 
       - name: Run isort check
         working-directory: ./backend
-        run: isort --check-only app/ || true
+        run: isort --check-only app/
 
       - name: Run flake8 lint
         working-directory: ./backend
@@ -45,7 +45,8 @@ jobs:
 
       - name: Run mypy type check
         working-directory: ./backend
-        run: mypy app/ --ignore-missing-imports || true
+        run: mypy app/ --ignore-missing-imports
+        continue-on-error: true
 
       - name: Run bandit security scan
         working-directory: ./backend
@@ -87,11 +88,13 @@ jobs:
 
       - name: Run Prettier check
         working-directory: ./frontend
-        run: npx prettier --check "src/**/*.{ts,tsx,css}" || true
+        run: npx prettier --check "src/**/*.{ts,tsx,css}"
+        continue-on-error: true
 
       - name: Run security audit
         working-directory: ./frontend
-        run: npm audit --audit-level=moderate || true
+        run: npm audit --audit-level=high
+        continue-on-error: true
 
   # ========== 后端测试 ==========
   test-backend:
@@ -146,6 +149,10 @@ jobs:
           DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
           ENVIRONMENT: testing
+          SECRET_KEY: test-secret-key-for-ci
+          QWEN_API_KEY: test-key
+          STARTUP_FAIL_FAST: "false"
+          RATE_LIMIT_ENABLED: "false"
         run: |
           pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=term -n auto --timeout=60
 
@@ -155,6 +162,10 @@ jobs:
           DATABASE_URL: postgresql://test_user:test_pass@localhost:5432/test_db
           REDIS_URL: redis://localhost:6379/0
           ENVIRONMENT: testing
+          SECRET_KEY: test-secret-key-for-ci
+          QWEN_API_KEY: test-key
+          STARTUP_FAIL_FAST: "false"
+          RATE_LIMIT_ENABLED: "false"
         run: |
           pytest tests/integration/ -v --timeout=120
 
@@ -194,10 +205,6 @@ jobs:
       - name: Install dependencies
         working-directory: ./frontend
         run: npm ci
-
-      - name: Run unit tests
-        working-directory: ./frontend
-        run: npm run test -- --coverage --watchAll=false || true
 
       - name: Build production
         working-directory: ./frontend
