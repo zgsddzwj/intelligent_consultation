@@ -6,7 +6,7 @@ from typing import List, Optional, Dict, Any, AsyncGenerator
 import json
 import asyncio
 from sqlalchemy.orm import Session
-from app.dependencies import get_db, get_consultation_repository
+from app.dependencies import get_db, get_consultation_repository, get_orchestrator
 from app.infrastructure.repositories.consultation_repository import ConsultationRepository
 from app.agents.orchestrator import AgentOrchestrator
 from app.models.consultation import Consultation, ConsultationStatus, AgentType
@@ -18,7 +18,6 @@ from app.config import get_settings
 
 settings = get_settings()
 router = APIRouter()
-orchestrator = AgentOrchestrator()
 
 
 # ========== 请求/响应模型 ==========
@@ -107,7 +106,11 @@ def _update_consultation_messages(
 # ========== 路由 ==========
 
 @router.post("/chat", response_model=ChatResponse, summary="发送咨询消息", description="发送消息获取AI医疗咨询回答")
-async def chat(request: ChatRequest, db: Session = Depends(get_db)):
+async def chat(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    orchestrator: AgentOrchestrator = Depends(get_orchestrator),
+):
     """发送咨询消息 - 增强版（含完整错误处理和数据库持久化）"""
     consultation_id = 0
     start_time = asyncio.get_event_loop().time()
@@ -219,7 +222,11 @@ async def chat(request: ChatRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/chat/stream", response_model=None, summary="流式咨询接口", description="SSE流式返回AI回答")
-async def chat_stream(request: ChatRequest, db: Session = Depends(get_db)) -> StreamingResponse:
+async def chat_stream(
+    request: ChatRequest,
+    db: Session = Depends(get_db),
+    orchestrator: AgentOrchestrator = Depends(get_orchestrator),
+) -> StreamingResponse:
     """流式咨询接口（SSE）- 增强版"""
     consultation_id = 0
 

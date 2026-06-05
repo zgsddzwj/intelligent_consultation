@@ -26,3 +26,22 @@ class TestCacheHealth:
         result = cache_service.health_check()
         assert "status" in result
         assert result["status"] in ("healthy", "unhealthy")
+
+
+class TestStartupEndpointProtection:
+    def test_startup_hidden_in_production_without_token(self, monkeypatch):
+        pytest.importorskip("langgraph")
+        monkeypatch.setenv("ENVIRONMENT", "production")
+        monkeypatch.delenv("METRICS_ACCESS_TOKEN", raising=False)
+        from app.config import get_settings
+        get_settings.cache_clear()
+
+        from app.main import app
+        from fastapi.testclient import TestClient
+
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.get("/startup")
+            assert response.status_code == 404
+
+        get_settings.cache_clear()
+        monkeypatch.setenv("ENVIRONMENT", "testing")

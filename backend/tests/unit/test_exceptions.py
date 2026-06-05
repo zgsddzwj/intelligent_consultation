@@ -13,7 +13,7 @@ from app.common.exceptions import (
 def test_base_exception():
     """测试基础异常类"""
     exc = BaseAppException("测试错误", error_code="TEST001")
-    assert str(exc) == "测试错误"
+    assert str(exc) == "[TEST001] 测试错误"
     assert exc.error_code == "TEST001"
     assert exc.details == {}
 

@@ -154,7 +154,7 @@ jobs:
           STARTUP_FAIL_FAST: "false"
           RATE_LIMIT_ENABLED: "false"
         run: |
-          pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=term -n auto --timeout=60
+          pytest tests/unit/ -v --cov=app --cov-report=xml --cov-report=term --cov-fail-under=40 -n auto --timeout=60
 
       - name: Run integration tests
         working-directory: ./backend
@@ -216,6 +216,73 @@ jobs:
           name: frontend-build
           path: ./frontend/dist
 
+  # ========== 容器冒烟测试 ==========
+  compose-smoke-test:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: smoke_db
+          POSTGRES_USER: smoke_user
+          POSTGRES_PASSWORD: smoke_pass
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t medical-backend:ci ./backend
+
+      - name: Start backend container
+        run: |
+          docker run -d --name medical-backend-smoke \
+            --network host \
+            -e DATABASE_URL=postgresql://smoke_user:smoke_pass@localhost:5432/smoke_db \
+            -e REDIS_URL=redis://localhost:6379/0 \
+            -e ENVIRONMENT=testing \
+            -e SECRET_KEY=smoke-test-secret-key \
+            -e QWEN_API_KEY=smoke-test-key \
+            -e STARTUP_FAIL_FAST=false \
+            -e RATE_LIMIT_ENABLED=false \
+            -e ENABLE_AUTH_MIDDLEWARE=false \
+            medical-backend:ci
+
+      - name: Wait for health endpoints
+        run: |
+          for i in $(seq 1 40); do
+            if curl -sf http://localhost:8000/live && curl -sf http://localhost:8000/ready; then
+              echo "Smoke test passed"
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Backend failed smoke test"
+          docker logs medical-backend-smoke
+          exit 1
+
+      - name: Stop smoke container
+        if: always()
+        run: docker rm -f medical-backend-smoke || true
+
   # ========== 性能测试 ==========
   performance-test:
     needs: [test-backend]
@@ -243,7 +310,7 @@ jobs:
 
   # ========== 构建与发布 ==========
   build-images:
-    needs: [test-backend, test-frontend]
+    needs: [test-backend, test-frontend, compose-smoke-test]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/tags/v'))
     permissions:
@@ -307,18 +374,22 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Run Trivy vulnerability scanner (backend)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.ref_name }}-${{ github.sha }}
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
 
       - name: Run Trivy vulnerability scanner (frontend)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.ref_name }}-${{ github.sha }}
           format: 'sarif'
           output: 'trivy-frontend-results.sarif'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
 
       - name: Upload Trivy scan results
         uses: actions/upload-artifact@v4

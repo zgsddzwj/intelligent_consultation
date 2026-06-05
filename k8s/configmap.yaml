@@ -9,6 +9,7 @@ data:
   APP_VERSION: "0.1.1"
   ENVIRONMENT: "production"
   DEBUG: "false"
+  LOG_LEVEL: "INFO"
 
   # 安全
   ENABLE_AUTH_MIDDLEWARE: "true"
@@ -17,7 +18,8 @@ data:
   
   # API配置
   API_V1_PREFIX: "/api/v1"
-  CORS_ORIGINS: "https://yourdomain.com"
+  CORS_ORIGINS: '["https://app.yourdomain.com","https://api.yourdomain.com"]'
+  TRUSTED_HOSTS: '["api.yourdomain.com","app.yourdomain.com","localhost"]'
   
   # 数据库配置（从Secret读取敏感信息）
   DATABASE_POOL_SIZE: "10"

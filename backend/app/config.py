@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     
     # Database
     DATABASE_URL: str = ""  # 从.env读取，格式: postgresql://user:password@host:port/dbname
+    DATABASE_READ_URL: Optional[str] = None  # 可选只读库，未配置时读写均走主库
     DATABASE_POOL_SIZE: int = 10
     DATABASE_MAX_OVERFLOW: int = 20
     

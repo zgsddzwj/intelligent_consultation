@@ -28,13 +28,13 @@
 ```bash
 # 构建后端镜像
 cd backend
-docker build -t your-registry/medical-backend:latest .
-docker push your-registry/medical-backend:latest
+docker build -t ghcr.io/zgsddzwj/intelligent_consultation/backend:latest .
+docker push ghcr.io/zgsddzwj/intelligent_consultation/backend:latest
 
 # 构建前端镜像
 cd frontend
-docker build -t your-registry/medical-frontend:latest .
-docker push your-registry/medical-frontend:latest
+docker build -t ghcr.io/zgsddzwj/intelligent_consultation/frontend:latest .
+docker push ghcr.io/zgsddzwj/intelligent_consultation/frontend:latest
 ```
 
 ### 3. 配置 Secrets

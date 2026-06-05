@@ -76,7 +76,7 @@ engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)
 
 # ===== 只读引擎（如果配置了只读库） =====
 read_engine = None
-if hasattr(settings, 'DATABASE_READ_URL') and settings.DATABASE_READ_URL:
+if settings.DATABASE_READ_URL:
     read_engine = create_engine(
         settings.DATABASE_READ_URL,
         poolclass=QueuePool,
@@ -160,6 +160,8 @@ def after_cursor_execute(conn, cursor, statement, parameters, context, executema
 
 
 # ========== 数据库依赖注入增强 ==========
+# API 层请使用 app.dependencies.get_db（无自动 commit）。
+# 以下 get_db 供脚本/内部模块使用，会在请求结束时自动 commit。
 
 def get_db():
     db = SessionLocal()

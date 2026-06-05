@@ -37,6 +37,8 @@ _startup_state = {
 }
 
 _metrics_task: asyncio.Task | None = None
+_deps_cache: Dict[str, Any] = {"results": {}, "cached_at": 0.0}
+DEPS_CACHE_TTL_SECONDS = 20.0
 
 
 class DependencyChecker:
@@ -108,9 +110,13 @@ class DependencyChecker:
 async def _check_postgresql():
     from app.database.session import engine
     from sqlalchemy import text
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
-    return {"status": "healthy"}
+
+    def _ping():
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "healthy"}
+
+    return await asyncio.to_thread(_ping)
 
 
 async def _check_redis():
@@ -414,8 +420,16 @@ async def health_check():
             content={"status": "starting", "ready": False}
         )
 
-    # 实时并行检查依赖（避免启动后依赖宕机仍报 healthy）
-    deps = await DependencyChecker.check_all()
+    now = time.time()
+    if (
+        _deps_cache["results"]
+        and now - _deps_cache["cached_at"] < DEPS_CACHE_TTL_SECONDS
+    ):
+        deps = _deps_cache["results"]
+    else:
+        deps = await DependencyChecker.check_all()
+        _deps_cache["results"] = deps
+        _deps_cache["cached_at"] = now
     required_unhealthy = [
         name for name, result in deps.items()
         if result.get("required") and result.get("status") != "healthy"

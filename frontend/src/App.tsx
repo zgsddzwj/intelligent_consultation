@@ -1,7 +1,8 @@
 import { Suspense, lazy, useState, useEffect } from 'react'
-import { BrowserRouter, Routes, Route, useLocation, Link } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation, useNavigate, Link } from 'react-router-dom'
 import { Layout, Menu, Typography, Space, Avatar, Breadcrumb, Drawer, Button, Spin } from 'antd'
 import ErrorBoundary from './components/ErrorBoundary'
+import AuthGuard from './components/AuthGuard'
 import {
   MedicineBoxOutlined,
   UserOutlined,
@@ -102,6 +103,7 @@ function PageBreadcrumb() {
 // 应用布局组件 - 包含侧边导航（响应式）
 function AppLayout() {
   const location = useLocation()
+  const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -207,7 +209,10 @@ function AppLayout() {
           padding: '0 12px',
         }}
         theme="dark"
-        onClick={() => isMobile && setMobileOpen(false)}
+        onClick={({ key }) => {
+          navigate(key)
+          if (isMobile) setMobileOpen(false)
+        }}
       />
 
       {/* 底部信息 */}
@@ -361,8 +366,22 @@ function AppLayout() {
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/" element={<PatientPortal />} />
-                <Route path="/doctor" element={<DoctorDashboard />} />
-                <Route path="/admin" element={<AdminPanel />} />
+                <Route
+                  path="/doctor"
+                  element={
+                    <AuthGuard requireAuth allowedRoles={['doctor', 'admin']}>
+                      <DoctorDashboard />
+                    </AuthGuard>
+                  }
+                />
+                <Route
+                  path="/admin"
+                  element={
+                    <AuthGuard requireAuth allowedRoles={['admin']}>
+                      <AdminPanel />
+                    </AuthGuard>
+                  }
+                />
                 <Route path="/knowledge-graph" element={<KnowledgeGraph />} />
               </Routes>
             </Suspense>

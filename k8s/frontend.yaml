@@ -36,14 +36,11 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: frontend
-        image: your-registry/medical-frontend:latest
+        image: ghcr.io/zgsddzwj/intelligent_consultation/frontend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 80
           name: http
-        env:
-        - name: REACT_APP_API_URL
-          value: "http://backend-service:8000"
         resources:
           requests:
             memory: "128Mi"

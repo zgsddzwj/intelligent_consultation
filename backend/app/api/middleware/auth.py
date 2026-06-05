@@ -1,16 +1,16 @@
 """认证中间件"""
-from fastapi import Request, HTTPException, status
+from fastapi import Request, status
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 from app.utils.security import decode_access_token
-from app.common.exceptions import UnauthorizedException, ErrorCode
-from app.utils.logger import app_logger
+from app.common.exceptions import ErrorCode
+from app.common.tracing import get_request_id
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
     """认证中间件 - JWT验证"""
-    
-    # 不需要认证的路径
-    PUBLIC_PATHS = [
+
+    EXACT_PUBLIC_PATHS = {
         "/",
         "/health",
         "/ready",
@@ -19,50 +19,65 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/docs",
         "/redoc",
         "/openapi.json",
+    }
+
+    PREFIX_PUBLIC_PATHS = (
         "/api/v1/health",
         "/api/v1/users/register",
         "/api/v1/users/login",
-    ]
-    
+    )
+
+    @classmethod
+    def _is_public_path(cls, path: str) -> bool:
+        if path in cls.EXACT_PUBLIC_PATHS:
+            return True
+        return any(path.startswith(prefix) for prefix in cls.PREFIX_PUBLIC_PATHS)
+
+    @staticmethod
+    def _unauthorized_response(message: str, error_code: str) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={
+                "success": False,
+                "error": {
+                    "code": error_code,
+                    "message": message,
+                    "details": {},
+                    "request_id": get_request_id(),
+                },
+                "data": None,
+            },
+        )
+
     async def dispatch(self, request: Request, call_next):
-        # 检查是否为公开路径
-        if any(request.url.path.startswith(path) for path in self.PUBLIC_PATHS):
+        if self._is_public_path(request.url.path):
             return await call_next(request)
-        
-        # 获取Token
+
         authorization = request.headers.get("Authorization")
         if not authorization:
-            raise UnauthorizedException(
-                "缺少认证令牌",
-                error_code=ErrorCode.UNAUTHORIZED
-            )
-        
-        # 解析Token
+            return self._unauthorized_response("缺少认证令牌", ErrorCode.UNAUTHORIZED)
+
         try:
             scheme, token = authorization.split()
             if scheme.lower() != "bearer":
-                raise UnauthorizedException(
+                return self._unauthorized_response(
                     "认证方案错误，应使用Bearer",
-                    error_code=ErrorCode.UNAUTHORIZED
+                    ErrorCode.UNAUTHORIZED,
                 )
         except ValueError:
-            raise UnauthorizedException(
+            return self._unauthorized_response(
                 "认证令牌格式错误",
-                error_code=ErrorCode.UNAUTHORIZED
+                ErrorCode.UNAUTHORIZED,
             )
-        
-        # 验证Token
+
         payload = decode_access_token(token)
         if not payload:
-            raise UnauthorizedException(
+            return self._unauthorized_response(
                 "认证令牌无效或已过期",
-                error_code=ErrorCode.TOKEN_INVALID
+                ErrorCode.TOKEN_INVALID,
             )
-        
-        # 将用户信息添加到请求状态
+
         request.state.user_id = payload.get("sub")
         request.state.user_role = payload.get("role")
-        
-        # 继续处理请求
-        return await call_next(request)
 
+        return await call_next(request)

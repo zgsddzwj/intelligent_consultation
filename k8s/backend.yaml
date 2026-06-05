@@ -36,7 +36,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: backend
-        image: your-registry/medical-backend:latest
+        image: ghcr.io/zgsddzwj/intelligent_consultation/backend:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 8000
@@ -52,6 +52,26 @@ spec:
             configMapKeyRef:
               name: medical-config
               key: ENVIRONMENT
+        - name: DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: DEBUG
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: LOG_LEVEL
+        - name: CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: CORS_ORIGINS
+        - name: TRUSTED_HOSTS
+          valueFrom:
+            configMapKeyRef:
+              name: medical-config
+              key: TRUSTED_HOSTS
         - name: DATABASE_URL
           value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB)"
         - name: POSTGRES_USER

@@ -1,10 +1,12 @@
 """缓存功能测试"""
 import pytest
-from app.infrastructure.cache import cache_result, CacheManager
+from app.infrastructure.cache import cache_result, CacheManager, local_cache
 
 
 def test_cache_result_decorator(mock_redis):
     """测试缓存装饰器"""
+    local_cache.clear()
+    mock_redis.flushdb()
     call_count = 0
     
     @cache_result(ttl=60)
@@ -26,6 +28,8 @@ def test_cache_result_decorator(mock_redis):
 
 def test_cache_manager(mock_redis):
     """测试缓存管理器"""
+    local_cache.clear()
+    mock_redis.flushdb()
     # 设置缓存
     CacheManager.set("test_key", {"data": "value"}, ttl=60)
     

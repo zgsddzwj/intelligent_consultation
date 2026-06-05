@@ -1,4 +1,15 @@
 """Pytest配置和fixtures - 极致优化版（覆盖率、性能基准、工厂模式）"""
+import os
+
+# 必须在导入 app 模块之前设置，确保 Settings 与数据库引擎使用测试配置
+os.environ.setdefault("ENVIRONMENT", "testing")
+os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
+os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing")
+os.environ.setdefault("QWEN_API_KEY", "test-key")
+os.environ.setdefault("STARTUP_FAIL_FAST", "false")
+os.environ.setdefault("ENABLE_AUTH_MIDDLEWARE", "false")
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import pytest
 import sys
 import time
@@ -12,7 +23,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 
-TEST_DATABASE_URL = "sqlite:///./test.db"
+TEST_DATABASE_URL = os.environ["DATABASE_URL"]
 
 test_engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
 TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
@@ -49,7 +60,8 @@ def client():
     """创建测试客户端"""
     try:
         from app.main import app
-        return TestClient(app)
+        with TestClient(app, raise_server_exceptions=False) as test_client:
+            yield test_client
     except Exception as e:
         pytest.skip(f"无法创建测试客户端: {e}")
 
@@ -108,8 +120,12 @@ def mock_redis(monkeypatch):
         def flushdb(self):
             self._data.clear()
 
+        def health_check(self):
+            return {"status": "healthy"}
+
     mock = MockRedis()
     monkeypatch.setattr("app.services.redis_service.redis_service", mock)
+    monkeypatch.setattr("app.infrastructure.cache.redis_service", mock)
     return mock
 
 
@@ -134,8 +150,6 @@ def mock_llm_service(monkeypatch):
     return mock
 
 
-# ========== 性能测试Fixture ==========
-
 @pytest.fixture
 def benchmark():
     """性能基准测试fixture"""
@@ -144,12 +158,9 @@ def benchmark():
             self.results = []
 
         def __call__(self, func, *args, iterations=100, **kwargs):
-            """运行性能基准测试"""
-            # 预热
             for _ in range(10):
                 func(*args, **kwargs)
 
-            # 正式测试
             times = []
             for _ in range(iterations):
                 start = time.perf_counter()
@@ -168,8 +179,6 @@ def benchmark():
 
     return Benchmark()
 
-
-# ========== 工厂模式Fixture ==========
 
 @pytest.fixture
 def user_factory(db_session):
@@ -197,19 +206,15 @@ def consultation_factory(db_session):
     return _create_consultation
 
 
-# ========== 覆盖率辅助 ==========
-
 @pytest.fixture(autouse=True)
 def log_test_coverage(request):
-    """记录测试覆盖率信息"""
+    """记录慢测试"""
     start_time = time.time()
     yield
     duration = time.time() - start_time
     if duration > 1.0:
         print(f"\n[SLOW TEST] {request.node.name}: {duration:.2f}s")
 
-
-# ========== 异步测试支持 ==========
 
 @pytest.fixture
 def event_loop():

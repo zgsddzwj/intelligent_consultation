@@ -164,6 +164,11 @@ def get_current_user_id(request: Request) -> Optional[int]:
     return None
 
 
+def get_orchestrator():
+    """获取 Agent 编排器单例（延迟加载）"""
+    return ServiceContainer.get_orchestrator()
+
+
 def get_pagination_params(
     page: int = 1,
     page_size: int = 10,

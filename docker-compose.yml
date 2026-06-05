@@ -193,6 +193,8 @@ services:
       - SECRET_KEY=${SECRET_KEY:?请在 backend/.env 或环境变量中设置 SECRET_KEY}
       - QWEN_API_KEY=${QWEN_API_KEY:?请在 backend/.env 或环境变量中设置 QWEN_API_KEY}
       - ENABLE_AUTH_MIDDLEWARE=${ENABLE_AUTH_MIDDLEWARE:-false}
+      - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000","http://localhost:5173"]}
+      - TRUSTED_HOSTS=${TRUSTED_HOSTS:-["localhost","127.0.0.1"]}
       - RATE_LIMIT_FAIL_CLOSED=${RATE_LIMIT_FAIL_CLOSED:-true}
       - STARTUP_FAIL_FAST=${STARTUP_FAIL_FAST:-true}
     ports:
@@ -209,7 +211,7 @@ services:
       minio:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/live"]
       interval: 30s
       timeout: 10s
       start_period: 40s

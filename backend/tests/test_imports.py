@@ -76,7 +76,7 @@ def test_exception_classes():
         
         # 测试基础异常
         exc = BaseAppException("测试错误", error_code="TEST001")
-        assert str(exc) == "测试错误"
+        assert str(exc) == "[TEST001] 测试错误"
         assert exc.error_code == "TEST001"
         
         # 测试业务异常

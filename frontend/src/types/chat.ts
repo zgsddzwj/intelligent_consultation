@@ -10,7 +10,7 @@ export type MessageStatus = 'sending' | 'sent' | 'error' | 'streaming'
 /** 单条聊天消息 */
 export interface Message {
   /** 消息唯一ID */
-  id: string
+  id?: string
   /** 消息角色 */
   role: MessageRole
   /** 消息内容 */
