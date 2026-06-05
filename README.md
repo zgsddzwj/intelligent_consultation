@@ -12,7 +12,52 @@
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" />
   <img src="https://img.shields.io/badge/Platform-K8s/Docker-orange.svg" alt="Platform" />
   <img src="https://img.shields.io/badge/CI/CD-GitHub_Actions-success.svg" alt="CI/CD" />
+  <img src="https://img.shields.io/badge/Version-3.0+-brightgreen.svg" alt="Version" />
+  <img src="https://img.shields.io/badge/Commit-Active-brightgreen.svg" alt="Active" />
 </p>
+
+---
+
+## 📋 版本演进
+
+### 🛡️ 认证闭环
+- ✅ **AuthGuard 组件** 实现基于角色的访问保护，支持 `allowedRoles` 配置
+- ✅ **Login 页面** 登录成功后自动回跳至原访问页面
+- ✅ 用户数据上下文 **user_id 全局关联**，支撑咨询记录绑定与查询
+- ✅ **认证中间件** 统一 401 异常处理，前端拦截跳转登录页面
+- ✅ 多环境 **配置对齐**，统一 JWT、RBAC、权限策略
+
+### ⚡ 后端性能优化
+- ✅ **`/health` 健康检查端点** 增加 Redis 缓存，降低依赖服务查询频率
+- ✅ **`/live` 存活探针** 支持容器编排（Kubernetes/Liveness Probe）
+- ✅ **Orchestrator Agent 编排器** 单例注入，避免重复初始化，提升线程安全
+- ✅ **并行依赖检查** 在应用启动阶段预热数据库、Redis、Milvus、Neo4j 等服务
+
+### 🚀 部署/CI 完善
+- ✅ **GHCR (GitHub Container Registry)** 镜像仓库自动化构建与推送
+- ✅ **Secrets 模板** 统一敏感信息配置，支持多环境部署
+- ✅ **`start.sh` 健康等待** 应用启动前检测依赖服务就绪状态
+- ✅ **冒烟测试** API 基本功能端到端验证，确保部署可用性
+- ✅ **Trivy 漏洞扫描** 集成安全扫描，阻断高危镜像部署
+- ✅ **代码覆盖率门禁** 单元测试覆盖率报告，强制质量阈值
+
+### 🧹 代码质量提升
+- ✅ 移除未使用的 `frontend/src/hooks/useAnimations.ts`，精简构建体积
+- ✅ **`tsconfig.json` 路径别名** 映射优化（`@/` → `src/`）
+- ✅ **复用 Chat 组件** 统一医患聊天气泡样式与交互逻辑
+- ✅ **补充认证单元测试** `test_auth_middleware.py`、`test_users_auth.py`
+- ✅ **修复导入异常** `test_imports.py` 解决模块循环依赖问题
+
+### 🏗️ 模块功能增强
+- ✅ **Agent 工作流状态 Redis 缓存**，支持 L1 LRU + Redis 跨实例缓存
+- ✅ **LLM 服务连接池管理**，复用 HTTP 连接，自动重试与降级切换
+- ✅ **数据库读写分离**，优化读库负载，支持动态连接池调整
+- ✅ **多级缓存穿透防护**，布隆过滤器机制防止无效查询洪峰
+
+### 🎯 工程化收尾整理
+- ✅ **统一工程化规范**：Git 提交规范、分支策略、PR 模板、Changelog 生成
+- ✅ **API 文档全面优化**：OpenAPI Schema 增强、Swagger 描述补充
+- ✅ **全局错误码体系** 统一异常定义与响应格式，便于前后端错误定位
 
 ---
 
@@ -29,7 +74,7 @@
 | **📊 医疗知识图谱** | 基于Neo4j构建的专业医疗图谱，支持实体识别、关系推理、意图分类与查询缓存 |
 | **🧠 ML模型训练** | 生产级ML流水线：SVM意图分类、相关性评分、排序优化、集成学习重排 |
 | **👁️ 全链路监控** | Prometheus指标 + 告警规则引擎 + 性能剖析器(p50/p95/p99) + Langfuse LLM追踪 |
-| **💅 现代化前端** | React 18 + TypeScript + Vite，代码分割懒加载、Zustand状态分层、暗色模式 |
+| **💅 现代化前端** | React 18 + TypeScript + Vite，代码分割懒加载、Zustand状态分层、暗色模式、响应式设计 |
 | **🔐 企业级安全** | JWT认证、RBAC权限、防重放攻击、审计日志、数据加密、请求签名验证 |
 | **⚡ 极致性能** | 多级缓存(L1 LRU + L2 Redis)、连接池、批量推理、读写分离、动态连接池调整 |
 
@@ -49,6 +94,7 @@
 | **机器学习** | Scikit-learn (SVM/随机森林/梯度提升), GridSearchCV调优 |
 | **监控告警** | Prometheus Client + 自定义告警规则引擎 + Profiler性能剖析 |
 | **安全** | JWT + 防重放攻击 + 审计日志 + HMAC签名验证 |
+| **工程化** | 统一响应包装、增强限流中间件、请求校验中间件、优雅关闭 |
 
 ### 前端
 | 类别 | 技术 |
@@ -59,7 +105,7 @@
 | **数据获取** | @tanstack/react-query 5 |
 | **可视化** | react-force-graph-2d (知识图谱力导向图) |
 | **路由** | React Router DOM 6 (路由级懒加载) |
-| **设计系统** | CSS变量、暗色模式、骨架屏、玻璃态效果 |
+| **设计系统** | CSS变量、暗色模式、骨架屏、玻璃态效果、响应式布局 |
 
 ### 部署 & 基础设施
 | 类别 | 技术 |
@@ -83,7 +129,9 @@ intelligent_consultation/
 │   │   │   ├── customer_service_agent.py # 客服Agent
 │   │   │   ├── operations_agent.py      # 运营分析Agent
 │   │   │   └── tools/             # Agent工具集
-│   │   ├── api/                 # API路由和中间件
+│   │   ├── api/
+│   │   │   ├── v1/               # API v1版本 (health/consultation/users/image_analysis)
+│   │   │   └── middleware/         # 中间件层 (认证/增强限流/响应包装/请求校验)
 │   │   ├── common/              # 公共模块 (异常、加密、追踪、RBAC)
 │   │   ├── database/            # 数据库 (PostgreSQL + 读写分离 + QueryOptimizer)
 │   │   ├── infrastructure/      # 基础设施 (多级缓存、监控告警、限流、重试)
