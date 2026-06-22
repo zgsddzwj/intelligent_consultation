@@ -404,6 +404,9 @@ function AppLayout() {
             <Text type="secondary" style={{ fontSize: '13px' }}>
               本系统仅提供医疗信息参考，不替代医生诊断
             </Text>
+            <Text type="secondary" style={{ fontSize: '12px', opacity: 0.6 }}>
+              v3.1.0
+            </Text>
           </Space>
         </Footer>
       </Layout>
