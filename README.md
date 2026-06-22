@@ -12,6 +12,7 @@
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License" />
   <img src="https://img.shields.io/badge/Platform-K8s/Docker-orange.svg" alt="Platform" />
   <img src="https://img.shields.io/badge/CI/CD-GitHub_Actions-success.svg" alt="CI/CD" />
+  <img src="https://img.shields.io/github/actions/workflow/status/zgsddzwj/intelligent_consultation/ci.yml?branch=main&label=CI&style=flat-square" alt="GitHub Actions" />
   <img src="https://img.shields.io/badge/Version-3.0+-brightgreen.svg" alt="Version" />
   <img src="https://img.shields.io/badge/Commit-Active-brightgreen.svg" alt="Active" />
 </p>
