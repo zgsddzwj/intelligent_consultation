@@ -33,25 +33,23 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# 安装运行时依赖（最小化）
+# 安装运行时依赖并创建用户（合并为单个RUN减少层数）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     postgresql-client \
     curl \
     && rm -rf /var/lib/apt/lists/* \
-    && groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+    && groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser \
+    && mkdir -p /app/logs /app/data/documents /app/models \
+    && chown -R appuser:appuser /app
 
 # 从构建阶段复制已安装的包
 COPY --from=builder /install /usr/local
-
-# 创建必要的目录
-RUN mkdir -p /app/logs /app/data/documents /app/models && \
-    chown -R appuser:appuser /app
 
 # 切换到非root用户
 USER appuser
 
 # 复制应用代码
-COPY . .
+COPY --chown=appuser:appuser . .
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
