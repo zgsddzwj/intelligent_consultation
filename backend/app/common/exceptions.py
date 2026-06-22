@@ -36,11 +36,16 @@ class BaseAppException(Exception):
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式，用于API响应"""
+        import time
+        import uuid
         return {
+            "success": False,
             "error": {
                 "code": self.error_code,
                 "message": self.message,
-                "details": self.details
+                "details": self.details,
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "request_id": str(uuid.uuid4())[:8]
             },
             "http_status": self.http_status
         }
