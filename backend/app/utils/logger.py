@@ -3,12 +3,35 @@ import sys
 import json
 import time
 import functools
+import contextvars
+import uuid
 from typing import Dict, Any, Optional, Callable
 from loguru import logger
 from pathlib import Path
 from app.config import get_settings
 
 settings = get_settings()
+
+# 请求上下文变量
+request_id_var = contextvars.ContextVar('request_id', default=None)
+user_id_var = contextvars.ContextVar('user_id', default=None)
+
+
+def set_request_context(request_id: str = None, user_id: str = None):
+    """设置请求上下文"""
+    request_id_var.set(request_id or str(uuid.uuid4())[:12])
+    if user_id:
+        user_id_var.set(user_id)
+
+
+def get_request_id() -> str:
+    """获取当前请求ID"""
+    return request_id_var.get() or "unknown"
+
+
+def get_user_id() -> str:
+    """获取当前用户ID"""
+    return user_id_var.get() or "anonymous"
 
 
 class LogAggregator:
