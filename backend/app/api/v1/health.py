@@ -15,6 +15,9 @@ from app.utils.logger import app_logger
 router = APIRouter()
 settings = get_settings()
 
+# 应用启动时间
+_STARTUP_TIME = time.time()
+
 # 核心服务：失败会导致系统不可用
 CORE_SERVICES = {"database", "redis"}
 # 可选服务：失败仅导致功能降级
@@ -220,6 +223,7 @@ async def health_check(
         "version": settings.APP_VERSION,
         "environment": settings.ENVIRONMENT,
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "uptime_seconds": int(time.time() - _STARTUP_TIME),
         "response_time_ms": round((time.time() - start_time) * 1000, 2),
         "check_depth": depth,
         "components": components,
