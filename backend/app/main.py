@@ -1,4 +1,7 @@
-"""FastAPI应用入口 - 极致优化版（优雅启动、依赖预热、配置校验、健康检查聚合）"""
+"""FastAPI应用入口 - 极致优化版（优雅启动、依赖预热、配置校验、健康检查聚合）
+版本: 3.1.0
+更新日期: 2025-01
+"""
 import asyncio
 import time
 from contextlib import asynccontextmanager
