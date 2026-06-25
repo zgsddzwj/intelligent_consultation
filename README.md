@@ -1,7 +1,7 @@
 # 🏥 智能医疗管家平台
 
 <p align="center">
-  <strong>一个以AI医生Agent为核心的智能医疗管家平台 v3.0</strong><br>
+  <strong>一个以AI医生Agent为核心的智能医疗管家平台 v3.1</strong><br>
   集成多Agent协同系统、高级RAG检索、Neo4j知识图谱、ML模型训练和现代化React前端
 </p>
 
