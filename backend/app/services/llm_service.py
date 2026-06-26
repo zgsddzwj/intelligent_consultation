@@ -1,7 +1,7 @@
 """LLM服务 - 极致优化版（连接池、批量推理、智能降级、Token精确计费）"""
 import dashscope
 from dashscope import Generation
-from typing import List, Dict, Optional, AsyncGenerator, Tuple
+from typing import List, Dict, Optional, Any, AsyncGenerator, Tuple
 import time
 import asyncio
 import threading
@@ -716,6 +716,23 @@ class PromptTemplate:
     DRUG_CONSULTATION_SYSTEM = """你是一位专业的用药咨询AI。基于药物信息和知识图谱，回答用药相关问题。
 注意：具体用药方案需要医生根据患者情况制定。"""
 
+    DIAGNOSIS_ASSISTANT_USER = """基于以下医疗知识和患者症状，提供诊断辅助建议：\n\n参考资料：\n{context}\n\n患者症状描述：{question}\n\n请提供可能的诊断方向、建议检查项目，并标注信息来源。注意：这仅是辅助参考，最终诊断需要医生确认。"""
+
+    DRUG_CONSULTATION_USER = """基于以下药物信息和医疗知识，回答用户的用药问题：\n\n参考资料：\n{context}\n\n用户问题：{question}\n\n请提供专业、准确的用药建议，并标注信息来源。注意：具体用药方案需要医生根据患者情况制定。"""
+
     @staticmethod
     def format_medical_prompt(context: str, question: str) -> str:
         return PromptTemplate.MEDICAL_CONSULTATION_USER.format(context=context, question=question)
+
+    @staticmethod
+    def format_diagnosis_prompt(question: str, context: str = "") -> str:
+        """格式化诊断辅助Prompt"""
+        return PromptTemplate.DIAGNOSIS_ASSISTANT_USER.format(context=context, question=question)
+
+    @staticmethod
+    def format_drug_prompt(question: str, drug_info: str = None, context: str = "") -> str:
+        """格式化用药咨询Prompt"""
+        drug_section = f"\n已知药物信息：{drug_info}\n" if drug_info else ""
+        return PromptTemplate.DRUG_CONSULTATION_USER.format(
+            context=context, question=question
+        ) + drug_section
