@@ -50,8 +50,8 @@ git checkout -b feat/your-feature-name
 ```bash
 # 后端
 cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uv sync
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 前端
 cd frontend
@@ -65,15 +65,15 @@ npm run dev
 
 ```bash
 # 格式化
-black app/
-isort app/
+uv run black app/
+uv run isort app/
 
 # 检查
-flake8 app/ --max-line-length=120 --ignore=E501,W503
-mypy app/ --ignore-missing-imports
+uv run flake8 app/ --max-line-length=120 --ignore=E501,W503
+uv run mypy app/ --ignore-missing-imports
 
 # 测试
-pytest tests/unit/ -v --cov=app
+uv run pytest tests/unit/ -v --cov=app
 ```
 
 **要求：**
@@ -138,7 +138,7 @@ git push origin feat/your-feature-name
 
 提交 PR 前请确认：
 
-- [ ] 代码通过本地测试 (`pytest tests/unit/ -v`)
+- [ ] 代码通过本地测试 (`uv run pytest tests/unit/ -v`)
 - [ ] 代码通过 Lint 检查 (`black`, `flake8`, `eslint`)
 - [ ] 新功能附带对应的单元测试
 - [ ] 提交信息符合 Conventional Commits 规范
@@ -176,13 +176,13 @@ backend/app/
 cd backend
 
 # 单元测试
-pytest tests/unit/ -v --cov=app --cov-report=term
+uv run pytest tests/unit/ -v --cov=app --cov-report=term
 
 # 集成测试（需要 PostgreSQL + Redis）
-pytest tests/integration/ -v
+uv run pytest tests/integration/ -v
 
 # 并行测试
-pytest tests/unit/ -n auto --timeout=60
+uv run pytest tests/unit/ -n auto --timeout=60
 ```
 
 ### 编写测试

@@ -184,7 +184,8 @@ graph TB
 ### 环境要求
 
 - Docker & Docker Compose（推荐）
-- 或 Python 3.11+ + Node.js 18+（本地开发）
+- 或 uv + Node.js 18+（本地开发）
+  - 安装 uv: `curl -LsSf https://astral.sh/uv/install.sh | sh`
 
 ### 方式一：Docker 一键启动（推荐）
 
@@ -203,8 +204,8 @@ chmod +x start.sh && ./start.sh
 
 # 4. 初始化数据（首次运行）
 cd backend
-python scripts/init_all.py
-python scripts/train_ml_models.py
+uv run python scripts/init_all.py
+uv run python scripts/train_ml_models.py
 ```
 
 ### 方式二：本地开发
@@ -212,9 +213,9 @@ python scripts/train_ml_models.py
 ```bash
 # 后端
 cd backend
-pip install -r requirements.txt
+uv sync
 cp .env.example .env  # 配置 API Key
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 # 前端
 cd frontend
@@ -274,7 +275,9 @@ intelligent_consultation/
 │   │   └── main.py                   # 应用入口 (优雅启动/K8s probes)
 │   ├── scripts/                      # 管理脚本 (初始化/训练/数据导入)
 │   ├── tests/                        # 测试套件 (单元/集成/性能)
-│   └── requirements.txt
+│   ├── pyproject.toml               # Python 依赖与项目配置 (uv 管理)
+│   ├── uv.lock                      # uv 依赖锁文件
+│   └── requirements.txt             # 由 uv 导出 (向后兼容)
 ├── frontend/                         # 前端应用 (React + Vite)
 │   └── src/
 │       ├── pages/                    # 页面 (患者门户/医生工作台/知识图谱/管理)
@@ -298,16 +301,16 @@ intelligent_consultation/
 cd backend
 
 # 训练所有模型
-python scripts/train_ml_models.py
+uv run python scripts/train_ml_models.py
 
 # 仅训练指定模型
-python scripts/train_ml_models.py --model intent
+uv run python scripts/train_ml_models.py --model intent
 
 # 使用自定义数据目录
-python scripts/train_ml_models.py --data-dir ./data/training
+uv run python scripts/train_ml_models.py --data-dir ./data/training
 
 # 输出详细报告
-python scripts/train_ml_models.py --verbose
+uv run python scripts/train_ml_models.py --verbose
 ```
 
 ---
@@ -318,16 +321,16 @@ python scripts/train_ml_models.py --verbose
 cd backend
 
 # 单元测试 + 覆盖率
-pytest tests/unit/ -v --cov=app --cov-report=html
+uv run pytest tests/unit/ -v --cov=app --cov-report=html
 
 # 集成测试
-pytest tests/integration/ -v
+uv run pytest tests/integration/ -v
 
 # 性能基准测试
-pytest tests/ -k benchmark -v
+uv run pytest tests/ -k benchmark -v
 
 # 并行测试
-pytest tests/unit/ -n auto --timeout=60
+uv run pytest tests/unit/ -n auto --timeout=60
 ```
 
 ---
@@ -390,11 +393,9 @@ git push origin feat/your-feature
 - [x] 监控告警引擎 + 性能剖析器
 - [x] 企业级安全体系 (防重放/审计/加密)
 - [x] 完整 CI/CD 流水线 (代码质量/测试/扫描/发布)
-
-### 🔄 进行中
-- [ ] 知识图谱实时更新机制
-- [ ] 多模态诊断能力增强
-- [ ] Kubernetes 资源配置完善
+- [x] 知识图谱实时更新机制（事件驱动 + CRUD API + 审计日志）
+- [x] 多模态诊断能力增强（图像分类 + 结构化报告 + KG 关联）
+- [x] Kubernetes 资源配置完善（NetworkPolicy + ServiceMonitor + HPA/PDB + ResourceQuota + PriorityClass）
 
 ### 📋 规划中
 - [ ] 移动端 App (React Native / Flutter)

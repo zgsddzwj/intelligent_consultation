@@ -79,7 +79,7 @@ def check_dependencies():
             missing.append(module)
 
     if missing:
-        app_logger.info("  请运行: pip install -r requirements.txt")
+        app_logger.info("  请运行: uv sync")
         return False
     return True
 
@@ -140,7 +140,7 @@ def main():
         app_logger.info("\n✓ 所有检查通过！可以开始初始化数据。")
         app_logger.info("\n下一步:")
         app_logger.info("  1. 启动服务: docker-compose up -d")
-        app_logger.info("  2. 初始化数据: python scripts/init_all.py")
+        app_logger.info("  2. 初始化数据: uv run python scripts/init_all.py")
     else:
         app_logger.warning("\n⚠ 部分检查未通过，请先解决上述问题。")
 

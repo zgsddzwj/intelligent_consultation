@@ -1,7 +1,6 @@
 """语义检索器 - 基于语义理解的检索"""
 from typing import List, Dict, Any
 from app.knowledge.rag.embedder import Embedder
-from app.services.llm_service import LLMService
 from app.utils.logger import app_logger
 import re
 
@@ -11,8 +10,16 @@ class SemanticRetriever:
     
     def __init__(self):
         self.embedder = Embedder()
-        self.llm = LLMService()
+        self._llm = None
         self._medical_terms_cache = {}
+
+    @property
+    def llm(self):
+        """延迟导入 LLMService，避免循环导入"""
+        if self._llm is None:
+            from app.services.llm_service import LLMService
+            self._llm = LLMService()
+        return self._llm
     
     def expand_query(self, query: str) -> Dict[str, Any]:
         """查询扩展 - 生成同义词和相关术语"""

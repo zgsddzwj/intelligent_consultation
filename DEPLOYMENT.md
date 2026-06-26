@@ -61,10 +61,10 @@ docker-compose down -v
 cd backend
 
 # 一键初始化全部数据
-python scripts/init_all.py
+uv run python scripts/init_all.py
 
 # 训练ML模型
-python scripts/train_ml_models.py
+uv run python scripts/train_ml_models.py
 ```
 
 ---
@@ -83,17 +83,12 @@ docker-compose up -d postgres redis neo4j milvus etcd minio
 ### 2. 启动后端
 
 ```bash
-# 创建并激活Python虚拟环境
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# venv\Scripts\activate   # Windows
-
-# 安装依赖
+# 使用 uv 自动创建并管理虚拟环境
 cd backend
-pip install -r requirements.txt
+uv sync
 
 # 启动后端（热重载模式）
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### 3. 启动前端
@@ -208,10 +203,10 @@ kubectl logs -f deployment/backend -n medical-platform
 cd backend
 
 # 一键初始化（含知识图谱 + 向量库 + ML模型）
-python scripts/init_all.py
+uv run python scripts/init_all.py
 
 # 单独训练ML模型
-python scripts/train_ml_models.py
+uv run python scripts/train_ml_models.py
 ```
 
 初始化内容：
@@ -299,7 +294,7 @@ ls -la backend/models/intent/
 ls -la backend/models/relevance/
 
 # 重新训练
-python scripts/train_ml_models.py --model intent --verbose
+uv run python scripts/train_ml_models.py --model intent --verbose
 ```
 
 ---

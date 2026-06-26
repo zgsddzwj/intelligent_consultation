@@ -6,7 +6,7 @@
 
 ```bash
 cd backend
-pip install -r requirements.txt
+uv sync --extra dev
 ```
 
 ### 2. 环境变量配置
@@ -25,7 +25,7 @@ QWEN_API_KEY=your_key_here
 ### 基础导入测试（不依赖外部服务）
 
 ```bash
-python tests/test_imports.py
+uv run python tests/test_imports.py
 ```
 
 这个测试验证：
@@ -38,31 +38,31 @@ python tests/test_imports.py
 
 ```bash
 # 运行所有单元测试
-pytest tests/unit/ -v
+uv run pytest tests/unit/ -v
 
 # 运行特定测试文件
-pytest tests/unit/test_exceptions.py -v
+uv run pytest tests/unit/test_exceptions.py -v
 
 # 运行特定测试函数
-pytest tests/unit/test_exceptions.py::test_base_exception -v
+uv run pytest tests/unit/test_exceptions.py::test_base_exception -v
 ```
 
 ### 集成测试
 
 ```bash
-pytest tests/integration/ -v
+uv run pytest tests/integration/ -v
 ```
 
 ### 端到端测试
 
 ```bash
-pytest tests/e2e/ -v
+uv run pytest tests/e2e/ -v
 ```
 
 ### 生成覆盖率报告
 
 ```bash
-pytest --cov=app --cov-report=html --cov-report=term
+uv run pytest --cov=app --cov-report=html --cov-report=term
 ```
 
 ## 测试分类
@@ -148,7 +148,7 @@ def test_llm_function(mock_llm_service):
 
 **解决**: 
 ```bash
-pip install -r requirements.txt
+uv sync --extra dev
 ```
 
 ### 2. 数据库连接错误
@@ -171,8 +171,8 @@ pip install -r requirements.txt
 # .github/workflows/test.yml
 - name: Run tests
   run: |
-    pip install -r requirements.txt
-    pytest tests/ -v --cov=app
+    uv sync --extra dev
+    uv run pytest tests/ -v --cov=app
 ```
 
 ## 下一步

@@ -14,6 +14,7 @@ spec:
       labels:
         app: postgres
     spec:
+      priorityClassName: medical-data
       containers:
       - name: postgres
         image: postgres:15
@@ -83,4 +84,16 @@ spec:
   - port: 5432
     targetPort: 5432
   clusterIP: None
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: postgres-pdb
+  namespace: medical-consultation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: postgres
 

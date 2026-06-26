@@ -51,6 +51,29 @@ class GraphVisualizationRequest(BaseModel):
     depth: int = 2  # 查询深度
 
 
+class KGEntityCreateRequest(BaseModel):
+    """知识图谱实体创建请求"""
+    entity_type: str  # Disease | Symptom | Drug | Examination | Department
+    name: str
+    properties: Optional[Dict[str, Any]] = None
+
+
+class KGEntityDeleteRequest(BaseModel):
+    """知识图谱实体删除请求"""
+    entity_type: str
+    name: str
+
+
+class KGRelationshipCreateRequest(BaseModel):
+    """知识图谱关系创建请求"""
+    from_type: str
+    from_name: str
+    rel_type: str  # HAS_SYMPTOM | TREATED_BY | REQUIRES_EXAM | BELONGS_TO | INTERACTS_WITH | CONTRAINDICATED_FOR
+    to_type: str
+    to_name: str
+    properties: Optional[Dict[str, Any]] = None
+
+
 @router.post("/documents")
 async def upload_document(
     file: UploadFile = File(...),
@@ -141,6 +164,17 @@ async def upload_document(
         doc.vector_id = str(vector_ids[0]) if vector_ids else None
         db.commit()
         
+        # 8. 事件驱动：从文档中抽取实体并增量更新知识图谱
+        kg_update_stats = None
+        try:
+            from app.services.kg_update_service import get_kg_update_service
+            kg_service = get_kg_update_service()
+            doc_text = "\n\n".join(texts)
+            kg_update_stats = kg_service.update_from_document(doc_text, source=file.filename)
+            app_logger.info(f"文档上传触发KG更新: {kg_update_stats.get('entities_created', 0)} 实体, {kg_update_stats.get('relationships_created', 0)} 关系")
+        except Exception as kg_err:
+            app_logger.warning(f"文档上传后KG更新失败（不影响文档索引）: {kg_err}")
+        
         return {
             "document_id": doc.id,
             "title": doc.title,
@@ -148,7 +182,8 @@ async def upload_document(
             "status": "indexed",
             "object_storage_key": object_key,
             "storage_type": storage_type,
-            "file_size": file_size
+            "file_size": file_size,
+            "kg_update": kg_update_stats
         }
         
     except HTTPException:
@@ -490,3 +525,90 @@ async def get_departments():
         return {
             "departments": []
         }
+
+
+# ==================== 知识图谱实时更新 API ====================
+
+@router.post("/graph/entities")
+async def add_kg_entity(request: KGEntityCreateRequest):
+    """添加或更新知识图谱实体（MERGE 语义，幂等）
+    
+    支持的实体类型：Disease, Symptom, Drug, Examination, Department
+    """
+    from app.services.kg_update_service import get_kg_update_service
+    try:
+        service = get_kg_update_service()
+        result = service.add_entity(request.entity_type, request.name, request.properties)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        app_logger.error(f"添加KG实体失败: {e}")
+        raise HTTPException(status_code=500, detail=f"知识图谱更新失败: {e}")
+
+
+@router.delete("/graph/entities")
+async def delete_kg_entity(request: KGEntityDeleteRequest):
+    """删除知识图谱实体及其所有关联关系"""
+    from app.services.kg_update_service import get_kg_update_service
+    try:
+        service = get_kg_update_service()
+        result = service.delete_entity(request.entity_type, request.name)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        app_logger.error(f"删除KG实体失败: {e}")
+        raise HTTPException(status_code=500, detail=f"知识图谱更新失败: {e}")
+
+
+@router.post("/graph/relationships")
+async def add_kg_relationship(request: KGRelationshipCreateRequest):
+    """添加知识图谱关系（MERGE 语义，幂等）
+    
+    支持的关系类型：HAS_SYMPTOM, TREATED_BY, REQUIRES_EXAM, BELONGS_TO, INTERACTS_WITH, CONTRAINDICATED_FOR
+    """
+    from app.services.kg_update_service import get_kg_update_service
+    try:
+        service = get_kg_update_service()
+        result = service.add_relationship(
+            request.from_type, request.from_name,
+            request.rel_type,
+            request.to_type, request.to_name,
+            request.properties
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        app_logger.error(f"添加KG关系失败: {e}")
+        raise HTTPException(status_code=500, detail=f"知识图谱更新失败: {e}")
+
+
+@router.post("/graph/update-from-text")
+async def update_kg_from_text(text: str, source: str = "manual"):
+    """从文本中抽取医疗实体并增量更新知识图谱
+    
+    适用于用户提交一段医疗文本，系统自动识别实体并更新知识图谱。
+    """
+    from app.services.kg_update_service import get_kg_update_service
+    try:
+        service = get_kg_update_service()
+        result = service.update_from_document(text, source=source)
+        return result
+    except Exception as e:
+        app_logger.error(f"文本驱动KG更新失败: {e}")
+        raise HTTPException(status_code=500, detail=f"知识图谱更新失败: {e}")
+
+
+@router.get("/graph/audit-log")
+async def get_kg_audit_log(limit: int = 50):
+    """获取知识图谱更新审计日志"""
+    from app.services.kg_update_service import get_kg_update_service
+    try:
+        service = get_kg_update_service()
+        logs = service.get_audit_log(limit=limit)
+        return {"logs": logs, "count": len(logs)}
+    except Exception as e:
+        app_logger.error(f"获取KG审计日志失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

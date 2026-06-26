@@ -14,6 +14,12 @@ if ! docker info > /dev/null 2>&1; then
     exit 1
 fi
 
+# 检查 uv 是否安装（用于本地初始化脚本）
+if ! command -v uv &> /dev/null; then
+    echo "警告: uv 未安装，本地初始化脚本将无法运行"
+    echo "请安装: curl -LsSf https://astral.sh/uv/install.sh | sh"
+fi
+
 # 检查.env文件
 if [ ! -f "backend/.env" ]; then
     echo "警告: backend/.env 文件不存在"
@@ -62,13 +68,13 @@ echo ""
 echo "[3/3] 数据初始化..."
 if [ "$INIT_DATA" = true ]; then
     echo "正在运行 init_all.py ..."
-    (cd backend && python scripts/init_all.py) || {
+    (cd backend && uv run python scripts/init_all.py) || {
         echo "警告: init_all.py 执行失败，请手动运行"
     }
 else
     echo "提示: 首次运行请执行以下命令初始化数据："
     echo "  ./start.sh --init"
-    echo "  或: cd backend && python scripts/init_all.py"
+    echo "  或: cd backend && uv run python scripts/init_all.py"
 fi
 
 echo ""

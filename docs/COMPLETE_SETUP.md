@@ -45,7 +45,7 @@ docker-compose up -d
 ### 步骤2: 初始化数据（首次运行）
 ```bash
 cd backend
-python scripts/init_all.py
+uv run python scripts/init_all.py
 ```
 
 ### 步骤3: 访问系统
@@ -58,7 +58,7 @@ python scripts/init_all.py
 ### 1. 验证环境
 ```bash
 cd backend
-python scripts/verify_setup.py
+uv run python scripts/verify_setup.py
 ```
 
 ### 2. 启动Docker服务
@@ -75,7 +75,7 @@ docker-compose ps
 #### 方式A: 一键初始化（推荐）
 ```bash
 cd backend
-python scripts/init_all.py
+uv run python scripts/init_all.py
 ```
 
 #### 方式B: 分步初始化
@@ -83,23 +83,23 @@ python scripts/init_all.py
 cd backend
 
 # 1. 初始化数据库表
-python scripts/init_db.py
+uv run python scripts/init_db.py
 
 # 2. 获取医疗数据
-python scripts/fetch_medical_data_enhanced.py
+uv run python scripts/fetch_medical_data_enhanced.py
 
 # 3. 初始化知识图谱
-python scripts/init_knowledge_graph.py
+uv run python scripts/init_knowledge_graph.py
 
 # 4. 加载数据到向量数据库
-python scripts/load_sample_data.py
-python scripts/load_medical_knowledge.py
+uv run python scripts/load_sample_data.py
+uv run python scripts/load_medical_knowledge.py
 ```
 
 ### 4. 测试系统
 ```bash
 cd backend
-python scripts/test_system.py
+uv run python scripts/test_system.py
 ```
 
 ## 🎯 用户可以直接使用的功能
@@ -176,7 +176,7 @@ curl http://localhost:8000/api/v1/knowledge/graph/departments
 ### 完整测试
 ```bash
 cd backend
-python scripts/test_system.py
+uv run python scripts/test_system.py
 ```
 
 ## 📝 使用示例

@@ -1,0 +1,143 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "intelligent-consultation-backend"
+version = "3.1.0"
+description = "智能医疗管家平台 - AI-powered healthcare assistant backend"
+readme = "../README.md"
+requires-python = ">=3.11,<3.12"
+license = { text = "MIT" }
+authors = [{ name = "WangJian" }]
+
+dependencies = [
+    # Web Framework
+    "fastapi==0.109.2",
+    "uvicorn[standard]==0.27.1",
+    "python-multipart==0.0.9",
+
+    # Database
+    "sqlalchemy==2.0.27",
+    "alembic==1.13.1",
+    "psycopg2-binary==2.9.9",
+    "redis==5.0.1",
+
+    # LLM & AI
+    "langchain>=0.1.20,<0.2",
+    "langchain-community>=0.0.20,<0.1",
+    "langgraph>=0.0.26,<0.1",
+    "openai==1.12.0",
+    "dashscope==1.17.0",
+
+    # Vector Database
+    "pymilvus==2.3.6",
+
+    # Knowledge Graph
+    "neo4j==5.17.0",
+
+    # Document Processing
+    "pypdf2==3.0.1",
+    "python-docx==1.1.0",
+    "pdfplumber==0.10.3",
+
+    # Embeddings
+    "sentence-transformers==2.2.2",
+    "torch>=2.0.0,<2.2.0",  # 约束版本以兼容 macOS x86_64 (Intel)
+    "huggingface-hub>=0.16.0,<0.20.0",  # 兼容 sentence-transformers 2.2.2
+
+    # RAG & Retrieval
+    "rank-bm25==0.2.2",
+    "jieba==0.42.1",
+    "FlagEmbedding==1.2.0",
+    "transformers>=4.33.0,<5.0.0",
+
+    # Machine Learning
+    "scikit-learn==1.3.2",
+    "numpy==1.24.3",
+
+    # OCR & Image Processing
+    "paddleocr==2.7.0.3",
+    "Pillow==10.1.0",
+
+    # Data Validation
+    "pydantic==2.5.0",
+    "pydantic-settings==2.1.0",
+
+    # Authentication & Security
+    "python-jose[cryptography]==3.3.0",
+    "passlib[bcrypt]==1.7.4",
+    "bcrypt==4.0.1",
+    "cryptography==41.0.7",
+
+    # Utilities
+    "python-dotenv==1.0.0",
+    "httpx==0.25.2",
+    "aiohttp==3.9.1",
+    "aiofiles==23.2.1",
+    "loguru==0.7.2",
+    "pandas==2.1.4",
+
+    # Object Storage
+    "minio==7.2.0",
+    "boto3==1.34.0",
+    "oss2==2.18.4",
+
+    # Monitoring
+    "prometheus-client==0.19.0",
+    "psutil==5.9.8",
+    "langfuse>=2.0.0",
+
+    # Progress
+    "tqdm==4.66.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==7.4.3",
+    "pytest-asyncio==0.21.1",
+    "pytest-cov",
+    "pytest-xdist",
+    "pytest-timeout",
+    "black",
+    "isort",
+    "flake8",
+    "mypy",
+    "bandit",
+    "locust",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.uv]
+package = true
+
+# 覆盖 paddleocr 对 pymupdf<1.21.0 的过时约束，使用有预编译 wheel 的版本
+override-dependencies = ["pymupdf>=1.23.0"]
+
+[[tool.uv.index]]
+url = "https://mirrors.aliyun.com/pypi/simple/"
+default = true
+
+# --- 开发工具配置 ---
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.flake8]
+max-line-length = 120
+extend-ignore = ["E501", "W503"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -19,7 +19,7 @@
 
 ```bash
 cd backend
-pip install -r requirements.txt
+uv sync
 ```
 
 **注意**: 
@@ -41,10 +41,10 @@ QWEN_API_KEY=sk-xxxxxx
 
 ```bash
 # 1. 准备训练数据
-python scripts/prepare_training_data.py
+uv run python scripts/prepare_training_data.py
 
 # 2. 训练模型
-python scripts/train_ml_models.py
+uv run python scripts/train_ml_models.py
 ```
 
 ---

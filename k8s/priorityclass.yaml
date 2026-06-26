@@ -1,0 +1,32 @@
+# =============================================================================
+# PriorityClass - Pod 调度优先级
+# 确保关键服务在资源紧张时优先调度
+# =============================================================================
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: medical-critical
+description: "医疗咨询平台关键服务优先级（后端、前端）"
+value: 1000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: medical-data
+description: "医疗咨询平台数据服务优先级（PostgreSQL、Neo4j、Redis、Milvus）"
+value: 2000
+globalDefault: false
+preemptionPolicy: PreemptLowerPriority
+
+---
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: medical-batch
+description: "医疗咨询平台批处理任务优先级（文档处理、模型训练）"
+value: 500
+globalDefault: false
+preemptionPolicy: Never

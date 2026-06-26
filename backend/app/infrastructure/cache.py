@@ -6,11 +6,16 @@ import threading
 from functools import wraps
 from typing import Callable, Any, Optional, Dict, List
 from collections import OrderedDict
-from app.services.redis_service import redis_service
 from app.config import get_settings
 from app.utils.logger import app_logger
 
 settings = get_settings()
+
+
+def _get_redis():
+    """延迟导入 redis_service，避免循环导入"""
+    from app.services.redis_service import redis_service
+    return redis_service
 
 
 # ========== 本地LRU缓存（L1缓存） ==========
@@ -168,10 +173,11 @@ def _generate_cache_key(func_name: str, *args, **kwargs) -> str:
 def _scan_keys(pattern: str, count: int = 100) -> list:
     keys = []
     cursor = 0
+    rs = _get_redis()
 
     try:
         while True:
-            cursor, batch = redis_service.client.scan(
+            cursor, batch = rs.client.scan(
                 cursor=cursor,
                 match=pattern,
                 count=count
@@ -182,7 +188,7 @@ def _scan_keys(pattern: str, count: int = 100) -> list:
     except Exception as e:
         app_logger.warning(f"SCAN命令执行失败，模式: {pattern}: {e}")
         try:
-            keys = redis_service.client.keys(pattern)
+            keys = rs.client.keys(pattern)
         except Exception as fallback_err:
             app_logger.error(f"keys命令也失败了: {fallback_err}")
             keys = []
@@ -222,7 +228,8 @@ def cache_result(ttl: Optional[int] = None, key_prefix: str = None,
 
             # L2缓存查找
             try:
-                cached_result = redis_service.get_json(cache_key)
+                rs = _get_redis()
+                cached_result = rs.get_json(cache_key)
                 if cached_result is not None:
                     lookup_time = time.time() - start_time
                     cache_stats.record_hit("l2", lookup_time)
@@ -247,7 +254,8 @@ def cache_result(ttl: Optional[int] = None, key_prefix: str = None,
             # 写入L2
             try:
                 cache_ttl = ttl or settings.REDIS_CACHE_TTL
-                redis_service.set_json(cache_key, result, ttl=cache_ttl)
+                rs = _get_redis()
+                rs.set_json(cache_key, result, ttl=cache_ttl)
                 cache_stats.record_write("l2")
                 app_logger.debug(f"L2缓存写入: {cache_key}, TTL: {cache_ttl}")
             except Exception as e:
@@ -273,7 +281,8 @@ def cache_result(ttl: Optional[int] = None, key_prefix: str = None,
                     return l1_result
 
             try:
-                cached_result = redis_service.get_json(cache_key)
+                rs = _get_redis()
+                cached_result = rs.get_json(cache_key)
                 if cached_result is not None:
                     lookup_time = time.time() - start_time
                     cache_stats.record_hit("l2", lookup_time)
@@ -291,7 +300,8 @@ def cache_result(ttl: Optional[int] = None, key_prefix: str = None,
 
             try:
                 cache_ttl = ttl or settings.REDIS_CACHE_TTL
-                redis_service.set_json(cache_key, result, ttl=cache_ttl)
+                rs = _get_redis()
+                rs.set_json(cache_key, result, ttl=cache_ttl)
                 cache_stats.record_write("l2")
             except Exception as e:
                 cache_stats.record_error()
@@ -328,7 +338,8 @@ def invalidate_cache(key_pattern: str, invalidate_l1: bool = True) -> int:
             for i in range(0, len(keys), batch_size):
                 batch = keys[i:i + batch_size]
                 try:
-                    redis_service.client.delete(*batch)
+                    rs = _get_redis()
+                    rs.client.delete(*batch)
                     deleted_count += len(batch)
                 except Exception as e:
                     app_logger.warning(f"批量删除缓存键失败: {e}")
@@ -354,8 +365,9 @@ class CacheWarmer:
             value = item.get("value")
             if key and value is not None:
                 try:
+                    rs = _get_redis()
                     cache_ttl = ttl or settings.REDIS_CACHE_TTL
-                    redis_service.set_json(key, value, ttl=cache_ttl)
+                    rs.set_json(key, value, ttl=cache_ttl)
                     warmed += 1
                 except Exception as e:
                     app_logger.warning(f"缓存预热失败: {key}, {e}")
@@ -383,7 +395,8 @@ class CacheManager:
                 return l1_result
 
         try:
-            result = redis_service.get_json(key)
+            rs = _get_redis()
+            result = rs.get_json(key)
             if result is not None:
                 cache_stats.record_hit("l2")
                 if use_l1:
@@ -403,7 +416,8 @@ class CacheManager:
             local_cache.set(key, value, ttl=min(ttl or 60, 60))
 
         try:
-            result = redis_service.set_json(key, value, ttl=ttl)
+            rs = _get_redis()
+            result = rs.set_json(key, value, ttl=ttl)
             if result:
                 cache_stats.record_write("l2")
             return result
@@ -419,7 +433,8 @@ class CacheManager:
             local_cache.delete(key)
 
         try:
-            result = redis_service.delete(key)
+            rs = _get_redis()
+            result = rs.delete(key)
             if result:
                 cache_stats.record_invalidation(1)
             return result
@@ -435,7 +450,8 @@ class CacheManager:
     @staticmethod
     def exists(key: str) -> bool:
         try:
-            return redis_service.exists(key)
+            rs = _get_redis()
+            return rs.exists(key)
         except Exception as e:
             app_logger.warning(f"缓存存在性检查失败: {key}, {e}")
             return False
@@ -456,7 +472,8 @@ class CacheManager:
         """清空所有缓存"""
         local_cache.clear()
         try:
-            redis_service.client.flushdb()
+            rs = _get_redis()
+            rs.client.flushdb()
             app_logger.info("所有缓存已清空")
         except Exception as e:
             app_logger.error(f"清空Redis缓存失败: {e}")

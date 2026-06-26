@@ -267,3 +267,123 @@ class ImageProcessor:
         
         return found_terms
 
+    # ==================== 多模态诊断增强 ====================
+
+    # 图片类型分类提示词
+    CLASSIFY_PROMPT = (
+        "请判断这张图片属于以下哪种医疗图片类型，只返回类型名称（不要其他文字）：\n"
+        "- lab_report: 化验报告/检验单（血常规、尿常规、生化等）\n"
+        "- prescription: 处方/用药单\n"
+        "- skin_condition: 皮肤病灶/皮疹照片\n"
+        "- xray: X光片\n"
+        "- ct_scan: CT/MRI影像\n"
+        "- ultrasound: 超声/B超图像\n"
+        "- ecg: 心电图\n"
+        "- medical_record: 病历记录\n"
+        "- other: 非医疗图片"
+    )
+
+    def classify_image(self, image_path: str) -> Dict[str, Any]:
+        """分类医疗图片类型
+
+        Returns:
+            {"type": str, "confidence": float, "raw_response": str}
+        """
+        result = self.understand_image_with_llm(image_path, self.CLASSIFY_PROMPT)
+        raw = result.get("description", "").strip().lower()
+
+        valid_types = [
+            "lab_report", "prescription", "skin_condition",
+            "xray", "ct_scan", "ultrasound", "ecg", "medical_record", "other"
+        ]
+        image_type = "other"
+        for t in valid_types:
+            if t in raw:
+                image_type = t
+                break
+
+        return {
+            "type": image_type,
+            "confidence": 0.85 if image_type != "other" else 0.3,
+            "raw_response": raw,
+        }
+
+    def generate_structured_report(self, image_path: str, patient_context: str = "") -> Dict[str, Any]:
+        """生成结构化诊断报告
+
+        整合 OCR + 多模态理解，输出结构化诊断信息。
+
+        Args:
+            image_path: 图片路径
+            patient_context: 患者背景信息
+
+        Returns:
+            结构化诊断报告字典
+        """
+        import json as _json
+        import re as _re
+
+        report: Dict[str, Any] = {
+            "image_type": "unknown",
+            "ocr_text": "",
+            "findings": [],
+            "summary": "",
+            "recommendations": [],
+            "risk_level": "low",
+        }
+
+        # 1. 图片分类
+        try:
+            classification = self.classify_image(image_path)
+            report["image_type"] = classification.get("type", "unknown")
+        except Exception as e:
+            app_logger.warning(f"图片分类失败: {e}")
+
+        # 2. OCR 文本提取
+        if self.ocr_enabled:
+            ocr_result = self.ocr_image(image_path)
+            report["ocr_text"] = ocr_result.get("text", "")
+
+        # 3. 多模态 LLM 分析
+        context_section = f"\n患者背景：{patient_context}\n" if patient_context else ""
+        analysis_prompt = f"""请分析这张医疗图片并生成结构化诊断报告。{context_section}
+
+请以JSON格式返回（只返回JSON）：
+{{
+    "findings": [
+        {{"category": "发现类别", "item": "项目", "value": "值", "reference": "参考范围", "abnormality": "normal|abnormal_low|abnormal_high|positive|negative"}}
+    ],
+    "summary": "诊断摘要",
+    "recommendations": ["建议1", "建议2"],
+    "risk_level": "low|medium|high"
+}}"""
+
+        llm_result = self.understand_image_with_llm(image_path, analysis_prompt)
+        raw_response = llm_result.get("description", "")
+
+        # 4. 解析 LLM 返回的 JSON
+        if raw_response:
+            try:
+                parsed = _json.loads(raw_response)
+            except (_json.JSONDecodeError, TypeError):
+                # 尝试从代码块提取
+                match = _re.search(r'```(?:json)?\s*(.*?)\s*```', raw_response, _re.DOTALL)
+                if match:
+                    try:
+                        parsed = _json.loads(match.group(1).strip())
+                    except (_json.JSONDecodeError, TypeError):
+                        parsed = {}
+                else:
+                    parsed = {}
+
+            report["findings"] = parsed.get("findings", [])
+            report["summary"] = parsed.get("summary", "")
+            report["recommendations"] = parsed.get("recommendations", [])
+            report["risk_level"] = parsed.get("risk_level", "low")
+
+        # 5. 如果 OCR 有文本但 LLM 无结构化结果，将 OCR 文本放入 summary
+        if not report["summary"] and report["ocr_text"]:
+            report["summary"] = f"OCR识别文本: {report['ocr_text'][:500]}"
+
+        return report
+

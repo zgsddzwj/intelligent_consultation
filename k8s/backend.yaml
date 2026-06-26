@@ -22,6 +22,7 @@ spec:
         app: backend
         version: v1
     spec:
+      priorityClassName: medical-critical
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:

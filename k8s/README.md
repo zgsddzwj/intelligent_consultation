@@ -4,16 +4,27 @@
 
 ## 文件说明
 
+### 核心配置
 - `namespace.yaml` - 创建命名空间
 - `configmap.yaml` - 应用配置（非敏感信息）
 - `secrets.yaml` - 敏感信息（密码、API密钥等）
-- `postgres.yaml` - PostgreSQL 数据库
-- `redis.yaml` - Redis 缓存
-- `neo4j.yaml` - Neo4j 知识图谱
+
+### 数据服务
+- `postgres.yaml` - PostgreSQL 数据库（含 PDB + PriorityClass）
+- `redis.yaml` - Redis 缓存（含 PDB + PriorityClass）
+- `neo4j.yaml` - Neo4j 知识图谱（含 PDB + PriorityClass）
 - `milvus.yaml` - Milvus 向量数据库（包含 etcd 和 minio）
-- `backend.yaml` - 后端服务（包含 HPA）
-- `frontend.yaml` - 前端服务（包含 HPA）
+
+### 应用服务
+- `backend.yaml` - 后端服务（含 HPA + PDB + PriorityClass）
+- `frontend.yaml` - 前端服务（含 HPA + PDB + PriorityClass）
 - `ingress.yaml` - Ingress 配置（需要安装 Ingress Controller）
+
+### 安全与运维（v3.1 新增）
+- `networkpolicy.yaml` - 网络安全策略（限制 Pod 间通信，仅允许必要流量）
+- `servicemonitor.yaml` - Prometheus 监控配置（ServiceMonitor + PrometheusRule 告警规则）
+- `resourcequota.yaml` - 命名空间资源配额 + LimitRange 默认资源限制
+- `priorityclass.yaml` - Pod 调度优先级（critical / data / batch）
 
 ## 部署步骤
 
@@ -71,24 +82,34 @@ kubectl apply -f namespace.yaml
 kubectl apply -f configmap.yaml
 kubectl apply -f secrets.yaml
 
-# 3. 部署数据服务（按顺序）
+# 3. 创建资源配额和优先级
+kubectl apply -f resourcequota.yaml
+kubectl apply -f priorityclass.yaml
+
+# 4. 部署数据服务（按顺序）
 kubectl apply -f postgres.yaml
 kubectl apply -f redis.yaml
 kubectl apply -f neo4j.yaml
 kubectl apply -f milvus.yaml
 
-# 4. 等待数据服务就绪
+# 5. 等待数据服务就绪
 kubectl wait --for=condition=ready pod -l app=postgres -n medical-consultation --timeout=300s
 kubectl wait --for=condition=ready pod -l app=redis -n medical-consultation --timeout=300s
 kubectl wait --for=condition=ready pod -l app=neo4j -n medical-consultation --timeout=300s
 kubectl wait --for=condition=ready pod -l app=milvus -n medical-consultation --timeout=300s
 
-# 5. 部署应用服务
+# 6. 部署应用服务
 kubectl apply -f backend.yaml
 kubectl apply -f frontend.yaml
 
-# 6. 部署 Ingress（可选）
+# 7. 部署网络安全策略
+kubectl apply -f networkpolicy.yaml
+
+# 8. 部署 Ingress（可选）
 kubectl apply -f ingress.yaml
+
+# 9. 部署监控（需要 Prometheus Operator）
+kubectl apply -f servicemonitor.yaml
 ```
 
 ### 6. 一键部署脚本
@@ -100,6 +121,8 @@ kubectl apply -f ingress.yaml
 kubectl apply -f namespace.yaml
 kubectl apply -f configmap.yaml
 kubectl apply -f secrets.yaml
+kubectl apply -f resourcequota.yaml
+kubectl apply -f priorityclass.yaml
 
 # 数据服务
 kubectl apply -f postgres.yaml
@@ -115,8 +138,14 @@ sleep 60
 kubectl apply -f backend.yaml
 kubectl apply -f frontend.yaml
 
+# 安全策略
+kubectl apply -f networkpolicy.yaml
+
 # Ingress
 kubectl apply -f ingress.yaml
+
+# 监控（可选，需要 Prometheus Operator）
+kubectl apply -f servicemonitor.yaml
 
 echo "部署完成！"
 ```
@@ -173,22 +202,26 @@ HPA 已配置，会根据 CPU 和内存使用率自动扩缩容：
 
 ### Prometheus 监控
 
-如果已安装 Prometheus，可以添加 ServiceMonitor：
+已配置 `servicemonitor.yaml`，包含：
+- **ServiceMonitor**：自动发现并抓取 backend、frontend、postgres、redis 的 `/metrics` 端点
+- **PrometheusRule**：内置告警规则
+  - Backend 错误率过高（>5% 5xx）
+  - Backend P95 延迟过高（>2s）
+  - Pod 频繁重启（1h 内 >3 次）
+  - PostgreSQL/Redis/Neo4j 连接断开
 
-```yaml
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: backend-metrics
-  namespace: medical-consultation
-spec:
-  selector:
-    matchLabels:
-      app: backend
-  endpoints:
-  - port: 8000
-    path: /metrics
+部署监控（需要已安装 kube-prometheus-stack 或 prometheus-operator）：
+```bash
+kubectl apply -f servicemonitor.yaml
 ```
+
+### Pod 安全
+
+- 所有 Pod 配置了 `securityContext`（非 root 运行、禁止提权、最小权限）
+- `NetworkPolicy` 限制 Pod 间通信，仅允许必要流量
+- `PriorityClass` 确保关键服务优先调度
+- `ResourceQuota` 限制命名空间资源总量
+- `LimitRange` 为未设置资源限制的 Pod 提供默认值
 
 ## 备份和恢复
 
@@ -258,6 +291,8 @@ kubectl get events -n medical-consultation --sort-by='.lastTimestamp'
 ## 卸载
 
 ```bash
+kubectl delete -f servicemonitor.yaml
+kubectl delete -f networkpolicy.yaml
 kubectl delete -f ingress.yaml
 kubectl delete -f frontend.yaml
 kubectl delete -f backend.yaml
@@ -265,6 +300,8 @@ kubectl delete -f milvus.yaml
 kubectl delete -f neo4j.yaml
 kubectl delete -f redis.yaml
 kubectl delete -f postgres.yaml
+kubectl delete -f priorityclass.yaml
+kubectl delete -f resourcequota.yaml
 kubectl delete -f secrets.yaml
 kubectl delete -f configmap.yaml
 kubectl delete -f namespace.yaml

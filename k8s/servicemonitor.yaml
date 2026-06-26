@@ -1,0 +1,163 @@
+# =============================================================================
+# ServiceMonitor - Prometheus 监控配置
+# 需要安装 kube-prometheus-stack 或 prometheus-operator
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: backend-monitor
+  namespace: medical-consultation
+  labels:
+    release: monitoring  # 匹配 Prometheus Operator 的 selector
+spec:
+  selector:
+    matchLabels:
+      app: backend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+      honorLabels: true
+      relabelings:
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod_name
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: frontend-monitor
+  namespace: medical-consultation
+  labels:
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: frontend
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+
+---
+# =============================================================================
+# PodMonitor - 用于监控有状态服务（通过 exporter）
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: postgres-monitor
+  namespace: medical-consultation
+  labels:
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: postgres
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: redis-monitor
+  namespace: medical-consultation
+  labels:
+    release: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: redis
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+
+---
+# =============================================================================
+# PrometheusRule - 告警规则
+# =============================================================================
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: medical-alerts
+  namespace: medical-consultation
+  labels:
+    release: monitoring
+spec:
+  groups:
+    - name: backend-alerts
+      rules:
+        - alert: BackendHighErrorRate
+          expr: |
+            rate(http_requests_total{status=~"5..", namespace="medical-consultation"}[5m])
+            / rate(http_requests_total{namespace="medical-consultation"}[5m]) > 0.05
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Backend 错误率过高 (>5%)"
+            description: "后端服务 5xx 错误率超过 5%，持续 5 分钟"
+
+        - alert: BackendHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              rate(http_request_duration_seconds_bucket{namespace="medical-consultation"}[5m])
+            ) > 2
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Backend P95 延迟过高 (>2s)"
+            description: "后端服务 P95 延迟超过 2 秒"
+
+        - alert: BackendPodRestart
+          expr: |
+            increase(kube_pod_container_status_restarts_total{namespace="medical-consultation", container="backend"}[1h]) > 3
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Backend Pod 频繁重启"
+            description: "后端 Pod 在过去 1 小时内重启超过 3 次"
+
+    - name: infrastructure-alerts
+      rules:
+        - alert: DatabaseConnectionFailed
+          expr: |
+            pg_up{namespace="medical-consultation"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PostgreSQL 连接失败"
+            description: "PostgreSQL 数据库连接断开超过 2 分钟"
+
+        - alert: RedisDown
+          expr: |
+            redis_up{namespace="medical-consultation"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Redis 不可用"
+            description: "Redis 服务不可用超过 2 分钟"
+
+        - alert: Neo4jDown
+          expr: |
+            up{job="neo4j", namespace="medical-consultation"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Neo4j 不可用"
+            description: "Neo4j 知识图谱服务不可用超过 2 分钟"

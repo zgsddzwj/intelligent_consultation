@@ -6,7 +6,7 @@ metadata:
 data:
   # 应用配置
   APP_NAME: "智能医疗管家平台"
-  APP_VERSION: "0.1.1"
+  APP_VERSION: "3.1.0"
   ENVIRONMENT: "production"
   DEBUG: "false"
   LOG_LEVEL: "INFO"
@@ -58,6 +58,10 @@ data:
   # Langfuse配置
   ENABLE_LANGFUSE: "true"
   LANGFUSE_HOST: "https://cloud.langfuse.com"
+
+  # 多模态诊断配置
+  ENABLE_MULTIMODAL_DIAGNOSIS: "true"
+  QWEN_VL_MODEL: "qwen-vl-max"
   
   # 上下文管理
   CONTEXT_MAX_TOKENS: "8000"
@@ -69,4 +73,7 @@ data:
   LLM_DEFAULT_MAX_TOKENS: "2000"
   LLM_SEMANTIC_CACHE_ENABLED: "true"
   LLM_SEMANTIC_CACHE_THRESHOLD: "0.95"
+
+  # 知识图谱实时更新
+  ENABLE_KG_REALTIME_UPDATE: "true"
 

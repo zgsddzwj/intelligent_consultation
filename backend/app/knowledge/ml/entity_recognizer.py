@@ -1,6 +1,5 @@
 """医疗实体识别器 - 使用LLM进行NER"""
 from typing import List, Dict, Any, Optional
-from app.services.llm_service import llm_service
 from app.utils.logger import app_logger
 import json
 import re
@@ -19,6 +18,11 @@ class MedicalEntityRecognizer:
     
     def __init__(self):
         self.cache = {}  # 简单的缓存机制
+
+    def _get_llm(self):
+        """延迟导入 llm_service，避免循环导入"""
+        from app.services.llm_service import llm_service
+        return llm_service
     
     def extract_entities(self, query: str, use_cache: bool = True) -> Dict[str, List[str]]:
         """
@@ -46,7 +50,7 @@ class MedicalEntityRecognizer:
         try:
             # 使用LLM进行实体识别
             prompt = self._build_ner_prompt(query)
-            response = llm_service.generate(
+            response = self._get_llm().generate(
                 prompt=prompt,
                 system_prompt="你是一个专业的医疗实体识别助手，擅长从医疗相关文本中准确提取实体。",
                 temperature=0.1,  # 低温度保证稳定性

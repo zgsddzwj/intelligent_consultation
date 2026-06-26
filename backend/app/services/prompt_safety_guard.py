@@ -12,7 +12,6 @@ import time
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
-from app.services.llm_service import llm_service
 from app.utils.logger import app_logger
 
 

@@ -6,7 +6,7 @@
 
 确保已安装：
 1. **Docker** 和 **Docker Compose** (用于一键启动全部服务)
-2. **Python 3.11+** (用于运行初始化脚本和ML模型训练)
+2. **uv** (用于管理 Python 依赖和运行脚本，安装: `curl -LsSf https://astral.sh/uv/install.sh | sh`)
 3. **Node.js 18+** (可选，用于本地开发前端)
 4. **Git** (用于克隆项目)
 
@@ -60,8 +60,8 @@ docker-compose up -d postgres redis neo4j milvus etcd minio
 
 # 终端2: 启动后端
 cd backend
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uv sync
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # 终端3: 启动前端
 cd frontend
@@ -79,7 +79,7 @@ npm run dev
 cd backend
 
 # 一键初始化全部（推荐）
-python scripts/init_all.py
+uv run python scripts/init_all.py
 ```
 
 这将自动执行：
@@ -95,16 +95,16 @@ python scripts/init_all.py
 cd backend
 
 # 训练所有ML模型（约2-3分钟）
-python scripts/train_ml_models.py
+uv run python scripts/train_ml_models.py
 
 # 或仅训练指定模型
-python scripts/train_ml_models.py --model intent      # 意图分类器
-python scripts/train_ml_models.py --model relevance    # 相关性评分器
-python scripts/train_ml_models.py --model ranking      # 排序优化器
-python scripts/train_ml_models.py --model reranker     # ML重排序器
+uv run python scripts/train_ml_models.py --model intent      # 意图分类器
+uv run python scripts/train_ml_models.py --model relevance    # 相关性评分器
+uv run python scripts/train_ml_models.py --model ranking      # 排序优化器
+uv run python scripts/train_ml_models.py --model reranker     # ML重排序器
 
 # 列出所有可用模型
-python scripts/train_ml_models.py --list-models
+uv run python scripts/train_ml_models.py --list-models
 ```
 
 训练的模型将保存在 `backend/models/` 目录下。
@@ -214,11 +214,11 @@ curl http://localhost:8000/health
 
 ### ML模型训练失败
 ```bash
-# 确保scikit-learn已安装
-pip install scikit-learn numpy
+# 确保scikit-learn已安装（已包含在项目依赖中）
+uv sync
 
 # 查看详细错误日志
-python scripts/train_ml_models.py --verbose
+uv run python scripts/train_ml_models.py --verbose
 ```
 
 ## 10. 下一步

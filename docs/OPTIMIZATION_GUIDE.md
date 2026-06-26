@@ -55,7 +55,7 @@
 | 任务 | 说明 | 建议方案 |
 |------|------|----------|
 | **日志归档** | `app.log` 无轮转策略 | 配置 Loguru 的 `rotation` 和 `retention` 策略。 |
-| **依赖清理** | `requirements.txt` 存在冗余 | 扫描并移除未使用的 Python 包。 |
+| **依赖清理** | `pyproject.toml` 存在冗余 | 使用 `uv tree` 审查依赖树，移除未使用的 Python 包。 |
 | **测试覆盖** | 核心路径缺乏单测 | 补充 `test_rag.py` 和 `test_agent_flow.py`。 |
 
 ---

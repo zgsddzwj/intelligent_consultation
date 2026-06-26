@@ -8,13 +8,13 @@
 
 Usage:
     # 训练所有模型
-    python scripts/train_ml_models.py
+    uv run python scripts/train_ml_models.py
     
     # 仅训练指定模型
-    python scripts/train_ml_models.py --model intent
+    uv run python scripts/train_ml_models.py --model intent
     
     # 使用自定义数据目录
-    python scripts/train_ml_models.py --data-dir ./data/training
+    uv run python scripts/train_ml_models.py --data-dir ./data/training
 
 Author: 智能医疗管家团队
 Version: 1.0.0

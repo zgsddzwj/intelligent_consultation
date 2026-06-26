@@ -6,8 +6,6 @@ import dashscope
 from dashscope import TextEmbedding
 from app.config import get_settings
 from app.utils.logger import app_logger
-from app.infrastructure.cache import MultiLevelCache
-
 settings = get_settings()
 dashscope.api_key = settings.QWEN_API_KEY
 
@@ -31,11 +29,10 @@ class Embedder:
         self.model = model or settings.QWEN_EMBEDDING_MODEL
         self.dimension = dimension
         self.enable_cache = enable_cache
-        self._cache = MultiLevelCache(
-            local_maxsize=1000,
-            redis_ttl=3600 * 24 * 7,  # 7天
-            prefix="embedding"
-        ) if enable_cache else None
+        self._cache = None
+        if enable_cache:
+            from app.infrastructure.cache import CacheManager
+            self._cache = CacheManager()
 
     def _make_cache_key(self, text: str) -> str:
         """生成缓存键"""

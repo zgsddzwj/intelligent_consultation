@@ -11,10 +11,15 @@ from app.utils.logger import app_logger
 from app.infrastructure.retry import retry, get_circuit_breaker
 from app.common.exceptions import LLMServiceException, ErrorCode
 from app.services.langfuse_service import langfuse_service
-from app.services.semantic_cache import semantic_cache
 from app.infrastructure.monitoring import track_llm_request, track_llm_cache_hit
 
 settings = get_settings()
+
+
+def _get_semantic_cache():
+    """延迟导入 semantic_cache，避免循环导入"""
+    from app.services.semantic_cache import semantic_cache
+    return semantic_cache
 
 if settings.LLM_PROVIDER == "qwen":
     dashscope.api_key = settings.QWEN_API_KEY
@@ -374,7 +379,7 @@ class LLMService:
         first_token_time = None
 
         cache_key = f"{system_prompt or ''}:{prompt}" if system_prompt else prompt
-        cached_result = semantic_cache.get(cache_key)
+        cached_result = _get_semantic_cache().get(cache_key)
         if cached_result:
             app_logger.info(f"语义缓存命中，相似度: {cached_result.get('similarity', 0):.3f}")
             track_llm_cache_hit("semantic")
@@ -452,7 +457,7 @@ class LLMService:
                     }
                 )
 
-            semantic_cache.set(
+            _get_semantic_cache().set(
                 cache_key,
                 result,
                 metadata={
@@ -736,3 +741,7 @@ class PromptTemplate:
         return PromptTemplate.DRUG_CONSULTATION_USER.format(
             context=context, question=question
         ) + drug_section
+
+
+# 全局单例
+llm_service = LLMService()
