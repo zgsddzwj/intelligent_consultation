@@ -35,7 +35,7 @@ Neo4j 管理界面：`http://localhost:7474`
 
 ```bash
 # 运行实时导入脚本 (推荐)
-python backend/scripts/import_medical_kg_realtime.py
+python backend/scripts/kg/import_medical_kg_realtime.py
 ```
 
 ### 3. 数据验证

@@ -2,7 +2,7 @@
 
 # 启动前端服务脚本
 
-cd "$(dirname "$0")/frontend"
+cd "$(dirname "$0")/../frontend"
 
 PORT="${FRONTEND_PORT:-3000}"
 echo "启动前端服务..."

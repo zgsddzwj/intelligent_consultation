@@ -1,115 +1,140 @@
 # 脚本使用说明
 
-## 初始化脚本
+本目录存放后端所有管理脚本，按用途分类到子目录中。所有脚本均在 `backend/` 目录下通过 `uv run` 执行。
 
-### 1. `init_all.py` - 一键初始化（推荐）
-```bash
-python scripts/init_all.py
+## 目录结构
+
 ```
-执行所有初始化步骤：
-- 数据库表初始化
-- 医疗数据获取
-- 知识图谱初始化
-- 向量数据库数据加载
-
-### 2. `init_db.py` - 初始化数据库表
-```bash
-python scripts/init_db.py
+scripts/
+├── setup/          # 系统初始化与验证
+├── data/           # 数据获取与加载
+├── kg/             # 知识图谱导入
+├── ml/             # ML 模型训练
+└── maintenance/    # 运维与测试
 ```
-创建所有数据库表（users, consultations, knowledge_documents, agent_logs）
 
-### 3. `init_knowledge_graph.py` - 初始化知识图谱
+## setup/ - 系统初始化与验证
+
+### `setup/init_all.py` - 一键初始化（推荐）
 ```bash
-python scripts/init_knowledge_graph.py
+uv run python scripts/setup/init_all.py
 ```
-在Neo4j中创建：
-- 15个科室
-- 13种疾病
-- 18种症状
-- 10种药物
-- 5种检查项目
-- 完整的关系网络
+执行所有初始化步骤：数据库表、医疗数据获取、知识图谱初始化、向量数据库数据加载。
 
-### 4. `fetch_medical_data.py` - 获取医疗数据
+### `setup/init_knowledge_graph.py` - 初始化知识图谱
 ```bash
-python scripts/fetch_medical_data.py
+uv run python scripts/setup/init_knowledge_graph.py
 ```
-获取基础医疗数据并保存到JSON文件
+在 Neo4j 中创建科室、疾病、症状、药物、检查项目及关系网络。
 
-### 5. `fetch_medical_data_enhanced.py` - 获取增强医疗数据
+### `setup/verify_setup.py` - 验证系统设置
 ```bash
-python scripts/fetch_medical_data_enhanced.py
+uv run python scripts/setup/verify_setup.py
 ```
-获取更丰富的医疗数据，包括：
-- 详细的疾病信息
-- 药物详细信息
-- 医疗指南文档
+检查环境变量配置、目录结构、Python 依赖。
 
-### 6. `load_sample_data.py` - 加载示例数据到向量数据库
+## data/ - 数据获取与加载
+
+### `data/fetch_medical_data.py` - 获取基础医疗数据
 ```bash
-python scripts/load_sample_data.py
+uv run python scripts/data/fetch_medical_data.py
 ```
-将示例医疗文档处理并加载到Milvus向量数据库
 
-### 7. `load_medical_knowledge.py` - 加载医疗知识
+### `data/fetch_medical_data_enhanced.py` - 获取增强医疗数据
 ```bash
-python scripts/load_medical_knowledge.py
+uv run python scripts/data/fetch_medical_data_enhanced.py
 ```
-将医疗数据加载到知识图谱和向量数据库
+获取更丰富的医疗数据（疾病详情、药物详情、医疗指南）。
 
-## 验证和测试脚本
-
-### 8. `verify_setup.py` - 验证系统设置
+### `data/load_sample_data.py` - 加载示例数据到向量数据库
 ```bash
-python scripts/verify_setup.py
+uv run python scripts/data/load_sample_data.py
 ```
-检查：
-- 环境变量配置
-- 目录结构
-- Python依赖
 
-### 9. `test_system.py` - 系统功能测试
+### `data/load_medical_knowledge.py` - 加载医疗知识
 ```bash
-python scripts/test_system.py
+uv run python scripts/data/load_medical_knowledge.py
 ```
-测试：
-- API健康检查
-- 知识图谱API
-- 咨询功能
+将医疗数据加载到知识图谱和向量数据库。
+
+### `data/check_import_status.py` - 检查知识图谱导入状态
+```bash
+uv run python scripts/data/check_import_status.py
+```
+
+## kg/ - 知识图谱导入
+
+### `kg/import_medical_kg.py` - 从外部数据源导入知识图谱
+```bash
+uv run python scripts/kg/import_medical_kg.py
+```
+
+### `kg/import_medical_kg_realtime.py` - 实时进度导入
+```bash
+uv run python scripts/kg/import_medical_kg_realtime.py
+```
+
+## ml/ - ML 模型训练
+
+### `ml/train_ml_models.py` - 训练 ML 模型
+```bash
+# 训练所有模型
+uv run python scripts/ml/train_ml_models.py
+
+# 仅训练指定模型
+uv run python scripts/ml/train_ml_models.py --model intent
+
+# 列出可用模型
+uv run python scripts/ml/train_ml_models.py --list-models
+```
+
+### `ml/prepare_training_data.py` - 准备训练数据
+```bash
+uv run python scripts/ml/prepare_training_data.py
+```
+
+## maintenance/ - 运维与测试
+
+### `maintenance/migrate_to_object_storage.py` - 迁移到对象存储
+```bash
+uv run python scripts/maintenance/migrate_to_object_storage.py
+```
+
+### `maintenance/test_system.py` - 系统功能测试
+```bash
+uv run python scripts/maintenance/test_system.py
+```
+测试 API 健康检查、知识图谱 API、咨询功能。
 
 ## 使用顺序
 
 ### 首次运行
 ```bash
+cd backend
 # 1. 验证设置
-python scripts/verify_setup.py
+uv run python scripts/setup/verify_setup.py
 
 # 2. 一键初始化（推荐）
-python scripts/init_all.py
+uv run python scripts/setup/init_all.py
 
-# 3. 测试系统
-python scripts/test_system.py
+# 3. 训练 ML 模型
+uv run python scripts/ml/train_ml_models.py
+
+# 4. 测试系统
+uv run python scripts/maintenance/test_system.py
 ```
 
 ### 分步初始化
 ```bash
-# 1. 初始化数据库
-python scripts/init_db.py
-
-# 2. 获取医疗数据
-python scripts/fetch_medical_data_enhanced.py
-
-# 3. 初始化知识图谱
-python scripts/init_knowledge_graph.py
-
-# 4. 加载数据
-python scripts/load_sample_data.py
-python scripts/load_medical_knowledge.py
+cd backend
+uv run python scripts/data/fetch_medical_data_enhanced.py
+uv run python scripts/setup/init_knowledge_graph.py
+uv run python scripts/data/load_sample_data.py
+uv run python scripts/data/load_medical_knowledge.py
 ```
 
 ## 注意事项
 
-- 确保Docker服务已启动（PostgreSQL、Neo4j、Milvus等）
-- 确保`.env`文件中的API密钥已配置
+- 确保依赖服务已启动（PostgreSQL、Neo4j、Milvus、Redis 等，可用 `docker compose up -d`）
+- 确保 `.env` 文件中的 API 密钥已配置
 - 某些脚本需要等待服务完全启动后再运行
-

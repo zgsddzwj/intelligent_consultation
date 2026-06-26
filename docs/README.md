@@ -2,7 +2,7 @@
 
 本文档目录包含项目的核心架构文档、技术指南和开发规范。
 
-快速跳转： [架构](ARCHITECTURE.md) | [RAG 指南](RAG_GUIDE.md) | [知识图谱](KNOWLEDGE_GRAPH_GUIDE.md) | [部署](../DEPLOYMENT.md)
+快速跳转： [架构](ARCHITECTURE.md) | [RAG 指南](RAG_GUIDE.md) | [知识图谱](KNOWLEDGE_GRAPH_GUIDE.md) | [部署](DEPLOYMENT.md)
 
 ## 📚 核心文档
 
@@ -26,6 +26,10 @@
   - 实体识别 (NER) 与关系抽取
   - 图谱查询优化与 Cypher 模板
 
+- [Neo4j 访问指南 (ACCESS_NEO4J.md)](ACCESS_NEO4J.md)
+  - Web 浏览器 / 命令行 / Python 脚本访问 Neo4j
+  - 常用 Cypher 查询示例
+
 - [系统优化与路线图 (OPTIMIZATION_GUIDE.md)](OPTIMIZATION_GUIDE.md)
   - **包含内容**：原 `OPTIMIZATION_*.md` 系列文档的整合
   - 已完成的 QA 优化清单
@@ -34,17 +38,19 @@
 
 ## 🛠️ 设置与部署
 
-- [完整设置指南](../COMPLETE_SETUP.md) - 环境搭建与初始化
-- [部署文档](../DEPLOYMENT.md) - Docker/K8s 部署说明
+- [快速开始指南 (QUICKSTART.md)](QUICKSTART.md) - 快速启动和配置
+- [完整设置指南 (COMPLETE_SETUP.md)](COMPLETE_SETUP.md) - 环境搭建与初始化
+- [部署文档 (DEPLOYMENT.md)](DEPLOYMENT.md) - Docker/K8s 部署说明
 - [Kubernetes 部署](../k8s/README.md) - K8s 详细配置
 
 ## 📏 开发规范
 
 - [命名规范 (NAMING_CONVENTIONS.md)](NAMING_CONVENTIONS.md) - 代码风格与命名约定
+- [贡献指南 (CONTRIBUTING.md)](CONTRIBUTING.md) - 提交 Bug 报告、功能建议或 Pull Request
+- [日志指南 (LOGGING.md)](LOGGING.md) - 如何查看与排查日志
 
 ## 🔗 其他资源
 
 - [项目主页](../README.md) - 项目概述与快速开始
 - [脚本说明](../backend/scripts/README.md) - 数据处理脚本使用说明
-- [测试指南](../backend/tests/README.md) - 单元测试与集成测试
-- [日志指南](../LOGGING.md) - 如何查看与排查日志
+- [测试指南](../backend/tests/) - 单元测试与集成测试

@@ -8,7 +8,7 @@ from typing import Dict, List, Any
 from tqdm import tqdm
 
 # 添加项目根目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.knowledge.graph.builder import KnowledgeGraphBuilder
 from app.utils.logger import app_logger
@@ -16,7 +16,7 @@ from app.utils.logger import app_logger
 
 # QASystemOnMedicalKG数据URL
 MEDICAL_JSON_URL = "https://raw.githubusercontent.com/liuhuanyong/QASystemOnMedicalKG/master/data/medical.json"
-DATA_DIR = Path(__file__).parent.parent.parent / "data" / "external"
+DATA_DIR = Path(__file__).parent.parent.parent.parent / "data" / "external"
 MEDICAL_JSON_PATH = DATA_DIR / "medical.json"
 
 

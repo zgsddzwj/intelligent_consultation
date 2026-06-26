@@ -4,6 +4,9 @@
 
 set -e
 
+# 切换到项目根目录（脚本位于 scripts/ 下）
+cd "$(dirname "$0")/.."
+
 echo "=========================================="
 echo "智能医疗管家平台 - 启动脚本"
 echo "=========================================="
@@ -68,13 +71,13 @@ echo ""
 echo "[3/3] 数据初始化..."
 if [ "$INIT_DATA" = true ]; then
     echo "正在运行 init_all.py ..."
-    (cd backend && uv run python scripts/init_all.py) || {
+    (cd backend && uv run python scripts/setup/init_all.py) || {
         echo "警告: init_all.py 执行失败，请手动运行"
     }
 else
     echo "提示: 首次运行请执行以下命令初始化数据："
-    echo "  ./start.sh --init"
-    echo "  或: cd backend && uv run python scripts/init_all.py"
+    echo "  ./scripts/start.sh --init"
+    echo "  或: cd backend && uv run python scripts/setup/init_all.py"
 fi
 
 echo ""

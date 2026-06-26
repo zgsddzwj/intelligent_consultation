@@ -41,10 +41,10 @@ QWEN_API_KEY=sk-xxxxxx
 
 ```bash
 # 1. 准备训练数据
-uv run python scripts/prepare_training_data.py
+uv run python scripts/ml/prepare_training_data.py
 
 # 2. 训练模型
-uv run python scripts/train_ml_models.py
+uv run python scripts/ml/train_ml_models.py
 ```
 
 ---

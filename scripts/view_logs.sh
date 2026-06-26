@@ -1,6 +1,9 @@
 #!/bin/bash
 # 日志查看脚本
 
+# 切换到项目根目录（脚本位于 scripts/ 下）
+cd "$(dirname "$0")/.."
+
 echo "=== 日志查看工具 ==="
 echo ""
 echo "1. 后端日志 (backend/logs/app.log)"

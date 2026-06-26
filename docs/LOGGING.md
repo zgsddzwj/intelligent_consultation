@@ -231,7 +231,7 @@ alias logs-all='tail -f /tmp/backend.log /tmp/frontend.log'
 
 ### 方法一：使用查看脚本
 ```bash
-./view_logs.sh
+./scripts/view_logs.sh
 ```
 
 ### 方法二：直接查看

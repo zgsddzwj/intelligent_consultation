@@ -160,7 +160,7 @@ kubectl exec -it -n medical-consultation deployment/backend -- bash
 
 # 运行初始化脚本
 cd /app
-python scripts/init_all.py
+python scripts/setup/init_all.py
 ```
 
 ## 验证部署

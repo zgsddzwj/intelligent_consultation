@@ -2,7 +2,7 @@
 
 # 启动后端服务脚本（使用 uv 管理依赖）
 
-cd "$(dirname "$0")/backend"
+cd "$(dirname "$0")/../backend"
 
 echo "启动后端服务..."
 echo "依赖管理: uv"

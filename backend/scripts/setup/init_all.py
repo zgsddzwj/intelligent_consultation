@@ -4,11 +4,11 @@ import time
 from pathlib import Path
 
 # 添加项目根目录到路径
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.database.init_db import init_db
-from scripts.init_knowledge_graph import init_knowledge_graph
-from scripts.fetch_medical_data import save_medical_data_to_json, download_medical_documents
+from scripts.setup.init_knowledge_graph import init_knowledge_graph
+from scripts.data.fetch_medical_data import save_medical_data_to_json, download_medical_documents
 from app.utils.logger import app_logger
 
 
@@ -89,7 +89,7 @@ def init_all():
         # 4. 加载示例数据到向量数据库
         app_logger.info("[4/4] 加载示例数据到向量数据库...")
         try:
-            from scripts.load_sample_data import load_sample_data_to_vector_db
+            from scripts.data.load_sample_data import load_sample_data_to_vector_db
             load_sample_data_to_vector_db()
             app_logger.info("  ✓ 向量数据库数据加载完成")
         except Exception as e:

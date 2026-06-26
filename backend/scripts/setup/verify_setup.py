@@ -4,7 +4,7 @@ import os
 import socket
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.config import get_settings
 from app.utils.logger import app_logger
@@ -140,7 +140,7 @@ def main():
         app_logger.info("\n✓ 所有检查通过！可以开始初始化数据。")
         app_logger.info("\n下一步:")
         app_logger.info("  1. 启动服务: docker-compose up -d")
-        app_logger.info("  2. 初始化数据: uv run python scripts/init_all.py")
+        app_logger.info("  2. 初始化数据: uv run python scripts/setup/init_all.py")
     else:
         app_logger.warning("\n⚠ 部分检查未通过，请先解决上述问题。")
 

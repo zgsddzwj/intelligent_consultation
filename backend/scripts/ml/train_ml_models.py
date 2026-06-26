@@ -8,13 +8,13 @@
 
 Usage:
     # 训练所有模型
-    uv run python scripts/train_ml_models.py
+    uv run python scripts/ml/train_ml_models.py
     
     # 仅训练指定模型
-    uv run python scripts/train_ml_models.py --model intent
+    uv run python scripts/ml/train_ml_models.py --model intent
     
     # 使用自定义数据目录
-    uv run python scripts/train_ml_models.py --data-dir ./data/training
+    uv run python scripts/ml/train_ml_models.py --data-dir ./data/training
 
 Author: 智能医疗管家团队
 Version: 1.0.0
@@ -43,7 +43,7 @@ from sklearn.metrics import (
 import pickle
 
 # 添加项目根路径到sys.path
-PROJECT_ROOT = Path(__file__).parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.utils.logger import app_logger
@@ -1041,19 +1041,19 @@ def parse_arguments() -> argparse.Namespace:
         epilog="""
 示例用法:
   # 训练所有模型
-  python scripts/train_ml_models.py
+  python scripts/ml/train_ml_models.py
   
   # 仅训练意图分类器
-  python scripts/train_ml_models.py --model intent
+  python scripts/ml/train_ml_models.py --model intent
   
   # 训练多个指定模型
-  python scripts/train_ml_models.py --model intent relevance
+  python scripts/ml/train_ml_models.py --model intent relevance
   
   # 列出所有可用模型
-  python scripts/train_ml_models.py --list-models
+  python scripts/ml/train_ml_models.py --list-models
 
   # 输出详细日志
-  python scripts/train_ml_models.py --verbose
+  python scripts/ml/train_ml_models.py --verbose
         """
     )
     

@@ -61,10 +61,10 @@ docker-compose down -v
 cd backend
 
 # 一键初始化全部数据
-uv run python scripts/init_all.py
+uv run python scripts/setup/init_all.py
 
 # 训练ML模型
-uv run python scripts/train_ml_models.py
+uv run python scripts/ml/train_ml_models.py
 ```
 
 ---
@@ -203,10 +203,10 @@ kubectl logs -f deployment/backend -n medical-platform
 cd backend
 
 # 一键初始化（含知识图谱 + 向量库 + ML模型）
-uv run python scripts/init_all.py
+uv run python scripts/setup/init_all.py
 
 # 单独训练ML模型
-uv run python scripts/train_ml_models.py
+uv run python scripts/ml/train_ml_models.py
 ```
 
 初始化内容：
@@ -294,7 +294,7 @@ ls -la backend/models/intent/
 ls -la backend/models/relevance/
 
 # 重新训练
-uv run python scripts/train_ml_models.py --model intent --verbose
+uv run python scripts/ml/train_ml_models.py --model intent --verbose
 ```
 
 ---

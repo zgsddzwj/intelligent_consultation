@@ -70,10 +70,10 @@ curl -X POST http://localhost:8000/api/v1/knowledge/documents \
 ```bash
 # 批量上传本地文档到对象存储
 cd backend
-uv run python scripts/load_medical_knowledge.py --upload-to-storage
+uv run python scripts/data/load_medical_knowledge.py --upload-to-storage
 
 # 从对象存储加载到向量数据库
-uv run python scripts/load_medical_knowledge.py --use-storage
+uv run python scripts/data/load_medical_knowledge.py --use-storage
 ```
 
 **支持的格式**：
@@ -129,28 +129,28 @@ uv run python scripts/load_medical_knowledge.py --use-storage
 1. **知识图谱初始化**：
    ```bash
    cd backend
-   uv run python scripts/init_knowledge_graph.py
+   uv run python scripts/setup/init_knowledge_graph.py
    ```
 
 2. **文档上传**：
    - 通过API上传（推荐）
-   - 或批量上传本地文档：`uv run python scripts/load_medical_knowledge.py --upload-to-storage`
+   - 或批量上传本地文档：`uv run python scripts/data/load_medical_knowledge.py --upload-to-storage`
 
 3. **从对象存储加载到向量数据库**：
    ```bash
-   uv run python scripts/load_medical_knowledge.py --use-storage
+   uv run python scripts/data/load_medical_knowledge.py --use-storage
    ```
 
 ### 本地开发环境
 
 1. **一键初始化**：
    ```bash
-   uv run python scripts/init_all.py
+   uv run python scripts/setup/init_all.py
    ```
 
 2. **从本地文件系统加载**（仅开发用）：
    ```bash
-   uv run python scripts/load_medical_knowledge.py
+   uv run python scripts/data/load_medical_knowledge.py
    ```
 
 ## 数据存储位置
@@ -169,13 +169,13 @@ uv run python scripts/load_medical_knowledge.py --use-storage
 ```bash
 # 1. 批量上传本地文档到对象存储
 cd backend
-uv run python scripts/load_medical_knowledge.py --upload-to-storage
+uv run python scripts/data/load_medical_knowledge.py --upload-to-storage
 
 # 2. 验证上传结果
 # 检查对象存储中的文件
 
 # 3. 从对象存储加载到向量数据库
-uv run python scripts/load_medical_knowledge.py --use-storage
+uv run python scripts/data/load_medical_knowledge.py --use-storage
 ```
 
 ## 注意事项

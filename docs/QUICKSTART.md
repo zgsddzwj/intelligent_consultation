@@ -79,7 +79,7 @@ npm run dev
 cd backend
 
 # 一键初始化全部（推荐）
-uv run python scripts/init_all.py
+uv run python scripts/setup/init_all.py
 ```
 
 这将自动执行：
@@ -95,16 +95,16 @@ uv run python scripts/init_all.py
 cd backend
 
 # 训练所有ML模型（约2-3分钟）
-uv run python scripts/train_ml_models.py
+uv run python scripts/ml/train_ml_models.py
 
 # 或仅训练指定模型
-uv run python scripts/train_ml_models.py --model intent      # 意图分类器
-uv run python scripts/train_ml_models.py --model relevance    # 相关性评分器
-uv run python scripts/train_ml_models.py --model ranking      # 排序优化器
-uv run python scripts/train_ml_models.py --model reranker     # ML重排序器
+uv run python scripts/ml/train_ml_models.py --model intent      # 意图分类器
+uv run python scripts/ml/train_ml_models.py --model relevance    # 相关性评分器
+uv run python scripts/ml/train_ml_models.py --model ranking      # 排序优化器
+uv run python scripts/ml/train_ml_models.py --model reranker     # ML重排序器
 
 # 列出所有可用模型
-uv run python scripts/train_ml_models.py --list-models
+uv run python scripts/ml/train_ml_models.py --list-models
 ```
 
 训练的模型将保存在 `backend/models/` 目录下。
@@ -218,7 +218,7 @@ curl http://localhost:8000/health
 uv sync
 
 # 查看详细错误日志
-uv run python scripts/train_ml_models.py --verbose
+uv run python scripts/ml/train_ml_models.py --verbose
 ```
 
 ## 10. 下一步

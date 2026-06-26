@@ -199,13 +199,13 @@ cp backend/.env.example backend/.env
 # 编辑 backend/.env，至少配置 QWEN_API_KEY 或 DEEPSEEK_API_KEY
 
 # 3. 启动全部服务
-chmod +x start.sh && ./start.sh
+chmod +x scripts/start.sh && ./scripts/start.sh
 # 或: docker-compose up -d
 
 # 4. 初始化数据（首次运行）
 cd backend
-uv run python scripts/init_all.py
-uv run python scripts/train_ml_models.py
+uv run python scripts/setup/init_all.py
+uv run python scripts/ml/train_ml_models.py
 ```
 
 ### 方式二：本地开发
@@ -273,7 +273,12 @@ intelligent_consultation/
 │   │   │   └── prompt_templates/     #   Prompt 模板管理
 │   │   ├── utils/                    # 工具类 (安全/验证/日志)
 │   │   └── main.py                   # 应用入口 (优雅启动/K8s probes)
-│   ├── scripts/                      # 管理脚本 (初始化/训练/数据导入)
+│   ├── scripts/                      # 管理脚本（按用途分类）
+│   │   ├── setup/                   #   系统初始化与验证
+│   │   ├── data/                    #   数据获取与加载
+│   │   ├── kg/                      #   知识图谱导入
+│   │   ├── ml/                      #   ML 模型训练
+│   │   └── maintenance/             #   运维与测试
 │   ├── tests/                        # 测试套件 (单元/集成/性能)
 │   ├── pyproject.toml               # Python 依赖与项目配置 (uv 管理)
 │   ├── uv.lock                      # uv 依赖锁文件
@@ -285,12 +290,13 @@ intelligent_consultation/
 │       ├── services/                 # API 服务层 (统一响应/SSE 流式)
 │       ├── stores/                   # Zustand 状态管理
 │       └── App.tsx                   # 应用布局 (代码分割/懒加载)
-├── data/                             # 数据目录
-├── docs/                             # 详细文档
+├── data/                             # 数据目录 (种子/外部/示例数据)
+├── docs/                             # 详细文档 (架构/指南/规范)
 ├── k8s/                              # Kubernetes 部署配置
+├── scripts/                          # 启动/运维 Shell 脚本
 ├── .github/workflows/                # CI/CD 工作流
 ├── docker-compose.yml                # Docker Compose 编排
-└── start.sh                          # 一键启动脚本
+└── README.md                         # 项目说明
 ```
 
 ---
@@ -301,16 +307,16 @@ intelligent_consultation/
 cd backend
 
 # 训练所有模型
-uv run python scripts/train_ml_models.py
+uv run python scripts/ml/train_ml_models.py
 
 # 仅训练指定模型
-uv run python scripts/train_ml_models.py --model intent
+uv run python scripts/ml/train_ml_models.py --model intent
 
 # 使用自定义数据目录
-uv run python scripts/train_ml_models.py --data-dir ./data/training
+uv run python scripts/ml/train_ml_models.py --data-dir ./data/training
 
 # 输出详细报告
-uv run python scripts/train_ml_models.py --verbose
+uv run python scripts/ml/train_ml_models.py --verbose
 ```
 
 ---
@@ -354,18 +360,20 @@ GitHub Actions 全流程自动化 (`.github/workflows/ci.yml`)：
 
 | 文档 | 说明 |
 |------|------|
-| [快速开始指南](QUICKSTART.md) | 快速启动和配置 |
-| [部署文档](DEPLOYMENT.md) | 部署方式和环境配置 |
+| [快速开始指南](docs/QUICKSTART.md) | 快速启动和配置 |
+| [部署文档](docs/DEPLOYMENT.md) | 部署方式和环境配置 |
 | [架构文档](docs/ARCHITECTURE.md) | 系统架构设计 |
 | [RAG 使用指南](docs/RAG_GUIDE.md) | RAG 系统使用指南 |
 | [知识图谱指南](docs/KNOWLEDGE_GRAPH_GUIDE.md) | KG 操作与维护 |
 | [优化指南](docs/OPTIMIZATION_GUIDE.md) | 系统性能优化 |
+| [日志指南](docs/LOGGING.md) | 日志查看与排查 |
+| [贡献指南](docs/CONTRIBUTING.md) | 参与项目贡献 |
 
 ---
 
 ## 🤝 参与贡献
 
-欢迎任何形式的贡献！请阅读 [贡献指南](CONTRIBUTING.md) 了解如何提交 Bug 报告、功能建议或 Pull Request。
+欢迎任何形式的贡献！请阅读 [贡献指南](docs/CONTRIBUTING.md) 了解如何提交 Bug 报告、功能建议或 Pull Request。
 
 ```bash
 # Fork 后开发流程

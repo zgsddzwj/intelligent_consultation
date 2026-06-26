@@ -1,7 +1,7 @@
 """检查导入状态"""
 import sys
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.knowledge.graph.neo4j_client import get_neo4j_client
 from app.utils.logger import app_logger
