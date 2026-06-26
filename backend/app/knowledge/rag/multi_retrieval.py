@@ -208,19 +208,19 @@ class MultiRetrieval:
         try:
             vector_results = self.vector_retriever.retrieve(query, top_k=5)
             stats["methods"]["vector"] = len(vector_results)
-        except:
+        except Exception:
             stats["methods"]["vector"] = 0
         
         try:
             bm25_results = self.bm25_retriever.retrieve(query, top_k=5)
             stats["methods"]["bm25"] = len(bm25_results)
-        except:
+        except Exception:
             stats["methods"]["bm25"] = 0
         
         try:
             kg_results = self.kg_retriever.retrieve(query, top_k=5)
             stats["methods"]["kg"] = len(kg_results)
-        except:
+        except Exception:
             stats["methods"]["kg"] = 0
         
         stats["total_results"] = sum(stats["methods"].values())

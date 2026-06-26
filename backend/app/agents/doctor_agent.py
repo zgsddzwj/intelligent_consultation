@@ -112,16 +112,11 @@ class DoctorAgent(BaseAgent):
                 return ("rag", {"results": []}, "")
         
         def execute_kg():
-            """执行知识图谱查询（从RAG结果中提取，或使用KG工具）"""
+            """执行知识图谱查询（直接使用KG检索器，避免与RAG重复查询）"""
             try:
-                # 方法1: 从RAG结果中提取知识图谱相关结果
-                # RAG检索已经包含了知识图谱检索（通过AdvancedRAG）
-                rag_result = self.rag_tool.execute(question, top_k=5)
-                kg_results = [
-                    r for r in rag_result.get("results", [])
-                    if r.get("retrieval_method") == "knowledge_graph" or 
-                       r.get("source") == "knowledge_graph"
-                ]
+                from app.knowledge.rag.kg_retriever import KnowledgeGraphRetriever
+                kg_retriever = KnowledgeGraphRetriever()
+                kg_results = kg_retriever.retrieve(question, top_k=3)
                 
                 if kg_results:
                     kg_context = "\n".join([
@@ -129,22 +124,6 @@ class DoctorAgent(BaseAgent):
                         for r in kg_results[:3]
                     ])
                     return ("kg", kg_results, kg_context)
-                
-                # 方法2: 如果RAG中没有KG结果，尝试直接使用KG工具
-                # 使用实体识别进行智能查询
-                try:
-                    from app.knowledge.rag.kg_retriever import KnowledgeGraphRetriever
-                    kg_retriever = KnowledgeGraphRetriever()
-                    kg_results = kg_retriever.retrieve(question, top_k=3)
-                    
-                    if kg_results:
-                        kg_context = "\n".join([
-                            f"- {r.get('text', '')}" 
-                            for r in kg_results[:3]
-                        ])
-                        return ("kg", kg_results, kg_context)
-                except Exception as kg_error:
-                    app_logger.debug(f"直接KG查询失败: {kg_error}")
                 
                 return ("kg", None, "")
             except Exception as e:
@@ -166,6 +145,19 @@ class DoctorAgent(BaseAgent):
                         rag_context = formatted_context
                         if rag_result.get("results"):
                             tools_used.append("rag_search")
+                            # 从RAG结果中提取知识图谱相关结果（AdvancedRAG已包含KG检索）
+                            kg_from_rag = [
+                                r for r in rag_result.get("results", [])
+                                if r.get("retrieval_method") == "knowledge_graph" or 
+                                   r.get("source") == "knowledge_graph"
+                            ]
+                            if kg_from_rag and not kg_context:
+                                kg_context = "\n".join([
+                                    f"- {r.get('text', '')}" 
+                                    for r in kg_from_rag[:3]
+                                ])
+                                if "knowledge_graph_query" not in tools_used:
+                                    tools_used.append("knowledge_graph_query")
                     elif tool_type == "kg":
                         if result:
                             kg_context = formatted_context

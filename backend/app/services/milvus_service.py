@@ -60,7 +60,7 @@ class MilvusService:
                 connections.get_connection(alias="default")
                 app_logger.info("✓ 已连接到Milvus（复用现有连接）")
                 return
-            except:
+            except Exception:
                 pass
             
             connections.connect(

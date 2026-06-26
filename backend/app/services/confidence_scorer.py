@@ -183,7 +183,7 @@ class ConfidenceScorer:
             words = jieba.cut(text)
             # 过滤掉停用词和单字
             keywords.extend([w for w in words if len(w) > 1 and w not in ["的", "是", "在", "有"]])
-        except:
+        except Exception:
             pass
         
         return keywords[:20]  # 最多返回20个关键词

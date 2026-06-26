@@ -286,7 +286,7 @@ class SemanticCache:
                         if cached_data and cached_data.get("timestamp", 0) < cutoff_timestamp:
                             redis_service.delete(key)
                             cleared += 1
-                    except:
+                    except Exception:
                         continue
                 app_logger.info(f"清理了 {cleared} 个旧缓存项")
                 

@@ -205,7 +205,7 @@ class MinerUClient:
             try:
                 async with aiofiles.open(failed_marker, 'w') as f:
                     await f.write(f"Download failed: {str(e)}")
-            except:
+            except Exception:
                 pass
             
             app_logger.error(f"下载失败: {e}")

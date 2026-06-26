@@ -224,7 +224,7 @@ class BaseAgent(ABC):
             if span:
                 try:
                     span.end(metadata={"success": False, "error": error_msg})
-                except:
+                except Exception:
                     pass
             raise ValueError(error_msg)
         
