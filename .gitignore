@@ -100,10 +100,9 @@ Thumbs.db
 
 data/external/
 
-# 截屏文件
+# 截屏文件（避免提交本地截图）
 截屏*.png
 截图*.png
-*.png
 
 # 可执行文件（本地编译）
 main
