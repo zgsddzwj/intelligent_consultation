@@ -281,8 +281,7 @@ intelligent_consultation/
 │   │   └── maintenance/             #   运维与测试
 │   ├── tests/                        # 测试套件 (单元/集成/性能)
 │   ├── pyproject.toml               # Python 依赖与项目配置 (uv 管理)
-│   ├── uv.lock                      # uv 依赖锁文件
-│   └── requirements.txt             # 由 uv 导出 (向后兼容)
+│   └── uv.lock                      # uv 依赖锁文件
 ├── frontend/                         # 前端应用 (React + Vite)
 │   └── src/
 │       ├── pages/                    # 页面 (患者门户/医生工作台/知识图谱/管理)
