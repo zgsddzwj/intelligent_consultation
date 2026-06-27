@@ -3,7 +3,7 @@ from typing import Dict, Any, Optional
 import time
 from app.agents.base import BaseAgent
 from app.agents.tools.rag_tool import RAGTool
-from app.services.llm_service import PromptTemplate
+from app.prompts import AgentPrompts
 from app.utils.logger import app_logger
 
 
@@ -30,7 +30,7 @@ class CustomerServiceAgent(BaseAgent):
     
     def get_system_prompt(self) -> str:
         """获取系统Prompt"""
-        return PromptTemplate.CUSTOMER_SERVICE_SYSTEM
+        return AgentPrompts.CUSTOMER_SERVICE_SYSTEM
     
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """处理客服咨询"""
@@ -115,7 +115,7 @@ class CustomerServiceAgent(BaseAgent):
         full_context = f"{history_text}{rag_context}" if history_text else rag_context
         
         # 4. 生成回答
-        prompt = PromptTemplate.format_customer_service_prompt(question, full_context)
+        prompt = AgentPrompts.format_customer_service_prompt(question, full_context)
         
         answer = self.llm.generate(
             prompt=prompt,
@@ -133,14 +133,8 @@ class CustomerServiceAgent(BaseAgent):
     def _handle_feedback(self, question: str, feedback_data: Dict, context: Dict) -> Dict[str, Any]:
         """处理用户反馈"""
         history_text = self._format_history(context)
-        
-        prompt = f"""{history_text}
-用户反馈：
 
-反馈内容：{question}
-反馈数据：{feedback_data}
-
-请确认收到反馈，并表示感谢。"""
+        prompt = AgentPrompts.format_feedback_prompt(question, str(feedback_data), history_text)
         
         answer = self.llm.generate(
             prompt=prompt,

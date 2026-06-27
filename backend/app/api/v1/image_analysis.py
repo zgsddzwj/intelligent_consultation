@@ -7,6 +7,7 @@ from app.utils.validators import validate_image_file
 from app.config import get_settings
 from app.infrastructure.retry import retry
 from app.common.exceptions import LLMServiceException, ErrorCode
+from app.prompts import ImagePrompts, KnowledgePrompts
 import base64
 import json
 import re
@@ -23,7 +24,7 @@ class ImageAnalysisRequest(BaseModel):
     """图片分析请求"""
     image_base64: str
     prompt: Optional[str] = Field(
-        default="请识别图片中的医疗相关术语，包括疾病名称、症状、药物名称、检查项目等，并提取出来。",
+        default=ImagePrompts.IMAGE_ANALYZE_DEFAULT,
         description="分析提示词"
     )
 
@@ -216,7 +217,7 @@ def _call_qwen_vl(image_base64: str, prompt: str) -> str:
 @router.post("/analyze", response_model=ImageAnalysisResponse)
 async def analyze_medical_image(
     file: UploadFile = File(...),
-    prompt: str = "请识别图片中的医疗相关术语，包括疾病名称、症状、药物名称、检查项目等，并提取出来。"
+    prompt: str = ImagePrompts.IMAGE_ANALYZE_DEFAULT
 ):
     """
     分析医疗图片，提取医疗术语
@@ -245,22 +246,7 @@ async def analyze_medical_image(
         analysis_text = _call_qwen_vl(image_base64, prompt)
 
         # 使用LLM进一步提取结构化医疗术语
-        extraction_prompt = f"""请从以下文本中提取医疗相关术语，并按类型分类：
-
-{analysis_text}
-
-请以JSON格式返回，格式如下：
-{{
-    "terms": [
-        {{"term": "术语名称", "type": "疾病|症状|药物|检查|科室"}},
-        ...
-    ]
-}}
-
-注意：
-- 只返回JSON，不要添加其他说明文字
-- type字段只能是：疾病、症状、药物、检查、科室 之一
-- 如果没有识别到医疗术语，返回空数组"""
+        extraction_prompt = KnowledgePrompts.format_image_terms_classify_prompt(analysis_text)
 
         from app.services.llm_service import llm_service
         extraction_result = llm_service.generate(
@@ -414,38 +400,7 @@ async def diagnose_from_image(
         image_base64 = base64.b64encode(image_content).decode('utf-8')
 
         # 构建多模态诊断 Prompt
-        context_section = f"\n患者背景信息：{patient_context}\n" if patient_context else ""
-
-        diagnosis_prompt = f"""你是一位专业的医疗影像分析AI。请仔细分析这张医疗相关图片，并生成结构化诊断报告。
-
-{context_section}
-
-请按以下JSON格式返回结果（只返回JSON，不要其他文字）：
-{{
-    "image_type": "图片类型（lab_report|prescription|skin_condition|xray|ct_scan|other）",
-    "image_type_confidence": 0.0-1.0的置信度,
-    "findings": [
-        {{
-            "category": "发现类别（如：异常指标、阳性发现、阴性发现）",
-            "item": "具体项目名称",
-            "value": "检测值或描述",
-            "reference": "参考范围（如适用）",
-            "abnormality": "normal|abnormal_low|abnormal_high|positive|negative"
-        }}
-    ],
-    "summary": "诊断摘要（简洁描述图片中的关键发现）",
-    "recommendations": [
-        "建议1",
-        "建议2"
-    ],
-    "risk_level": "low|medium|high"
-}}
-
-注意：
-1. 如果图片不是医疗相关内容，image_type 设为 "other"，findings 为空数组
-2. risk_level 基于发现的异常程度判断
-3. recommendations 应包含后续检查或就诊建议
-4. 只返回JSON，不要添加Markdown格式或其他说明"""
+        diagnosis_prompt = ImagePrompts.format_diagnosis_report_prompt(patient_context)
 
         # 调用 Qwen-VL 进行诊断
         raw_result = _call_qwen_vl(image_base64, diagnosis_prompt)

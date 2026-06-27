@@ -6,7 +6,7 @@ from app.agents.base import BaseAgent
 from app.agents.tools.rag_tool import RAGTool
 from app.agents.tools.knowledge_graph_tool import KnowledgeGraphTool
 from app.knowledge.ml.entity_recognizer import MedicalEntityRecognizer
-from app.services.llm_service import PromptTemplate
+from app.prompts import AgentPrompts
 from app.utils.logger import app_logger
 
 
@@ -31,7 +31,7 @@ class HealthManagerAgent(BaseAgent):
     
     def get_system_prompt(self) -> str:
         """获取系统Prompt"""
-        return PromptTemplate.HEALTH_MANAGER_SYSTEM
+        return AgentPrompts.HEALTH_MANAGER_SYSTEM
     
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """处理健康管理咨询"""
@@ -161,13 +161,7 @@ class HealthManagerAgent(BaseAgent):
         full_context = f"{history_text}{combined_context}" if history_text else combined_context
         
         # 3. 生成回答
-        prompt = f"""基于以下健康管理信息，回答用户的问题：
-
-{full_context}
-
-用户问题：{question}
-
-请提供专业、实用的健康管理建议。"""
+        prompt = AgentPrompts.format_health_management_prompt(question, full_context)
         
         answer = self.llm.generate(
             prompt=prompt,
@@ -259,7 +253,7 @@ class HealthManagerAgent(BaseAgent):
         full_context = f"{history_text}{combined_context}" if history_text else combined_context
         
         # 3. 生成计划
-        prompt = PromptTemplate.format_health_plan_prompt(question, profile, full_context)
+        prompt = AgentPrompts.format_health_plan_prompt(question, profile, full_context)
         
         answer = self.llm.generate(
             prompt=prompt,
@@ -280,18 +274,8 @@ class HealthManagerAgent(BaseAgent):
     def _handle_health_tracking(self, question: str, profile: Dict, context: Dict, trace_id: Optional[str] = None) -> Dict[str, Any]:
         """处理健康数据追踪"""
         history_text = self._format_history(context)
-        
-        prompt = f"""{history_text}
-用户健康数据追踪咨询：
 
-用户问题：{question}
-用户信息：{profile}
-
-请提供健康数据追踪建议，包括：
-1. 需要追踪的指标
-2. 追踪频率
-3. 数据记录方法
-4. 异常情况处理"""
+        prompt = AgentPrompts.format_health_tracking_prompt(question, str(profile), history_text)
         
         answer = self.llm.generate(
             prompt=prompt,

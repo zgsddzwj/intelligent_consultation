@@ -4,6 +4,7 @@ import re
 from app.services.llm_service import llm_service
 from app.utils.logger import app_logger
 from app.config import get_settings
+from app.prompts import KnowledgePrompts
 
 settings = get_settings()
 
@@ -12,26 +13,7 @@ class HallucinationDetector:
     """幻觉检测器"""
     
     def __init__(self):
-        self.verification_prompt_template = """请验证以下陈述是否与提供的上下文信息一致。
-
-上下文信息：
-{context}
-
-需要验证的陈述：
-{claim}
-
-请回答：
-1. 该陈述是否与上下文一致？（是/否/不确定）
-2. 如果不一致，请指出不一致的地方
-3. 该陈述是否有明确的来源支持？（是/否）
-
-请以JSON格式回答：
-{{
-    "consistent": true/false/null,
-    "has_source": true/false,
-    "inconsistency": "不一致的地方（如果存在）",
-    "confidence": 0.0-1.0
-}}"""
+        self.verification_prompt_template = KnowledgePrompts.HALLUCINATION_VERIFICATION
     
     def detect(self, answer: str, context: str, sources: List[str] = None) -> Dict[str, Any]:
         """

@@ -12,6 +12,7 @@ from app.infrastructure.retry import retry, get_circuit_breaker
 from app.common.exceptions import LLMServiceException, ErrorCode
 from app.services.langfuse_service import langfuse_service
 from app.infrastructure.monitoring import track_llm_request, track_llm_cache_hit
+from app.prompts import ConsultationPrompts, AgentPrompts
 
 settings = get_settings()
 
@@ -696,51 +697,48 @@ class LLMService:
 
 
 class PromptTemplate:
-    """Prompt模板"""
+    """Prompt模板 - 向后兼容层
 
-    MEDICAL_CONSULTATION_SYSTEM = """你是一位专业的AI医疗助手。你的职责是：
-1. 基于提供的医疗文献和知识图谱信息，为用户提供准确的医疗咨询
-2. 所有回答必须标注数据来源
-3. 对于不确定的信息，明确说明"暂无明确指南支持"
-4. 禁止编造医疗建议
-5. 对于高风险场景（如紧急病症、手术方案、药物剂量调整），必须提示用户前往医院就诊
-6. 在回答结尾添加免责声明："本回答仅供参考，不替代医生诊断和治疗，具体医疗方案请遵医嘱"
-"""
+    所有 Prompt 文本已迁移至 app.prompts 公共库，
+    此类保留以兼容现有 `from app.services.llm_service import PromptTemplate` 引用。
+    新代码请直接使用 `from app.prompts import ConsultationPrompts, AgentPrompts`。
+    """
 
-    MEDICAL_CONSULTATION_USER = """基于以下医疗信息，回答用户的问题：
+    # ---- 医疗咨询 / 诊断 / 用药 ----
+    MEDICAL_CONSULTATION_SYSTEM = ConsultationPrompts.MEDICAL_CONSULTATION_SYSTEM
+    MEDICAL_CONSULTATION_USER = ConsultationPrompts.MEDICAL_CONSULTATION_USER
+    DIAGNOSIS_ASSISTANT_SYSTEM = ConsultationPrompts.DIAGNOSIS_ASSISTANT_SYSTEM
+    DRUG_CONSULTATION_SYSTEM = ConsultationPrompts.DRUG_CONSULTATION_SYSTEM
+    DIAGNOSIS_ASSISTANT_USER = ConsultationPrompts.DIAGNOSIS_ASSISTANT_USER
+    DRUG_CONSULTATION_USER = ConsultationPrompts.DRUG_CONSULTATION_USER
 
-{context}
-
-用户问题：{question}
-
-请提供专业、准确的回答，并标注信息来源。"""
-
-    DIAGNOSIS_ASSISTANT_SYSTEM = """你是一位专业的诊断辅助AI。基于患者的症状描述和医疗知识，提供可能的诊断建议。
-注意：这仅是辅助参考，最终诊断需要医生确认。"""
-
-    DRUG_CONSULTATION_SYSTEM = """你是一位专业的用药咨询AI。基于药物信息和知识图谱，回答用药相关问题。
-注意：具体用药方案需要医生根据患者情况制定。"""
-
-    DIAGNOSIS_ASSISTANT_USER = """基于以下医疗知识和患者症状，提供诊断辅助建议：\n\n参考资料：\n{context}\n\n患者症状描述：{question}\n\n请提供可能的诊断方向、建议检查项目，并标注信息来源。注意：这仅是辅助参考，最终诊断需要医生确认。"""
-
-    DRUG_CONSULTATION_USER = """基于以下药物信息和医疗知识，回答用户的用药问题：\n\n参考资料：\n{context}\n\n用户问题：{question}\n\n请提供专业、准确的用药建议，并标注信息来源。注意：具体用药方案需要医生根据患者情况制定。"""
+    # ---- 客服 / 健康管家（原先缺失，现已补全）----
+    CUSTOMER_SERVICE_SYSTEM = AgentPrompts.CUSTOMER_SERVICE_SYSTEM
+    HEALTH_MANAGER_SYSTEM = AgentPrompts.HEALTH_MANAGER_SYSTEM
 
     @staticmethod
     def format_medical_prompt(context: str, question: str) -> str:
-        return PromptTemplate.MEDICAL_CONSULTATION_USER.format(context=context, question=question)
+        return ConsultationPrompts.format_medical_prompt(context, question)
 
     @staticmethod
     def format_diagnosis_prompt(question: str, context: str = "") -> str:
         """格式化诊断辅助Prompt"""
-        return PromptTemplate.DIAGNOSIS_ASSISTANT_USER.format(context=context, question=question)
+        return ConsultationPrompts.format_diagnosis_prompt(question, context)
 
     @staticmethod
     def format_drug_prompt(question: str, drug_info: str = None, context: str = "") -> str:
         """格式化用药咨询Prompt"""
-        drug_section = f"\n已知药物信息：{drug_info}\n" if drug_info else ""
-        return PromptTemplate.DRUG_CONSULTATION_USER.format(
-            context=context, question=question
-        ) + drug_section
+        return ConsultationPrompts.format_drug_prompt(question, drug_info, context)
+
+    @staticmethod
+    def format_customer_service_prompt(question: str, context: str = "") -> str:
+        """格式化客服Prompt"""
+        return AgentPrompts.format_customer_service_prompt(question, context)
+
+    @staticmethod
+    def format_health_plan_prompt(question: str, profile: str, context: str = "") -> str:
+        """格式化健康计划Prompt"""
+        return AgentPrompts.format_health_plan_prompt(question, profile, context)
 
 
 # 全局单例

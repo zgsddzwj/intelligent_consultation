@@ -5,6 +5,7 @@ import json
 from typing import Dict, Any, Optional, List
 from app.config import get_settings
 from app.utils.logger import app_logger
+from app.prompts import ImagePrompts
 
 settings = get_settings()
 
@@ -122,18 +123,14 @@ class AIDescriptionGenerator:
             return ""
         
         try:
-            # 构建提示词
-            prompt_parts = []
-            if context:
-                prompt_parts.append(f"上下文信息：\n{context}\n\n")
-            if table_title:
-                prompt_parts.append(f"表格标题：{table_title}\n\n")
-            prompt_parts.append(f"表格HTML：\n{table_html}\n\n")
-            prompt_parts.append("请分析这个表格，生成简洁的文字描述，包括表格的主要内容和关键数据。")
-            
-            prompt = "".join(prompt_parts)
-            
-            system_prompt = "你是一个专业的数据分析师，擅长分析表格数据并生成准确、简洁的描述。"
+            # 构建提示词（委托至公共库）
+            prompt = ImagePrompts.format_table_description_prompt(
+                table_html=table_html,
+                table_title=table_title,
+                context=context,
+            )
+
+            system_prompt = ImagePrompts.TABLE_DESCRIPTION_SYSTEM
             
             description = await self._call_llm_api(
                 api_key=self.table_api_key,
@@ -174,20 +171,15 @@ class AIDescriptionGenerator:
                 image_bytes = f.read()
                 image_b64 = base64.b64encode(image_bytes).decode('utf-8')
                 image_data = f"data:image/jpeg;base64,{image_b64}"
-            
-            # 构建提示词
-            prompt_parts = []
-            if context_before:
-                prompt_parts.append(f"前文上下文：\n{context_before}\n\n")
-            if image_title:
-                prompt_parts.append(f"图片标题：{image_title}\n\n")
-            prompt_parts.append("请详细描述这张图片中的医疗相关内容，包括图表、文字、数据等信息。")
-            if context_after:
-                prompt_parts.append(f"\n\n后文上下文：\n{context_after}")
-            
-            prompt = "".join(prompt_parts)
-            
-            system_prompt = "你是一个专业的医疗图像分析师，擅长识别和分析医疗相关的图表、数据可视化等信息。"
+
+            # 构建提示词（委托至公共库）
+            prompt = ImagePrompts.format_image_description_prompt(
+                image_title=image_title,
+                context_before=context_before,
+                context_after=context_after,
+            )
+
+            system_prompt = ImagePrompts.IMAGE_DESCRIPTION_SYSTEM
             
             description = await self._call_llm_api(
                 api_key=self.image_api_key,

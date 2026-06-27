@@ -1,14 +1,11 @@
-"""用药咨询Prompt模板 - v1.0 遗留版本（向后兼容）"""
+"""用药咨询Prompt模板 - v1.0 遗留版本（向后兼容）
+
+系统 Prompt 引用 app.prompts.ConsultationPrompts 公共库。
+"""
 from app.services.prompt_engineer import PromptTemplate, prompt_engineer
+from app.prompts import ConsultationPrompts
 
-DRUG_CONSULTATION_SYSTEM_V1 = """你是一位专业的用药咨询AI。基于药物信息和知识图谱，回答用药相关问题。
-
-重要原则：
-1. 具体用药方案需要医生根据患者情况制定
-2. 提供药物的一般信息、适应症、禁忌症、注意事项
-3. 不提供具体的剂量建议（除非是通用指南）
-4. 强调个体化用药的重要性
-5. 提醒药物相互作用和副作用"""
+DRUG_CONSULTATION_SYSTEM_V1 = ConsultationPrompts.DRUG_CONSULTATION_SYSTEM
 
 DRUG_CONSULTATION_USER_V1 = """用药咨询问题：{question}
 

@@ -1,6 +1,7 @@
 """医疗实体识别器 - 使用LLM进行NER"""
 from typing import List, Dict, Any, Optional
 from app.utils.logger import app_logger
+from app.prompts import KnowledgePrompts
 import json
 import re
 
@@ -52,7 +53,7 @@ class MedicalEntityRecognizer:
             prompt = self._build_ner_prompt(query)
             response = self._get_llm().generate(
                 prompt=prompt,
-                system_prompt="你是一个专业的医疗实体识别助手，擅长从医疗相关文本中准确提取实体。",
+                system_prompt=KnowledgePrompts.NER_SYSTEM,
                 temperature=0.1,  # 低温度保证稳定性
                 max_tokens=500
             )
@@ -73,27 +74,8 @@ class MedicalEntityRecognizer:
             return self._fallback_extraction(query)
     
     def _build_ner_prompt(self, query: str) -> str:
-        """构建NER提示词"""
-        return f"""请从以下医疗咨询问题中提取所有医疗相关实体，并按类型分类。
-
-问题：{query}
-
-请以JSON格式返回，格式如下：
-{{
-    "diseases": ["疾病名称1", "疾病名称2"],
-    "symptoms": ["症状名称1", "症状名称2"],
-    "drugs": ["药物名称1", "药物名称2"],
-    "examinations": ["检查项目1", "检查项目2"],
-    "departments": ["科室名称1", "科室名称2"]
-}}
-
-要求：
-1. 只提取明确提到的实体，不要推测
-2. 实体名称要完整准确
-3. 如果某个类型没有实体，返回空数组
-4. 只返回JSON，不要其他文字
-
-JSON:"""
+        """构建NER提示词（委托至公共库）"""
+        return KnowledgePrompts.format_ner_prompt(query)
     
     def _parse_llm_response(self, response: str, query: str) -> Dict[str, List[str]]:
         """解析LLM返回的JSON"""

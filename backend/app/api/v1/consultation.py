@@ -14,6 +14,7 @@ from app.utils.logger import app_logger
 from app.utils.validators import validate_consultation_input, detect_high_risk_content, sanitize_user_input
 from app.utils.security import DISCLAIMER
 from app.services.llm_service import llm_service
+from app.prompts import ConsultationPrompts
 from app.config import get_settings
 
 settings = get_settings()
@@ -291,11 +292,8 @@ async def chat_stream(
                 app_logger.warning(f"获取上下文失败: {e}")
 
             # 构建prompt
-            system_prompt = "你是一位专业的AI医疗助手。基于提供的医疗信息，为用户提供准确的医疗咨询。"
-            if rag_context:
-                prompt = f"基于以下医疗知识：\n{rag_context}\n\n用户问题：{sanitized_message}\n\n请提供专业、准确的回答。"
-            else:
-                prompt = f"用户问题：{sanitized_message}\n\n请提供专业、准确的回答。"
+            system_prompt = ConsultationPrompts.STREAM_CONSULTATION_SYSTEM
+            prompt = ConsultationPrompts.format_stream_prompt(sanitized_message, rag_context)
 
             full_answer = ""
             first_token_sent = False

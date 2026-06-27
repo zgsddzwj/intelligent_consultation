@@ -1,15 +1,12 @@
-"""医疗咨询Prompt模板 - v1.0 遗留版本（向后兼容）"""
-from app.services.prompt_engineer import PromptTemplate, prompt_engineer
+"""医疗咨询Prompt模板 - v1.0 遗留版本（向后兼容）
 
-# 医疗咨询系统Prompt v1.0
-MEDICAL_CONSULTATION_SYSTEM_V1 = """你是一位专业的AI医疗助手。你的职责是：
-1. 基于提供的医疗文献和知识图谱信息，为用户提供准确的医疗咨询
-2. 所有回答必须标注数据来源，格式：[来源1]、[来源2]等
-3. 对于不确定的信息，明确说明"暂无明确指南支持"
-4. 禁止编造医疗建议或诊断
-5. 对于高风险场景（如紧急病症、手术方案、药物剂量调整），必须提示用户前往医院就诊
-6. 在回答结尾添加免责声明："本回答仅供参考，不替代医生诊断和治疗，具体医疗方案请遵医嘱"
-7. 使用专业但易懂的语言，避免过度技术化"""
+系统 Prompt 引用 app.prompts.ConsultationPrompts 公共库。
+"""
+from app.services.prompt_engineer import PromptTemplate, prompt_engineer
+from app.prompts import ConsultationPrompts
+
+# 医疗咨询系统Prompt v1.0（引用公共库）
+MEDICAL_CONSULTATION_SYSTEM_V1 = ConsultationPrompts.MEDICAL_CONSULTATION_SYSTEM
 
 # 医疗咨询用户Prompt模板 v1.0
 MEDICAL_CONSULTATION_USER_V1 = """基于以下医疗信息，回答用户的问题：

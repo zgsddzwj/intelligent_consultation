@@ -6,6 +6,7 @@ import io
 from PIL import Image
 import pdfplumber
 from app.utils.logger import app_logger
+from app.prompts import ImagePrompts, KnowledgePrompts
 import dashscope
 from dashscope import MultiModalConversation
 from app.config import get_settings
@@ -159,7 +160,7 @@ class ImageProcessor:
             app_logger.error(f"OCR识别失败: {e}")
             return {"text": "", "confidence": 0.0, "error": str(e)}
     
-    def understand_image_with_llm(self, image_path: str, query: str = "请描述这张图片中的医疗相关内容") -> Dict[str, Any]:
+    def understand_image_with_llm(self, image_path: str, query: str = ImagePrompts.IMAGE_UNDERSTAND_DEFAULT) -> Dict[str, Any]:
         """使用Qwen-VL理解图片内容"""
         if not self.multimodal_enabled:
             return {"description": "", "error": "多模态功能未启用"}
@@ -246,8 +247,8 @@ class ImageProcessor:
         
         # 再使用LLM理解
         llm_result = self.understand_image_with_llm(
-            image_path, 
-            "请识别图片中的医疗相关术语，包括疾病名称、症状、药物名称、检查项目等，并以列表形式返回。"
+            image_path,
+            ImagePrompts.IMAGE_MEDICAL_TERMS
         )
         llm_text = llm_result.get("description", "")
         
@@ -269,19 +270,8 @@ class ImageProcessor:
 
     # ==================== 多模态诊断增强 ====================
 
-    # 图片类型分类提示词
-    CLASSIFY_PROMPT = (
-        "请判断这张图片属于以下哪种医疗图片类型，只返回类型名称（不要其他文字）：\n"
-        "- lab_report: 化验报告/检验单（血常规、尿常规、生化等）\n"
-        "- prescription: 处方/用药单\n"
-        "- skin_condition: 皮肤病灶/皮疹照片\n"
-        "- xray: X光片\n"
-        "- ct_scan: CT/MRI影像\n"
-        "- ultrasound: 超声/B超图像\n"
-        "- ecg: 心电图\n"
-        "- medical_record: 病历记录\n"
-        "- other: 非医疗图片"
-    )
+    # 图片类型分类提示词（引用公共库）
+    CLASSIFY_PROMPT = ImagePrompts.IMAGE_CLASSIFY
 
     def classify_image(self, image_path: str) -> Dict[str, Any]:
         """分类医疗图片类型
@@ -345,18 +335,7 @@ class ImageProcessor:
             report["ocr_text"] = ocr_result.get("text", "")
 
         # 3. 多模态 LLM 分析
-        context_section = f"\n患者背景：{patient_context}\n" if patient_context else ""
-        analysis_prompt = f"""请分析这张医疗图片并生成结构化诊断报告。{context_section}
-
-请以JSON格式返回（只返回JSON）：
-{{
-    "findings": [
-        {{"category": "发现类别", "item": "项目", "value": "值", "reference": "参考范围", "abnormality": "normal|abnormal_low|abnormal_high|positive|negative"}}
-    ],
-    "summary": "诊断摘要",
-    "recommendations": ["建议1", "建议2"],
-    "risk_level": "low|medium|high"
-}}"""
+        analysis_prompt = ImagePrompts.format_image_processor_report_prompt(patient_context)
 
         llm_result = self.understand_image_with_llm(image_path, analysis_prompt)
         raw_response = llm_result.get("description", "")

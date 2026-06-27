@@ -8,7 +8,7 @@ from app.agents.tools.rag_tool import RAGTool
 from app.agents.tools.knowledge_graph_tool import KnowledgeGraphTool
 from app.agents.tools.diagnosis_tool import DiagnosisTool
 from app.knowledge.ml.entity_recognizer import MedicalEntityRecognizer
-from app.services.llm_service import PromptTemplate
+from app.prompts import ConsultationPrompts
 from app.utils.logger import app_logger
 
 
@@ -35,7 +35,7 @@ class DoctorAgent(BaseAgent):
     
     def get_system_prompt(self) -> str:
         """获取系统Prompt"""
-        return PromptTemplate.MEDICAL_CONSULTATION_SYSTEM
+        return ConsultationPrompts.MEDICAL_CONSULTATION_SYSTEM
     
     def process(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """处理医疗咨询"""
@@ -171,7 +171,7 @@ class DoctorAgent(BaseAgent):
         full_context = f"{history_text}{base_context}" if history_text else base_context
         
         # 4. 生成回答
-        prompt = PromptTemplate.format_medical_prompt(full_context, question)
+        prompt = ConsultationPrompts.format_medical_prompt(full_context, question)
         answer = self.llm.generate(
             prompt=prompt,
             system_prompt=self.get_system_prompt(),
@@ -232,10 +232,10 @@ class DoctorAgent(BaseAgent):
         full_context = f"{history_text}{base_context}" if history_text else base_context
         
         # 5. 生成诊断建议
-        prompt = PromptTemplate.format_diagnosis_prompt(question, full_context)
+        prompt = ConsultationPrompts.format_diagnosis_prompt(question, full_context)
         answer = self.llm.generate(
             prompt=prompt,
-            system_prompt=PromptTemplate.DIAGNOSIS_ASSISTANT_SYSTEM,
+            system_prompt=ConsultationPrompts.DIAGNOSIS_ASSISTANT_SYSTEM,
             temperature=0.7
         )
         
@@ -310,10 +310,10 @@ class DoctorAgent(BaseAgent):
         # 如果有明确的药物，传递给Prompt
         drug_info_str = ", ".join(found_drugs) if found_drugs else (drug_names[0] if drug_names else None)
         
-        prompt = PromptTemplate.format_drug_prompt(question, drug_info=drug_info_str, context=full_context)
+        prompt = ConsultationPrompts.format_drug_prompt(question, drug_info=drug_info_str, context=full_context)
         answer = self.llm.generate(
             prompt=prompt,
-            system_prompt=PromptTemplate.DRUG_CONSULTATION_SYSTEM,
+            system_prompt=ConsultationPrompts.DRUG_CONSULTATION_SYSTEM,
             temperature=0.7
         )
         
