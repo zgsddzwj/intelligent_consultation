@@ -18,6 +18,7 @@ class Embedder:
     - 嵌入结果多级缓存（本地LRU + Redis）
     - 多模型降级策略
     - 请求重试与指数退避
+    - API Key 有效性预检（避免无效重试）
     """
 
     # DashScope批量限制
@@ -30,6 +31,10 @@ class Embedder:
         self.dimension = dimension
         self.enable_cache = enable_cache
         self._cache = None
+        # 标记 API Key 是否可用，避免无效重试
+        self._api_available = bool(settings.QWEN_API_KEY and settings.QWEN_API_KEY.strip())
+        if not self._api_available:
+            app_logger.warning("QWEN_API_KEY 未配置，向量嵌入将不可用，RAG 向量检索将被跳过")
         if enable_cache:
             from app.infrastructure.cache import CacheManager
             self._cache = CacheManager()
@@ -66,6 +71,10 @@ class Embedder:
         if not texts:
             return []
 
+        # API Key 不可用时直接返回空列表，跳过向量检索
+        if not self._api_available:
+            return []
+
         results = [None] * len(texts)
         to_embed_indices = []
         to_embed_texts = []
@@ -81,11 +90,15 @@ class Embedder:
 
         # 2. 批量处理未缓存的文本
         if to_embed_texts:
-            embeddings = self._embed_batch(to_embed_texts)
-            for idx, emb in zip(to_embed_indices, embeddings):
-                results[idx] = emb
-                # 写入缓存
-                self._set_cached(texts[idx], emb)
+            try:
+                embeddings = self._embed_batch(to_embed_texts)
+                for idx, emb in zip(to_embed_indices, embeddings):
+                    results[idx] = emb
+                    # 写入缓存
+                    self._set_cached(texts[idx], emb)
+            except Exception as e:
+                app_logger.warning(f"嵌入批量处理失败，跳过向量检索: {e}")
+                return []
 
         return results
 
@@ -141,6 +154,8 @@ class Embedder:
 
     def embed_query(self, text: str) -> List[float]:
         """嵌入单个查询文本"""
+        if not self._api_available:
+            return []
         embeddings = self.embed([text])
         return embeddings[0] if embeddings else []
 

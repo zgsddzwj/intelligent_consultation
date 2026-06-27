@@ -40,10 +40,10 @@ if [ "${1:-}" = "--init" ]; then
     INIT_DATA=true
 fi
 
-# 启动Docker服务
+# 启动Docker服务（使用 backend/.env 进行变量插值）
 echo ""
 echo "[1/3] 启动Docker服务..."
-docker compose up -d
+docker compose --env-file backend/.env up -d
 
 # 等待后端存活
 echo ""

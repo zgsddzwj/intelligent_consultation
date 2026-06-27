@@ -3,6 +3,7 @@ from typing import Generator, Optional, Callable
 from functools import lru_cache
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
+import threading
 from app.database.session import SessionLocal, get_db_with_retry
 from app.config import get_settings
 from app.infrastructure.repositories.user_repository import UserRepository
@@ -52,10 +53,11 @@ class ServiceFactory:
     """服务工厂 - 提供懒加载的服务实例
     
     避免在应用启动时初始化所有服务，按需创建。
+    使用线程锁保证并发安全，防止多个请求同时创建同一服务实例。
     """
     
     _instances: dict = {}
-    _lock = False
+    _lock = threading.Lock()
     
     @classmethod
     def get_llm_service(cls):
@@ -99,10 +101,15 @@ class ServiceFactory:
     
     @classmethod
     def get_orchestrator(cls):
-        """获取Agent编排器"""
+        """获取Agent编排器（线程安全单例）"""
+        # 双重检查锁定，避免并发请求重复创建
         if "orchestrator" not in cls._instances:
-            from app.agents.orchestrator import AgentOrchestrator
-            cls._instances["orchestrator"] = AgentOrchestrator()
+            with cls._lock:
+                if "orchestrator" not in cls._instances:
+                    from app.agents.orchestrator import AgentOrchestrator
+                    app_logger.info("正在创建 AgentOrchestrator 实例...")
+                    cls._instances["orchestrator"] = AgentOrchestrator()
+                    app_logger.info("AgentOrchestrator 实例创建完成")
         return cls._instances["orchestrator"]
     
     @classmethod

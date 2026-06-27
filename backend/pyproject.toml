@@ -44,7 +44,7 @@ dependencies = [
     # Embeddings
     "sentence-transformers==2.2.2",
     "torch>=2.0.0,<2.2.0",  # 约束版本以兼容 macOS x86_64 (Intel)
-    "huggingface-hub>=0.16.0,<0.20.0",  # 兼容 sentence-transformers 2.2.2
+    "huggingface-hub>=0.20.0",  # transformers>=4.33 需要 split_torch_state_dict_into_shards
 
     # RAG & Retrieval
     "rank-bm25==0.2.2",

@@ -1,7 +1,10 @@
-import React, { useState } from 'react'
+import { useState, memo } from 'react'
 import { Avatar, Tag, Tooltip, Button } from 'antd'
 import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined, ExclamationCircleFilled } from '@ant-design/icons'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import type { Message, RiskLevel } from '../../types/chat'
+import ThinkingPanel from './ThinkingPanel'
 
 interface ChatMessageProps {
   message: Message
@@ -82,8 +85,15 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
           {message.timestamp
             ? new Date(message.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
             : new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-        </span>
+                </span>
 
+        {/* 思考过程面板（DeepSeek 风格可折叠） */}
+        {!isUser && message.thinkingSteps && message.thinkingSteps.length > 0 && (
+          <ThinkingPanel steps={message.thinkingSteps} isThinking={message.isThinking} />
+        )}
+
+        {/* 消息气泡：思考中且无内容时不渲染，避免空白框 */}
+        {(!message.isThinking || message.content) && (
         <div
           style={{
             padding: '12px 16px',
@@ -97,7 +107,7 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
               : 'var(--shadow-sm)',
             border: isUser ? 'none' : '1px solid var(--border-color)',
             wordBreak: 'break-word',
-            whiteSpace: 'pre-wrap',
+            whiteSpace: isUser ? 'pre-wrap' : 'normal',
             position: 'relative',
             fontSize: '14px',
             lineHeight: 1.6,
@@ -124,7 +134,16 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
             </Tooltip>
           )}
 
-          {message.content}
+          {/* AI 消息用 Markdown 渲染，用户消息用纯文本 */}
+          {isUser ? (
+            message.content
+          ) : (
+            <div className="markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {message.content}
+              </ReactMarkdown>
+            </div>
+          )}
 
           {/* 信息来源 */}
           {message.sources && message.sources.length > 0 && (
@@ -174,6 +193,7 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* 用户头像 */}
@@ -192,4 +212,4 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
   )
 }
 
-export default React.memo(ChatMessage)
+export default memo(ChatMessage)

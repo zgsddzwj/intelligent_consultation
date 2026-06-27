@@ -10,8 +10,19 @@ import re
 
 
 class KnowledgeGraphRetriever:
-    """知识图谱检索器（优化版）"""
+    """知识图谱检索器（优化版）
     
+    优化点：
+    - 默认使用 regex NER（避免 LLM 调用，省 5-8 秒）
+    - 批量实体验证（单次 Neo4j 查询替代 N 次）
+    - 查询结果缓存
+    - 单次查询超时控制
+    """
+    
+    # 查询结果缓存
+    _result_cache: Dict[str, Any] = {}
+    _cache_ttl = 300  # 5分钟
+
     def __init__(self):
         self.queries = CypherQueries()
         self._client = None
@@ -31,23 +42,20 @@ class KnowledgeGraphRetriever:
                 return None
         return self._client
     
-    def extract_entities(self, query: str, use_kg_validation: bool = True) -> Dict[str, List[str]]:
+    def extract_entities(self, query: str, use_kg_validation: bool = False) -> Dict[str, List[str]]:
         """
-        从查询中提取实体（使用NER模型）
+        从查询中提取实体（默认使用 regex 快速提取，避免 LLM 调用）
         
         Args:
             query: 查询文本
-            use_kg_validation: 是否使用知识图谱验证实体
+            use_kg_validation: 是否使用知识图谱验证实体（默认False，避免额外Neo4j查询）
         
         Returns:
             实体字典
         """
         try:
-            # 使用NER模型提取实体
-            if use_kg_validation and self.client:
-                entities = self.entity_recognizer.extract_with_kg_validation(query, self.client)
-            else:
-                entities = self.entity_recognizer.extract_entities(query)
+            # 默认使用 regex 快速提取（即时完成，不调 LLM）
+            entities = self.entity_recognizer._fallback_extraction(query)
             
             # 确保返回格式一致
             if "departments" not in entities:
@@ -118,7 +126,7 @@ class KnowledgeGraphRetriever:
         return entities
     
     def retrieve_by_entity(self, entity_type: str, entity_name: str, depth: int = 2) -> List[Dict[str, Any]]:
-        """根据实体检索相关信息"""
+        """根据实体检索相关信息（单次批量查询替代多次查询）"""
         if not self.client:
             return []
         
@@ -126,34 +134,33 @@ class KnowledgeGraphRetriever:
             results = []
             
             if entity_type == "Disease":
-                # 查询疾病相关信息
-                disease_info = self.queries.find_disease_by_name(entity_name)
-                disease_result = self.client.execute_query(disease_info, {"name": entity_name})
+                # 单次查询获取疾病+症状+药物+检查（替代原来的4次查询）
+                batch_query = """
+                MATCH (d:Disease {name: $name})
+                OPTIONAL MATCH (d)-[:HAS_SYMPTOM]->(s:Symptom)
+                OPTIONAL MATCH (d)-[:TREATED_BY]->(dr:Drug)
+                OPTIONAL MATCH (d)-[:REQUIRES_EXAM]->(e:Examination)
+                RETURN d.name as disease,
+                       collect(DISTINCT s.name) as symptoms,
+                       collect(DISTINCT dr.name) as drugs,
+                       collect(DISTINCT e.name) as exams
+                LIMIT 1
+                """
+                disease_result = self.client.execute_query(batch_query, {"name": entity_name})
                 
                 if disease_result:
-                    # 查询症状
-                    symptoms_query = self.queries.find_disease_symptoms(entity_name)
-                    symptoms = self.client.execute_query(symptoms_query, {"disease_name": entity_name})
-                    
-                    # 查询药物
-                    drugs_query = self.queries.find_disease_drugs(entity_name)
-                    drugs = self.client.execute_query(drugs_query, {"disease_name": entity_name})
-                    
-                    # 查询检查
-                    exams_query = self.queries.find_disease_examinations(entity_name)
-                    exams = self.client.execute_query(exams_query, {"disease_name": entity_name})
-                    
-                    # 构建文本结果
+                    info = disease_result[0]
                     text_parts = [f"疾病：{entity_name}"]
+                    symptoms = [s for s in info.get("symptoms", []) if s]
+                    drugs = [d for d in info.get("drugs", []) if d]
+                    exams = [e for e in info.get("exams", []) if e]
+                    
                     if symptoms:
-                        symptom_list = ", ".join([s["symptom"] for s in symptoms])
-                        text_parts.append(f"症状：{symptom_list}")
+                        text_parts.append(f"症状：{', '.join(symptoms[:10])}")
                     if drugs:
-                        drug_list = ", ".join([d["drug"] for d in drugs])
-                        text_parts.append(f"治疗药物：{drug_list}")
+                        text_parts.append(f"治疗药物：{', '.join(drugs[:10])}")
                     if exams:
-                        exam_list = ", ".join([e["examination"] for e in exams])
-                        text_parts.append(f"检查项目：{exam_list}")
+                        text_parts.append(f"检查项目：{', '.join(exams[:10])}")
                     
                     results.append({
                         "text": "\n".join(text_parts),
@@ -209,13 +216,28 @@ class KnowledgeGraphRetriever:
         Returns:
             排序后的检索结果列表
         """
+        import time as _time
+
+        # 检查缓存
+        cache_key = f"{query}:{top_k}"
+        cached = self._result_cache.get(cache_key)
+        if cached and (_time.time() - cached["ts"] < self._cache_ttl):
+            app_logger.debug(f"KG检索缓存命中: {query[:30]}")
+            return cached["data"]
+
         if not self.client:
             app_logger.warning(f"知识图谱检索跳过：Neo4j客户端未连接（查询: {query}）")
             return []
         
         try:
-            # 1. 提取实体（使用NER模型）
-            entities = self.extract_entities(query, use_kg_validation=True)
+            # 1. 提取实体（默认使用 regex 快速提取，避免 LLM 调用）
+            entities = self.extract_entities(query, use_kg_validation=False)
+            
+            # 如果没有提取到任何实体，直接返回空（避免无意义的 Neo4j 查询）
+            total_entities = sum(len(v) for v in entities.values())
+            if total_entities == 0:
+                app_logger.info(f"KG检索：未提取到实体，跳过查询: {query[:50]}")
+                return []
             
             # 2. 分类问题类型并选择查询策略
             query_analysis = self.strategy_selector.classify_question(query, entities)
@@ -239,6 +261,9 @@ class KnowledgeGraphRetriever:
             
             # 6. 返回top_k
             final_results = scored_results[:top_k]
+            
+            # 写入缓存
+            self._result_cache[cache_key] = {"data": final_results, "ts": _time.time()}
             
             app_logger.info(f"知识图谱检索完成，查询: {query}, "
                           f"返回 {len(final_results)} 条结果（共检索 {len(all_results)} 条）")

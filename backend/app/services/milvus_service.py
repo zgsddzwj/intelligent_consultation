@@ -36,21 +36,15 @@ class MilvusService:
         self.dimension = 1024  # Qwen embedding维度
         self._collection: Optional[Collection] = None
         self._connected = False
-        self._max_retries = 3
+        self._max_retries = 1  # 快速失败
         self._batch_size = 1000  # 批处理大小
         self._executor = ThreadPoolExecutor(max_workers=4)
         self._lock = threading.RLock()
         self._search_cache: Dict[str, Tuple[List[Dict], float]] = {}
         self._cache_ttl = 60  # 缓存TTL（秒）
-        
-        try:
-            self._connect()
-            self._ensure_collection()
-            self._connected = True
-            app_logger.info(f"✓ Milvus服务初始化成功")
-        except Exception as e:
-            app_logger.error(f"✗ Milvus初始化失败（将在首次使用时重试）: {e}")
-            self._connected = False
+        self._connect_logged = False  # 是否已输出过连接失败日志（避免刷屏）
+        self._last_fail_time = 0  # 上次连接失败时间戳
+        self._fail_cache_ttl = 30  # 失败缓存30秒，期间不再重试
     
     def _connect(self):
         """连接Milvus（支持连接池）"""
@@ -67,16 +61,19 @@ class MilvusService:
                 alias="default",
                 host=self.host,
                 port=self.port,
-                timeout=10,
+                timeout=3,
                 # 连接池配置
                 pool="QueuePool",
                 pool_size=10,
                 max_overflow=20,
                 pool_recycle=3600
             )
+            self._connect_logged = False  # 连接成功，重置日志标记
             app_logger.info(f"✓ 已连接到Milvus: {self.host}:{self.port}")
         except Exception as e:
-            app_logger.error(f"✗ 连接Milvus失败: {e}")
+            if not self._connect_logged:
+                app_logger.warning(f"Milvus连接失败（可选服务，不影响核心功能）: {self.host}:{self.port} - {e}")
+                self._connect_logged = True
             raise
     
     def _ensure_collection(self):
@@ -148,23 +145,31 @@ class MilvusService:
         app_logger.info(f"✓ 集合 {self.collection_name} 创建成功，已创建优化索引")
     
     def _ensure_connection(self) -> bool:
-        """确保连接可用（支持自动重连）"""
+        """确保连接可用（支持自动重连，懒加载，失败缓存）"""
+        if self._connected and self._collection:
+            try:
+                _ = self._collection.num_entities
+                return True
+            except Exception:
+                self._connected = False
+
+        # 失败缓存：如果最近失败过，直接返回 False 不重试
+        import time as _time
+        if self._last_fail_time and (_time.time() - self._last_fail_time < self._fail_cache_ttl):
+            return False
+
         for attempt in range(self._max_retries):
             try:
-                if not self._connected:
-                    self._connect()
-                    self._ensure_collection()
-                    self._connected = True
-                
-                # 测试连接
-                if self._collection:
-                    _ = self._collection.num_entities
-                    return True
-            except Exception as e:
-                app_logger.warning(f"连接检查失败 (尝试 {attempt + 1}/{self._max_retries}): {e}")
+                self._connect()
+                self._ensure_collection()
+                self._connected = True
+                self._last_fail_time = 0  # 重置失败缓存
+                return True
+            except Exception:
                 self._connected = False
+                self._last_fail_time = _time.time()
                 if attempt < self._max_retries - 1:
-                    time.sleep(0.5 * (attempt + 1))
+                    _time.sleep(0.3)
         
         return False
     
@@ -358,6 +363,8 @@ class MilvusService:
     
     def health_check(self) -> Dict[str, any]:
         """获取健康检查详情"""
+        if not self._connected:
+            return {"status": "unhealthy", "reason": "未连接（可选服务）", "connected": False}
         try:
             stats = self.get_collection_stats()
             if stats:

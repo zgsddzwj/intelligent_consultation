@@ -81,7 +81,7 @@ class SemanticCache:
         
         try:
             # 生成查询embedding
-            query_embedding = self.embedder.embed(query)
+            query_embedding = self.embedder.embed_query(query)
             if not query_embedding:
                 return None
             
@@ -185,7 +185,7 @@ class SemanticCache:
         
         try:
             # 生成查询embedding
-            query_embedding = self.embedder.embed(query)
+            query_embedding = self.embedder.embed_query(query)
             if not query_embedding:
                 return
             
@@ -246,8 +246,12 @@ class SemanticCache:
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """计算余弦相似度"""
         try:
-            v1 = np.array(vec1)
-            v2 = np.array(vec2)
+            v1 = np.array(vec1).flatten()
+            v2 = np.array(vec2).flatten()
+            
+            # 维度不一致时返回0
+            if v1.shape != v2.shape:
+                return 0.0
             
             dot_product = np.dot(v1, v2)
             norm1 = np.linalg.norm(v1)

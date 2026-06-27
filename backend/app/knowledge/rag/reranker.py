@@ -2,22 +2,30 @@
 from typing import List, Dict, Any, Optional
 from app.utils.logger import app_logger
 import os
+import threading
 
 
 class BGEReranker:
-    """BGE-Reranker - 使用FlagEmbedding的BGE-Reranker模型"""
-    
-    def __init__(self, model_name: str = "BAAI/bge-reranker-base"):
-        """
-        初始化BGE-Reranker
-        
-        Args:
-            model_name: 模型名称，默认使用BGE-Reranker-Base
-        """
-        self.model_name = model_name
-        self.model = None
-        self.tokenizer = None
-        self._load_model()
+    """BGE-Reranker - 使用FlagEmbedding的BGE-Reranker模型（单例模式）"""
+
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls, model_name: str = "BAAI/bge-reranker-base"):
+        """单例：相同模型名只加载一次"""
+        with cls._lock:
+            if cls._instance is not None:
+                # 已有实例且模型名一致则复用
+                if cls._instance.model_name == model_name and cls._instance._loaded:
+                    return cls._instance
+            instance = super().__new__(cls)
+            instance.model_name = model_name
+            instance.model = None
+            instance.tokenizer = None
+            instance._loaded = False
+            instance._load_model()
+            cls._instance = instance
+            return instance
     
     def _load_model(self):
         """加载BGE-Reranker模型"""

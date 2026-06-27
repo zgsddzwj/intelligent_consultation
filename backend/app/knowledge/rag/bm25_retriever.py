@@ -18,17 +18,11 @@ class BM25Retriever:
         self._load_index()
     
     def _load_index(self):
-        """从Milvus加载文档索引"""
-        try:
-            milvus = get_milvus_service()
-            # 从Milvus获取所有文档（用于构建BM25索引）
-            # 这里需要从Milvus获取文档文本，实际实现可能需要调整
-            app_logger.info("BM25索引加载中...")
-            # 暂时标记为未索引，等待文档加载
-            self._indexed = False
-        except Exception as e:
-            app_logger.warning(f"BM25索引加载失败: {e}")
-            self._indexed = False
+        """懒加载：不在初始化时连接Milvus，仅标记为未索引"""
+        # 不在初始化时连接Milvus，避免阻塞启动
+        # BM25索引在实际检索时按需构建
+        app_logger.debug("BM25索引延迟加载（初始化时跳过Milvus连接）")
+        self._indexed = False
     
     def _tokenize(self, text: str) -> List[str]:
         """中文分词"""

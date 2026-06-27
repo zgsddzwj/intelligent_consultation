@@ -27,7 +27,7 @@ def get_object_storage_client():
             from minio import Minio
             from minio.error import S3Error
             
-            _object_storage_client = MinioStorage(
+            _object_storage_client = MinIOStorage(
                 endpoint=settings.OBJECT_STORAGE_ENDPOINT,
                 access_key=settings.OBJECT_STORAGE_ACCESS_KEY,
                 secret_key=settings.OBJECT_STORAGE_SECRET_KEY,
@@ -59,6 +59,12 @@ def get_object_storage_client():
                 bucket=settings.OBJECT_STORAGE_BUCKET
             )
             app_logger.info("阿里云OSS对象存储客户端初始化成功")
+            
+        elif storage_type == "local":
+            _object_storage_client = LocalStorage(
+                base_path=settings.UPLOAD_DIR
+            )
+            app_logger.info("本地文件存储客户端初始化成功")
             
         else:
             app_logger.warning(f"不支持的对象存储类型: {storage_type}，使用本地存储")

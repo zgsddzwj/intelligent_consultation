@@ -164,7 +164,7 @@ async def chat(
                     user_input=sanitized_message,
                     context=context_data
                 ),
-                timeout=60.0
+                timeout=30.0
             )
         except asyncio.TimeoutError:
             app_logger.warning(f"咨询处理超时: consultation_id={consultation_id}")
@@ -226,9 +226,8 @@ async def chat(
 async def chat_stream(
     request: ChatRequest,
     db: Session = Depends(get_db),
-    orchestrator: AgentOrchestrator = Depends(get_orchestrator),
-) -> StreamingResponse:
-    """流式咨询接口（SSE）- 增强版"""
+):
+    """流式咨询接口（SSE）- 带 thinking 过程，不经过 orchestrator 避免重复 LLM 调用"""
     consultation_id = 0
 
     # 验证输入
@@ -270,48 +269,114 @@ async def chat_stream(
             # 发送开始信号
             yield f"data: {json.dumps({'type': 'start', 'consultation_id': consultation_id})}\n\n"
 
-            # 获取RAG上下文
+            # === Thinking: 意图分类 ===
+            yield f"data: {json.dumps({'type': 'thinking', 'content': '正在分析您的问题...'})}\n\n"
+
+            # 简单意图分类（规则，不调 LLM）
+            user_lower = sanitized_message.lower()
+            consultation_type = "general"
+            if any(kw in sanitized_message for kw in ["症状", "诊断", "可能", "疼", "痛", "发烧", "发热"]):
+                consultation_type = "diagnosis"
+            elif any(kw in sanitized_message for kw in ["用药", "药物", "药", "处方", "吃"]):
+                consultation_type = "drug"
+            elif any(kw in sanitized_message for kw in ["检查", "化验", "影像", "CT", "MRI"]):
+                consultation_type = "examination"
+
+            # === Thinking: 知识检索 ===
+            yield f"data: {json.dumps({'type': 'thinking', 'content': '正在检索医学知识库...'})}\n\n"
+
+            # 执行 RAG 检索（单次，包含 KG）
             rag_context = ""
             sources = []
-            try:
-                result = await asyncio.wait_for(
-                    asyncio.to_thread(
-                        orchestrator.process,
-                        user_input=sanitized_message,
-                        context=request.context or {}
-                    ),
-                    timeout=30.0
-                )
-                rag_context = result.get("context_used", "")
-                sources = result.get("sources", [])
-                if sources:
-                    yield f"data: {json.dumps({'type': 'sources', 'sources': sources})}\n\n"
-            except asyncio.TimeoutError:
-                app_logger.warning("获取上下文超时，使用基础prompt")
-            except Exception as e:
-                app_logger.warning(f"获取上下文失败: {e}")
+            tools_used = []
 
-            # 构建prompt
-            system_prompt = ConsultationPrompts.STREAM_CONSULTATION_SYSTEM
-            prompt = ConsultationPrompts.format_stream_prompt(sanitized_message, rag_context)
+            try:
+                # 使用 RAGTool 直接检索（不经过 orchestrator，避免重复 LLM 调用）
+                from app.agents.tools.rag_tool import RAGTool
+                rag_tool = RAGTool()
+
+                result = await asyncio.wait_for(
+                    asyncio.to_thread(rag_tool.execute, sanitized_message, 5),
+                    timeout=6.0
+                )
+
+                if result.get("results"):
+                    rag_context = rag_tool.format_context(result)
+                    sources = [r.get("source") for r in result["results"] if r.get("source")]
+                    tools_used.append("rag_search")
+
+                    # 检查是否有 KG 结果
+                    kg_results = [
+                        r for r in result.get("results", [])
+                        if r.get("retrieval_method") == "knowledge_graph" or
+                           r.get("source") == "knowledge_graph"
+                    ]
+                    if kg_results:
+                        tools_used.append("knowledge_graph")
+
+                    if sources:
+                        yield f"data: {json.dumps({'type': 'sources', 'sources': sources[:5]})}\n\n"
+
+            except asyncio.TimeoutError:
+                app_logger.warning("RAG检索超时，使用基础prompt")
+                yield f"data: {json.dumps({'type': 'thinking', 'content': '知识库检索超时，基于通用知识回答...'})}\n\n"
+            except Exception as e:
+                app_logger.warning(f"RAG检索失败: {e}")
+
+            # === Thinking: 生成回答 ===
+            thinking_msg = "正在生成回答..." if rag_context else "基于医学知识生成回答..."
+            yield f"data: {json.dumps({'type': 'thinking', 'content': thinking_msg})}\n\n"
+
+            # 构建 prompt
+            system_prompt = ConsultationPrompts.MEDICAL_CONSULTATION_SYSTEM
+            prompt = ConsultationPrompts.format_medical_prompt(rag_context, sanitized_message)
 
             full_answer = ""
             first_token_sent = False
 
-            # 流式生成
+            # 流式生成（stream_generate 是同步 generator，用线程消费）
             try:
-                async for chunk in llm_service.stream_generate(
-                    prompt=prompt,
-                    system_prompt=system_prompt,
-                    user_id=str(request.user_id) if request.user_id else None,
-                    session_id=str(consultation_id) if consultation_id else None
-                ):
-                    if chunk:
+                import queue
+                import threading
+
+                chunk_queue: queue.Queue = queue.Queue()
+                _sentinel = object()
+
+                def _produce_stream():
+                    try:
+                        for chunk in llm_service.stream_generate(
+                            prompt=prompt,
+                            system_prompt=system_prompt,
+                            user_id=str(request.user_id) if request.user_id else None,
+                            session_id=str(consultation_id) if consultation_id else None
+                        ):
+                            chunk_queue.put(chunk)
+                    except Exception as e:
+                        chunk_queue.put(e)
+                    finally:
+                        chunk_queue.put(_sentinel)
+
+                producer = threading.Thread(target=_produce_stream, daemon=True)
+                producer.start()
+
+                while True:
+                    try:
+                        item = await asyncio.to_thread(chunk_queue.get, timeout=60.0)
+                    except Exception:
+                        break
+
+                    if item is _sentinel:
+                        break
+                    if isinstance(item, Exception):
+                        raise item
+
+                    if item:
                         if not first_token_sent:
                             yield f"data: {json.dumps({'type': 'first_token'})}\n\n"
                             first_token_sent = True
-                        full_answer += chunk
-                        yield f"data: {json.dumps({'content': chunk, 'type': 'message'})}\n\n"
+                        full_answer += item
+                        yield f"data: {json.dumps({'content': item, 'type': 'message'})}\n\n"
+
             except asyncio.TimeoutError:
                 app_logger.warning("流式生成超时")
                 yield f"data: {json.dumps({'type': 'error', 'error': '生成超时，请稍后重试'})}\n\n"

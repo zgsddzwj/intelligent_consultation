@@ -3,6 +3,14 @@ import { persist, subscribeWithSelector } from 'zustand/middleware'
 import { devtools } from 'zustand/middleware'
 
 /**
+ * 思考步骤
+ */
+export interface ThinkingStep {
+  content: string
+  ts: number
+}
+
+/**
  * 消息接口定义
  */
 export interface Message {
@@ -13,6 +21,8 @@ export interface Message {
   timestamp?: string
   id?: string
   isStreaming?: boolean
+  thinkingSteps?: ThinkingStep[]
+  isThinking?: boolean
 }
 
 /**

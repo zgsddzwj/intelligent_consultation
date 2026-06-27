@@ -110,69 +110,96 @@ class MultiRetrieval:
                  enable_semantic: bool = True,
                  enable_kg: bool = True) -> List[Dict[str, Any]]:
         """
-        多路召回检索
-        
-        Args:
-            query: 查询文本
-            top_k: 返回结果数量
-            enable_vector: 是否启用向量检索
-            enable_bm25: 是否启用BM25检索
-            enable_semantic: 是否启用语义检索
-            enable_kg: 是否启用知识图谱检索
+        多路召回检索（并行执行，大幅减少等待时间）
         """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        import time as _time
+
         all_results = []
         all_weights = []
-        
-        # 1. 向量检索
-        if enable_vector:
+        vector_results = []
+
+        # 定义各检索任务
+        def _do_vector():
+            if not enable_vector:
+                return []
             try:
-                vector_results = self.vector_retriever.retrieve(query, top_k=top_k * 2)
-                if vector_results:
-                    all_results.append(vector_results)
-                    all_weights.append(self.weights["vector"])
-                    app_logger.info(f"向量检索返回 {len(vector_results)} 条结果")
+                results = self.vector_retriever.retrieve(query, top_k=top_k * 2)
+                if results:
+                    app_logger.info(f"向量检索返回 {len(results)} 条结果")
+                return results
             except Exception as e:
                 app_logger.warning(f"向量检索失败: {e}")
-        
-        # 2. BM25检索
-        if enable_bm25:
+                return []
+
+        def _do_bm25():
+            if not enable_bm25:
+                return []
             try:
-                # 需要先获取文档列表（从Milvus或其他来源）
-                # 这里简化处理，实际需要从Milvus获取文档文本
-                bm25_results = self.bm25_retriever.retrieve(query, top_k=top_k * 2)
-                if bm25_results:
-                    all_results.append(bm25_results)
-                    all_weights.append(self.weights["bm25"])
-                    app_logger.info(f"BM25检索返回 {len(bm25_results)} 条结果")
+                results = self.bm25_retriever.retrieve(query, top_k=top_k * 2)
+                if results:
+                    app_logger.info(f"BM25检索返回 {len(results)} 条结果")
+                return results
             except Exception as e:
                 app_logger.warning(f"BM25检索失败: {e}")
-        
-        # 3. 语义检索
-        if enable_semantic:
+                return []
+
+        def _do_kg():
+            if not enable_kg:
+                return []
             try:
-                # 需要文档列表，这里使用向量检索的结果作为候选
-                if enable_vector and vector_results:
-                    semantic_results = self.semantic_retriever.semantic_search(
-                        query, vector_results, top_k=top_k
-                    )
-                    if semantic_results:
-                        all_results.append(semantic_results)
-                        all_weights.append(self.weights["semantic"])
-                        app_logger.info(f"语义检索返回 {len(semantic_results)} 条结果")
-            except Exception as e:
-                app_logger.warning(f"语义检索失败: {e}")
-        
-        # 4. 知识图谱检索
-        if enable_kg:
-            try:
-                kg_results = self.kg_retriever.retrieve(query, top_k=top_k)
-                if kg_results:
-                    all_results.append(kg_results)
-                    all_weights.append(self.weights["kg"])
-                    app_logger.info(f"知识图谱检索返回 {len(kg_results)} 条结果")
+                results = self.kg_retriever.retrieve(query, top_k=top_k)
+                if results:
+                    app_logger.info(f"知识图谱检索返回 {len(results)} 条结果")
+                return results
             except Exception as e:
                 app_logger.warning(f"知识图谱检索失败: {e}")
-        
+                return []
+
+        # 并行执行向量、BM25、KG检索
+        start = _time.time()
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                executor.submit(_do_vector): "vector",
+                executor.submit(_do_bm25): "bm25",
+                executor.submit(_do_kg): "kg",
+            }
+
+            kg_results = []
+            for future in as_completed(futures):
+                method = futures[future]
+                try:
+                    results = future.result()
+                    if results:
+                        if method == "vector":
+                            vector_results = results
+                            all_results.append(results)
+                            all_weights.append(self.weights["vector"])
+                        elif method == "bm25":
+                            all_results.append(results)
+                            all_weights.append(self.weights["bm25"])
+                        elif method == "kg":
+                            kg_results = results
+                            all_results.append(results)
+                            all_weights.append(self.weights["kg"])
+                except Exception as e:
+                    app_logger.warning(f"{method} 检索异常: {e}")
+
+        app_logger.info(f"并行多路检索耗时: {_time.time() - start:.2f}s")
+
+        # 语义检索依赖向量结果，在并行后单独执行
+        if enable_semantic and vector_results:
+            try:
+                semantic_results = self.semantic_retriever.semantic_search(
+                    query, vector_results, top_k=top_k
+                )
+                if semantic_results:
+                    all_results.append(semantic_results)
+                    all_weights.append(self.weights["semantic"])
+                    app_logger.info(f"语义检索返回 {len(semantic_results)} 条结果")
+            except Exception as e:
+                app_logger.warning(f"语义检索失败: {e}")
+
         # 如果没有结果，返回空列表
         if not all_results:
             app_logger.warning("所有检索方法都失败，返回空结果")

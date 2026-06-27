@@ -184,7 +184,7 @@ class LLMService:
 
     def __init__(self):
         self.primary_provider = settings.LLM_PROVIDER.lower()
-        self.fallback_provider = settings.FALLBACK_LLM_PROVIDER.lower() if hasattr(settings, 'FALLBACK_LLM_PROVIDER') else None
+        self.fallback_provider = settings.FALLBACK_LLM_PROVIDER.lower() if settings.FALLBACK_LLM_PROVIDER else None
         self.prompt_version = settings.PROMPT_VERSION
         self.connection_pool = LLMConnectionPool()
 

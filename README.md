@@ -22,6 +22,26 @@
 
 ---
 
+## 🖼️ 项目预览
+
+<p align="center">
+  <img src="./index_page.png" alt="智能医疗管家平台 - 首页" width="900" />
+</p>
+
+<details>
+<summary><strong>📸 截图说明</strong></summary>
+
+> 上图为平台首页（患者门户），展示 AI 智能问诊界面，支持：
+> - **流式对话** — 实时打字效果，逐字输出 AI 回复
+> - **DeepSeek 风格思考面板** — 可折叠的思考过程展示，支持多步骤累加
+> - **Markdown 渲染** — 加粗、列表、表格、代码块等格式化输出
+> - **快捷问题入口** — 一键发起常见健康咨询
+> - **信息来源追溯** — 展示 RAG 检索引用的知识来源
+
+</details>
+
+---
+
 ## 📑 目录
 
 - [✨ 项目亮点](#-项目亮点)
@@ -365,6 +385,7 @@ GitHub Actions 全流程自动化 (`.github/workflows/ci.yml`)：
 | [RAG 使用指南](docs/RAG_GUIDE.md) | RAG 系统使用指南 |
 | [知识图谱指南](docs/KNOWLEDGE_GRAPH_GUIDE.md) | KG 操作与维护 |
 | [优化指南](docs/OPTIMIZATION_GUIDE.md) | 系统性能优化 |
+| [问题排查记录](docs/TROUBLESHOOTING.md) | 典型问题根因分析与解决方案 |
 | [日志指南](docs/LOGGING.md) | 日志查看与排查 |
 | [贡献指南](docs/CONTRIBUTING.md) | 参与项目贡献 |
 

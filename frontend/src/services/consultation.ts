@@ -33,14 +33,27 @@ export interface ChatResponse {
 }
 
 /**
- * 流式聊天响应
+ * 流式聊天响应（含 thinking 事件）
  */
 export interface ChatStreamEvent {
-  type: 'start' | 'first_token' | 'message' | 'sources' | 'done' | 'error'
+  type: 'start' | 'first_token' | 'message' | 'sources' | 'thinking' | 'done' | 'error'
   content?: string
   consultation_id?: number
   sources?: string[]
   error?: string
+}
+
+/**
+ * 流式聊天回调
+ */
+export interface ChatStreamCallbacks {
+  onStart?: (consultationId?: number) => void
+  onThinking?: (content: string) => void
+  onFirstToken?: () => void
+  onMessage?: (chunk: string) => void
+  onSources?: (sources: string[]) => void
+  onDone?: (consultationId?: number) => void
+  onError?: (error: string) => void
 }
 
 /**
@@ -98,20 +111,86 @@ export const consultationApi = {
     post<ChatResponse>('/consultation/chat', data),
 
   /**
-   * 流式对话（SSE）
+   * 流式对话（SSE POST，支持 thinking）
+   * 使用 fetch + ReadableStream 解析 SSE，支持 POST body
    */
-  chatStream: (data: ChatRequest): EventSource => {
-    const params = new URLSearchParams()
-    params.append('message', data.message)
-    if (data.consultation_id) params.append('consultation_id', String(data.consultation_id))
-    if (data.user_id) params.append('user_id', String(data.user_id))
-
+  chatStream: async (data: ChatRequest, callbacks: ChatStreamCallbacks): Promise<void> => {
     const token = localStorage.getItem('auth_token')
-    const url = `/api/v1/consultation/chat/stream?${params.toString()}`
+    const baseURL = import.meta.env.DEV ? 'http://localhost:8000' : ''
+    const url = `${baseURL}/api/v1/consultation/chat/stream`
 
-    return new EventSource(url, {
-      withCredentials: !!token,
-    })
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(data),
+      })
+
+      if (!response.ok) {
+        callbacks.onError?.(`HTTP ${response.status}`)
+        return
+      }
+
+      const reader = response.body?.getReader()
+      if (!reader) {
+        callbacks.onError?.('无法读取响应流')
+        return
+      }
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+
+        // 解析 SSE 事件（以 data: 开头，\n\n 结尾）
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          const dataMatch = line.match(/^data:\s*(.+)$/s)
+          if (!dataMatch) continue
+
+          try {
+            const event = JSON.parse(dataMatch[1]) as ChatStreamEvent
+
+            switch (event.type) {
+              case 'start':
+                callbacks.onStart?.(event.consultation_id)
+                break
+              case 'thinking':
+                callbacks.onThinking?.(event.content || '')
+                break
+              case 'first_token':
+                callbacks.onFirstToken?.()
+                break
+              case 'message':
+                callbacks.onMessage?.(event.content || '')
+                break
+              case 'sources':
+                callbacks.onSources?.(event.sources || [])
+                break
+              case 'done':
+                callbacks.onDone?.(event.consultation_id)
+                return
+              case 'error':
+                callbacks.onError?.(event.error || '未知错误')
+                return
+            }
+          } catch {
+            // 忽略解析错误
+          }
+        }
+      }
+    } catch (error) {
+      callbacks.onError?.(error instanceof Error ? error.message : '网络错误')
+    }
   },
 
   /**

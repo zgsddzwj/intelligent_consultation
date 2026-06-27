@@ -46,7 +46,8 @@ class Settings(BaseSettings):
     MILVUS_COLLECTION_NAME: str = "medical_documents"
     
     # LLM Provider Configuration
-    LLM_PROVIDER: str = "qwen"  # "qwen" | "deepseek" - 从.env读取
+    LLM_PROVIDER: str = "deepseek"  # "deepseek" | "qwen" - 从.env读取
+    FALLBACK_LLM_PROVIDER: str = ""  # 降级Provider，留空表示不降级
     
     # LLM - Qwen (阿里云百炼)
     QWEN_API_KEY: str = ""  # 从.env读取

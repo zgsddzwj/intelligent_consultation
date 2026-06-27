@@ -70,6 +70,9 @@ class Retriever:
             # 2. 多查询向量检索
             for q in queries:
                 query_vector = self.embedder.embed_query(q)
+                if not query_vector:
+                    app_logger.warning("向量嵌入为空（API Key 未配置或调用失败），跳过向量检索")
+                    continue
                 results = self.milvus.search(
                     query_vector=query_vector,
                     top_k=top_k * 2,

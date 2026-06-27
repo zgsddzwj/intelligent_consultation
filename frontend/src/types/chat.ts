@@ -7,6 +7,14 @@ export type RiskLevel = 'high' | 'medium' | 'low'
 /** 消息状态 */
 export type MessageStatus = 'sending' | 'sent' | 'error' | 'streaming'
 
+/** 思考步骤 */
+export interface ThinkingStep {
+  /** 步骤内容 */
+  content: string
+  /** 时间戳 */
+  ts: number
+}
+
 /** 单条聊天消息 */
 export interface Message {
   /** 消息唯一ID */
@@ -25,6 +33,10 @@ export interface Message {
   status?: MessageStatus
   /** 是否流式输出中 */
   isStreaming?: boolean
+  /** 思考过程步骤 */
+  thinkingSteps?: ThinkingStep[]
+  /** 是否正在思考 */
+  isThinking?: boolean
 }
 
 /** 聊天请求参数 */
@@ -58,7 +70,7 @@ export interface ChatResponse {
 /** 流式聊天事件 */
 export interface ChatStreamEvent {
   /** 事件类型 */
-  type: 'start' | 'first_token' | 'message' | 'sources' | 'done' | 'error'
+  type: 'start' | 'first_token' | 'message' | 'sources' | 'thinking' | 'done' | 'error'
   /** 内容片段 */
   content?: string
   /** 会话ID */

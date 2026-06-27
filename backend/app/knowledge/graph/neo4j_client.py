@@ -95,6 +95,8 @@ class Neo4jClient:
         self.password = settings.NEO4J_PASSWORD
         self.driver = None
         self._connected = False
+        self._last_fail_time = 0  # 上次失败时间戳
+        self._fail_cache_ttl = 30  # 失败缓存30秒
         self._query_stats = {
             "total_queries": 0,
             "cached_queries": 0,
@@ -120,10 +122,10 @@ class Neo4jClient:
         self.driver = GraphDatabase.driver(
             self.uri,
             auth=(self.user, self.password),
-            max_connection_pool_size=20,
-            connection_acquisition_timeout=10,
-            connection_timeout=10,
-            max_transaction_retry_time=30.0
+            max_connection_pool_size=10,
+            connection_acquisition_timeout=3,
+            connection_timeout=3,
+            max_transaction_retry_time=5.0
         )
         self.driver.verify_connectivity()
     
@@ -139,29 +141,32 @@ class Neo4jClient:
                 self._connected = False
     
     def _ensure_connection(self):
-        """确保连接可用（带重试退避）"""
+        """确保连接可用（快速失败 + 失败缓存）"""
         if not self._connected or not self.driver:
-            for attempt in range(3):
-                try:
-                    if self.driver:
-                        try:
-                            self.driver.close()
-                        except Exception:
-                            pass
-                    
-                    self._init_driver()
-                    self._connected = True
-                    app_logger.info(f"Neo4j重新连接成功（尝试 {attempt + 1}）")
-                    return
-                except Exception as e:
-                    app_logger.warning(f"Neo4j重连失败 (尝试 {attempt + 1}/3): {e}")
-                    time.sleep(0.5 * (attempt + 1))
-            
-            raise ConnectionError("Neo4j连接失败，已重试3次")
+            # 失败缓存：如果最近失败过，直接抛异常不重试
+            import time as _time
+            if self._last_fail_time and (_time.time() - self._last_fail_time < self._fail_cache_ttl):
+                raise ConnectionError("Neo4j连接不可用（失败缓存中）")
+
+            try:
+                if self.driver:
+                    try:
+                        self.driver.close()
+                    except Exception:
+                        pass
+                
+                self._init_driver()
+                self._connected = True
+                self._last_fail_time = 0
+                app_logger.info("Neo4j重新连接成功")
+            except Exception as e:
+                self._last_fail_time = _time.time()
+                app_logger.warning(f"Neo4j重连失败: {e}")
+                raise ConnectionError(f"Neo4j连接失败: {e}")
     
     def execute_query(self, query: str, parameters: Optional[Dict] = None,
-                      use_cache: bool = True) -> List[Dict[str, Any]]:
-        """执行Cypher查询（支持缓存）"""
+                      use_cache: bool = True, timeout: float = 5.0) -> List[Dict[str, Any]]:
+        """执行Cypher查询（支持缓存和超时）"""
         parameters = parameters or {}
         
         # 尝试从缓存获取
@@ -177,7 +182,7 @@ class Neo4jClient:
         start_time = time.time()
         try:
             with self.driver.session() as session:
-                result = session.run(query, parameters)
+                result = session.run(query, parameters, timeout=timeout)
                 data = [record.data() for record in result]
             
             # 更新统计

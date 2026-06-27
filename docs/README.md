@@ -36,6 +36,12 @@
   - 性能瓶颈分析与推荐方案
   - 未来开发路线图
 
+- [问题排查记录 (TROUBLESHOOTING.md)](TROUBLESHOOTING.md)
+  - 问诊无响应（模型重复加载、语义缓存 Bug）根因分析与修复
+  - KG 检索慢（LLM NER、N+1 查询、串行多路检索）优化方案
+  - 流式接口 thinking 过程实现
+  - 优化效果对比与关键经验总结
+
 ## 🛠️ 设置与部署
 
 - [快速开始指南 (QUICKSTART.md)](QUICKSTART.md) - 快速启动和配置

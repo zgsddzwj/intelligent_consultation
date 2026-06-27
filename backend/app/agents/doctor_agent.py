@@ -2,7 +2,6 @@
 from typing import Dict, Any, Optional
 import time
 import asyncio
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.agents.base import BaseAgent
 from app.agents.tools.rag_tool import RAGTool
 from app.agents.tools.knowledge_graph_tool import KnowledgeGraphTool
@@ -94,102 +93,60 @@ class DoctorAgent(BaseAgent):
         return history_text + "\n"
 
     def _handle_general_consultation(self, question: str, context: Dict, trace_id: Optional[str] = None) -> Dict[str, Any]:
-        """处理一般咨询（并行优化）"""
+        """处理一般咨询（单次RAG检索，KG结果从RAG中提取，避免重复查询）"""
         tools_used = []
-        
-        # 并行执行RAG检索和KG查询
+
+        # 执行一次RAG检索（内含向量+BM25+语义+KG多路召回）
         rag_result = {"results": []}
         rag_context = ""
         kg_context = ""
-        
-        def execute_rag():
-            """执行RAG检索"""
-            try:
-                result = self.rag_tool.execute(question, top_k=5)
-                return ("rag", result, self.rag_tool.format_context(result) if result.get("results") else "")
-            except Exception as e:
-                app_logger.warning(f"RAG检索失败: {e}")
-                return ("rag", {"results": []}, "")
-        
-        def execute_kg():
-            """执行知识图谱查询（直接使用KG检索器，避免与RAG重复查询）"""
-            try:
-                from app.knowledge.rag.kg_retriever import KnowledgeGraphRetriever
-                kg_retriever = KnowledgeGraphRetriever()
-                kg_results = kg_retriever.retrieve(question, top_k=3)
-                
-                if kg_results:
+
+        try:
+            rag_result = self.rag_tool.execute(question, top_k=5)
+            if rag_result.get("results"):
+                rag_context = self.rag_tool.format_context(rag_result)
+                tools_used.append("rag_search")
+
+                # 从RAG结果中提取知识图谱相关结果（AdvancedRAG的MultiRetrieval已包含KG检索）
+                kg_from_rag = [
+                    r for r in rag_result.get("results", [])
+                    if r.get("retrieval_method") == "knowledge_graph" or
+                       r.get("source") == "knowledge_graph"
+                ]
+                if kg_from_rag:
                     kg_context = "\n".join([
-                        f"- {r.get('text', '')}" 
-                        for r in kg_results[:3]
+                        f"- {r.get('text', '')}"
+                        for r in kg_from_rag[:3]
                     ])
-                    return ("kg", kg_results, kg_context)
-                
-                return ("kg", None, "")
-            except Exception as e:
-                app_logger.warning(f"知识图谱查询失败: {e}")
-                return ("kg", None, "")
-        
-        # 使用线程池并行执行
-        with ThreadPoolExecutor(max_workers=2) as executor:
-            futures = {
-                executor.submit(execute_rag): "rag",
-                executor.submit(execute_kg): "kg"
-            }
-            
-            for future in as_completed(futures):
-                try:
-                    tool_type, result, formatted_context = future.result()
-                    if tool_type == "rag":
-                        rag_result = result
-                        rag_context = formatted_context
-                        if rag_result.get("results"):
-                            tools_used.append("rag_search")
-                            # 从RAG结果中提取知识图谱相关结果（AdvancedRAG已包含KG检索）
-                            kg_from_rag = [
-                                r for r in rag_result.get("results", [])
-                                if r.get("retrieval_method") == "knowledge_graph" or 
-                                   r.get("source") == "knowledge_graph"
-                            ]
-                            if kg_from_rag and not kg_context:
-                                kg_context = "\n".join([
-                                    f"- {r.get('text', '')}" 
-                                    for r in kg_from_rag[:3]
-                                ])
-                                if "knowledge_graph_query" not in tools_used:
-                                    tools_used.append("knowledge_graph_query")
-                    elif tool_type == "kg":
-                        if result:
-                            kg_context = formatted_context
-                            tools_used.append("knowledge_graph_query")
-                except Exception as e:
-                    app_logger.warning(f"并行执行失败: {e}")
-        
+                    tools_used.append("knowledge_graph_query")
+        except Exception as e:
+            app_logger.warning(f"RAG检索失败: {e}")
+
         # 整合上下文
         history_text = self._format_history(context)
         base_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
         full_context = f"{history_text}{base_context}" if history_text else base_context
-        
-        # 4. 生成回答
+
+        # 生成回答
         prompt = ConsultationPrompts.format_medical_prompt(full_context, question)
         answer = self.llm.generate(
             prompt=prompt,
             system_prompt=self.get_system_prompt(),
             temperature=0.7
         )
-        
+
         # 无检索结果时添加用户提示
         answer = self.format_answer_with_fallback(answer, full_context)
-        
-        # 5. 添加来源信息
+
+        # 添加来源信息
         sources = []
         if rag_result.get("results"):
             sources = [r.get("source") for r in rag_result["results"]]
-        
+
         return {
             "answer": answer,
             "sources": sources,
-            "context_used": full_context[:500],  # 截取前500字符
+            "context_used": full_context[:500],
             "tools_used": tools_used
         }
     

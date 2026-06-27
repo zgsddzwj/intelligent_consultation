@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Input, Button, message, Upload, Tag, Tooltip, Badge, Typography, Space } from 'antd'
 import {
   SendOutlined,
@@ -8,9 +8,9 @@ import {
   SafetyCertificateOutlined,
   FileImageOutlined,
   DeleteOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons'
 import { ChatMessage, TypingIndicator, WelcomeScreen } from '../components/chat'
-import { useMutation } from '@tanstack/react-query'
 import { consultationApi } from '../services/consultation'
 import { useConsultationStore } from '../stores/consultation'
 import { post, ApiError } from '../services/api'
@@ -32,37 +32,21 @@ export default function PatientPortal() {
   const messages = useConsultationStore((state) => state.messages)
   const consultationId = useConsultationStore((state) => state.consultationId)
   const addMessage = useConsultationStore((state) => state.addMessage)
+  const updateLastMessage = useConsultationStore((state) => state.updateLastMessage)
   const setConsultationId = useConsultationStore((state) => state.setConsultationId)
   const clearMessages = useConsultationStore((state) => state.clearMessages)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const [isTyping, setIsTyping] = useState(false)
+  const contentRef = useRef<string>('')  // 用 ref 累加流式内容，避免闭包陈旧值
+  const thinkingStepsRef = useRef<Array<{ content: string; ts: number }>>([])  // 累加 thinking 步骤
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [hasFirstToken, setHasFirstToken] = useState(false)
   const [input, setInput] = useState('')
-
-  const chatMutation = useMutation({
-    mutationFn: (req: ChatRequest) => consultationApi.chat(req),
-    onSuccess: (data) => {
-      addMessage({
-        role: 'assistant',
-        content: data.answer,
-        sources: data.sources,
-        risk_level: data.risk_level,
-      })
-      if (data.consultation_id) {
-        setConsultationId(data.consultation_id)
-      }
-      setIsTyping(false)
-    },
-    onError: (error: Error) => {
-      message.error('发送失败: ' + (error.message || '请稍后重试'))
-      setIsTyping(false)
-    },
-  })
 
   // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, isTyping])
+  }, [messages, isStreaming, hasFirstToken])
 
   const buildChatRequest = (msg: string): ChatRequest => {
     const authUser = getAuthUser()
@@ -73,21 +57,73 @@ export default function PatientPortal() {
     }
   }
 
+  const handleStreamChat = useCallback(async (msg: string) => {
+    setIsStreaming(true)
+    setHasFirstToken(false)
+    contentRef.current = ''
+    thinkingStepsRef.current = []
+
+    // 添加一个占位的 assistant 消息
+    addMessage({ role: 'assistant', content: '', isStreaming: true, isThinking: true })
+
+    await consultationApi.chatStream(buildChatRequest(msg), {
+      onStart: (cid) => {
+        if (cid) setConsultationId(cid)
+      },
+      onThinking: (content) => {
+        // 累加 thinking 步骤到消息中
+        thinkingStepsRef.current = [...thinkingStepsRef.current, { content, ts: Date.now() }]
+        updateLastMessage({
+          thinkingSteps: thinkingStepsRef.current,
+          isThinking: true,
+        })
+      },
+      onFirstToken: () => {
+        // 思考结束，开始输出回答
+        updateLastMessage({ isThinking: false })
+        setHasFirstToken(true)
+      },
+      onMessage: (chunk) => {
+        // 用 ref 累加，确保闭包中拿到的是最新值
+        contentRef.current += chunk
+        updateLastMessage({ content: contentRef.current, isStreaming: true })
+      },
+      onSources: (sources) => {
+        updateLastMessage({ sources })
+      },
+      onDone: (cid) => {
+        if (cid) setConsultationId(cid)
+        updateLastMessage({ isStreaming: false, isThinking: false })
+        setIsStreaming(false)
+        setHasFirstToken(false)
+        contentRef.current = ''
+        thinkingStepsRef.current = []
+      },
+      onError: (error) => {
+        message.error('发送失败: ' + error)
+        updateLastMessage({ content: '抱歉，处理您的咨询时遇到问题，请重试。', isStreaming: false, isThinking: false })
+        setIsStreaming(false)
+        setHasFirstToken(false)
+        contentRef.current = ''
+        thinkingStepsRef.current = []
+      },
+    })
+  }, [consultationId, addMessage, updateLastMessage, setConsultationId])
+
   const handleSend = () => {
-    if (!input.trim() || chatMutation.isPending) return
+    if (!input.trim() || isStreaming) return
 
     const userMessage = input.trim()
     addMessage({ role: 'user', content: userMessage })
     setInput('')
-    setIsTyping(true)
 
-    chatMutation.mutate(buildChatRequest(userMessage))
+    handleStreamChat(userMessage)
   }
 
   const handleQuickSuggestion = (text: string) => {
+    if (isStreaming) return
     addMessage({ role: 'user', content: text })
-    setIsTyping(true)
-    chatMutation.mutate(buildChatRequest(text))
+    handleStreamChat(text)
   }
 
   const handleImageUpload = async (file: File) => {
@@ -203,7 +239,10 @@ export default function PatientPortal() {
                   index={index}
                 />
               ))}
-              {isTyping && <TypingIndicator />}
+              {/* 流式输出中但还没有内容且没有 thinking 时显示打字指示器 */}
+              {isStreaming && !hasFirstToken &&
+                !(messages.length > 0 && messages[messages.length - 1].thinkingSteps?.length) &&
+                <TypingIndicator />}
             </>
           )}
           <div ref={messagesEndRef} />
@@ -231,7 +270,7 @@ export default function PatientPortal() {
                 }}
                 placeholder="描述您的症状或健康问题，AI 将为您提供专业建议..."
                 rows={2}
-                disabled={chatMutation.isPending}
+                disabled={isStreaming}
                 style={{
                   borderRadius: '12px',
                   fontSize: '14px',
@@ -275,10 +314,10 @@ export default function PatientPortal() {
                   type="primary"
                   shape="circle"
                   size="large"
-                  icon={<SendOutlined />}
+                  icon={isStreaming ? <LoadingOutlined /> : <SendOutlined />}
                   onClick={handleSend}
-                  loading={chatMutation.isPending}
-                  disabled={!input.trim()}
+                  loading={isStreaming}
+                  disabled={!input.trim() || isStreaming}
                   style={{
                     width: '44px',
                     height: '44px',
