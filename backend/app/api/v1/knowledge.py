@@ -354,11 +354,12 @@ async def get_graph_visualization(request: GraphVisualizationRequest):
         node_ids = set()
         link_ids = set()
         
+        neo4j = get_neo4j_client()
+        
         # 构建Cypher查询
         if request.department:
             # 按科室查询
             query = queries.get_department_graph(request.department, request.depth)
-            neo4j = get_neo4j_client()
             result = neo4j.execute_query(query, {"dept_name": request.department})
         elif request.disease:
             # 按疾病查询
@@ -372,12 +373,10 @@ async def get_graph_visualization(request: GraphVisualizationRequest):
             LIMIT 100
             RETURN d, s, drug, exam, dept
             """
-            neo4j = get_neo4j_client()
             result = neo4j.execute_query(query, {"disease": request.disease})
         else:
             # 查询所有科室及其关联
             query = queries.get_all_graph_data(200)
-            neo4j = get_neo4j_client()
             result = neo4j.execute_query(query, {})
         
         # 转换为可视化格式
@@ -498,6 +497,10 @@ async def get_graph_visualization(request: GraphVisualizationRequest):
             "links": links
         }
         
+    except ConnectionError as e:
+        # Neo4j 不可用时降级返回空数据，前端展示友好提示
+        app_logger.warning(f"Neo4j不可用，返回空图谱数据: {e}")
+        return {"nodes": [], "links": [], "neo4j_available": False}
     except Exception as e:
         app_logger.error(f"获取图谱可视化数据失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))

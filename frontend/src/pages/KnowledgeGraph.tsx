@@ -26,6 +26,7 @@ import {
   BugOutlined,
   FileSearchOutlined,
   FundOutlined,
+  ApiOutlined,
 } from '@ant-design/icons'
 import ForceGraph2D from 'react-force-graph-2d'
 import { useQuery } from '@tanstack/react-query'
@@ -90,6 +91,7 @@ export default function KnowledgeGraph() {
   const [graphData, setGraphData] = useState<GraphData>({ nodes: [], links: [] })
   const [loading, setLoading] = useState(false)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
+  const [neo4jAvailable, setNeo4jAvailable] = useState(true)
   const fgRef = useRef<any>(undefined)
 
   // 获取科室列表
@@ -107,9 +109,11 @@ export default function KnowledgeGraph() {
         department: department || undefined,
         depth: 2,
       })
-      setGraphData(response)
+      setGraphData({ nodes: response.nodes || [], links: response.links || [] })
+      setNeo4jAvailable((response as any).neo4j_available !== false)
     } catch (error: any) {
       message.error('加载知识图谱失败: ' + (error.message || '未知错误'))
+      setNeo4jAvailable(false)
     } finally {
       setLoading(false)
     }
@@ -259,8 +263,38 @@ export default function KnowledgeGraph() {
             </div>
           )}
 
+          {/* Neo4j 不可用提示 */}
+          {!loading && !neo4jAvailable && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '12px',
+              }}
+            >
+              <ApiOutlined style={{ fontSize: '48px', color: 'var(--text-hint)' }} />
+              <Text style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-secondary)' }}>
+                知识图谱服务暂不可用
+              </Text>
+              <Text type="secondary" style={{ fontSize: '13px' }}>
+                Neo4j 数据库未连接，请启动后重试
+              </Text>
+              <Button
+                icon={<ReloadOutlined />}
+                onClick={() => fetchGraphData()}
+                style={{ marginTop: '8px' }}
+              >
+                重新加载
+              </Button>
+            </div>
+          )}
+
           {/* 空状态 */}
-          {!loading && graphData.nodes.length === 0 && (
+          {!loading && neo4jAvailable && graphData.nodes.length === 0 && (
             <div
               style={{
                 position: 'absolute',
