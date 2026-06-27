@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useLocation, useNavigate, Link } from 'react-router-dom'
-import { Layout, Menu, Typography, Space, Avatar, Breadcrumb, Drawer, Button, Spin } from 'antd'
+import { Layout, Menu, Typography, Avatar, Drawer, Button, Spin } from 'antd'
 import ErrorBoundary from './components/ErrorBoundary'
 import AuthGuard from './components/AuthGuard'
 import {
@@ -11,7 +11,7 @@ import {
   HeartOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
-  HomeOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons'
 import { getAuthUser, clearAuthToken, isAuthenticated } from './services/auth'
 import type { MenuProps } from 'antd'
@@ -23,15 +23,14 @@ const AdminPanel = lazy(() => import('./pages/AdminPanel'))
 const KnowledgeGraph = lazy(() => import('./pages/KnowledgeGraph'))
 const Login = lazy(() => import('./pages/Login'))
 
-// 加载占位
 const PageLoader = () => (
-  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
-    <Spin size="large" tip="页面加载中..." />
+  <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
+    <Spin size="large" />
   </div>
 )
 
 const { Content, Footer, Sider } = Layout
-const { Text, Title } = Typography
+const { Text } = Typography
 
 // 导航菜单项配置
 const menuItems: MenuProps['items'] = [
@@ -57,57 +56,10 @@ const menuItems: MenuProps['items'] = [
   },
 ]
 
-// 面包屑映射
-const breadcrumbMap: Record<string, { title: string; icon: React.ReactNode }> = {
-  '/': { title: '患者门户', icon: <UserOutlined /> },
-  '/doctor': { title: '医生工作台', icon: <MedicineBoxOutlined /> },
-  '/knowledge-graph': { title: '知识图谱', icon: <ExperimentOutlined /> },
-  '/admin': { title: '管理后台', icon: <SettingOutlined /> },
-}
-
-/** 面包屑组件 */
-function PageBreadcrumb() {
-  const location = useLocation()
-  const current = breadcrumbMap[location.pathname]
-
-  if (!current) return null
-
-  return (
-    <Breadcrumb
-      style={{
-        marginBottom: '16px',
-        padding: '0 4px',
-      }}
-      items={[
-        {
-          title: (
-            <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <HomeOutlined />
-              <span>首页</span>
-            </Link>
-          ),
-        },
-        {
-          title: (
-            <span style={{ display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary-color)' }}>
-              {current.icon}
-              {current.title}
-            </span>
-          ),
-        },
-      ]}
-    />
-  )
-}
-
-// 应用布局组件 - 包含侧边导航（响应式）
-function AppLayout() {
-  const location = useLocation()
+/** 侧边栏内容 */
+function SiderContent({ collapsed }: { collapsed: boolean }) {
   const navigate = useNavigate()
-  const [collapsed, setCollapsed] = useState(false)
-  const [mobileOpen, setMobileOpen] = useState(false)
-  const [isMobile, setIsMobile] = useState(false)
-
+  const location = useLocation()
   const [authUser, setAuthUser] = useState(getAuthUser())
 
   useEffect(() => {
@@ -119,7 +71,168 @@ function AppLayout() {
   const handleLogout = () => {
     clearAuthToken()
     setAuthUser(null)
+    navigate('/')
   }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Logo区域 */}
+      <div
+        style={{
+          padding: collapsed ? '20px 12px' : '24px 20px',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '12px',
+          borderBottom: '1px solid var(--sidebar-border)',
+          transition: 'padding var(--transition-normal)',
+        }}
+      >
+        <div
+          style={{
+            width: collapsed ? '40px' : '48px',
+            height: collapsed ? '40px' : '48px',
+            borderRadius: '14px',
+            background: 'linear-gradient(135deg, #2563eb 0%, #0d9488 100%)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
+            transition: 'all var(--transition-normal)',
+            flexShrink: 0,
+          }}
+        >
+          <HeartOutlined style={{ fontSize: collapsed ? '20px' : '24px', color: '#fff' }} />
+        </div>
+        {!collapsed && (
+          <div style={{ textAlign: 'center', animation: 'fadeIn 0.3s ease' }}>
+            <Text
+              style={{
+                color: '#fff',
+                fontSize: '15px',
+                fontWeight: 700,
+                display: 'block',
+                lineHeight: 1.3,
+              }}
+            >
+              智能医疗管家
+            </Text>
+            <Text
+              style={{
+                color: 'var(--sidebar-text-muted)',
+                fontSize: '11px',
+                marginTop: '2px',
+                display: 'block',
+              }}
+            >
+              AI Medical Platform
+            </Text>
+          </div>
+        )}
+      </div>
+
+      {/* 导航菜单 */}
+      <div style={{ flex: 1, overflowY: 'auto', paddingTop: '12px' }}>
+        <Menu
+          mode="inline"
+          selectedKeys={[location.pathname]}
+          items={menuItems}
+          inlineCollapsed={collapsed}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: '0 8px',
+          }}
+          theme="dark"
+          onClick={({ key }) => navigate(key)}
+        />
+      </div>
+
+      {/* 底部用户信息 */}
+      <div
+        style={{
+          padding: collapsed ? '16px 8px' : '16px 16px',
+          borderTop: '1px solid var(--sidebar-border)',
+        }}
+      >
+        {collapsed ? (
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <Avatar
+              size={36}
+              icon={<UserOutlined />}
+              style={{
+                background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)',
+                cursor: 'pointer',
+              }}
+            />
+          </div>
+        ) : (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 12px',
+              borderRadius: '12px',
+              background: 'var(--sidebar-bg-hover)',
+              border: '1px solid var(--sidebar-border)',
+            }}
+          >
+            <Avatar
+              size={32}
+              icon={<UserOutlined />}
+              style={{
+                background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)',
+                flexShrink: 0,
+              }}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Text
+                style={{
+                  color: '#fff',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  display: 'block',
+                  lineHeight: 1.3,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {authUser?.username || (isAuthenticated() ? '已登录' : '访客')}
+              </Text>
+              {authUser ? (
+                <Text
+                  onClick={handleLogout}
+                  style={{
+                    color: 'var(--sidebar-text-muted)',
+                    fontSize: '11px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2px',
+                  }}
+                >
+                  <LogoutOutlined /> 退出登录
+                </Text>
+              ) : (
+                <Link to="/login" style={{ color: 'var(--sidebar-text-muted)', fontSize: '11px' }}>
+                  登录 / 注册
+                </Link>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// 应用布局组件
+function AppLayout() {
+  const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(false)
 
   // 检测移动端
   useEffect(() => {
@@ -134,183 +247,43 @@ function AppLayout() {
     return () => window.removeEventListener('resize', checkMobile)
   }, [])
 
-  const siderWidth = collapsed ? 80 : 260
-
-  // 侧边栏内容
-  const siderContent = (
-    <>
-      {/* Logo区域 */}
-      <div
-        style={{
-          padding: collapsed ? '24px 12px' : '32px 24px',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '16px',
-          borderBottom: '1px solid rgba(255,255,255,0.08)',
-          transition: 'padding var(--transition-normal)',
-        }}
-      >
-        <div
-          style={{
-            width: collapsed ? '44px' : '64px',
-            height: collapsed ? '44px' : '64px',
-            borderRadius: '20px',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 8px 32px rgba(102, 126, 234, 0.4)',
-            animation: 'float 3s ease-in-out infinite',
-            transition: 'all var(--transition-normal)',
-            flexShrink: 0,
-          }}
-        >
-          <HeartOutlined style={{ fontSize: collapsed ? '22px' : '30px', color: '#fff' }} />
-        </div>
-        {!collapsed && (
-          <div style={{ textAlign: 'center', animation: 'fadeIn 0.3s ease' }}>
-            <Title
-              level={4}
-              style={{
-                color: '#fff',
-                margin: 0,
-                fontWeight: 700,
-                fontSize: '17px',
-                letterSpacing: '-0.02em',
-              }}
-            >
-              智能医疗管家
-            </Title>
-            <Text
-              style={{
-                color: 'rgba(255,255,255,0.45)',
-                fontSize: '12px',
-                marginTop: '4px',
-                display: 'block',
-              }}
-            >
-              AI-Powered Medical Platform
-            </Text>
-          </div>
-        )}
-      </div>
-
-      {/* 导航菜单 */}
-      <Menu
-        mode="inline"
-        selectedKeys={[location.pathname]}
-        items={menuItems}
-        inlineCollapsed={collapsed}
-        style={{
-          background: 'transparent',
-          border: 'none',
-          marginTop: '16px',
-          padding: '0 12px',
-        }}
-        theme="dark"
-        onClick={({ key }) => {
-          navigate(key)
-          if (isMobile) setMobileOpen(false)
-        }}
-      />
-
-      {/* 底部信息 */}
-      {!collapsed && (
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            padding: '20px 24px',
-            borderTop: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px',
-              padding: '12px 14px',
-              borderRadius: '14px',
-              background: 'rgba(255,255,255,0.05)',
-              border: '1px solid rgba(255,255,255,0.06)',
-            }}
-          >
-            <Avatar
-              size={36}
-              icon={<UserOutlined />}
-              style={{
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                flexShrink: 0,
-              }}
-            />
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <Text
-                style={{
-                  color: '#fff',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  display: 'block',
-                  lineHeight: 1.3,
-                }}
-              >
-                {authUser?.username || (isAuthenticated() ? '已登录用户' : '访客用户')}
-              </Text>
-              <Text style={{ color: 'rgba(255,255,255,0.4)', fontSize: '11px', display: 'block' }}>
-                {authUser ? (
-                  <a onClick={handleLogout} style={{ color: 'rgba(255,255,255,0.5)', cursor: 'pointer' }}>
-                    退出登录
-                  </a>
-                ) : (
-                  <Link to="/login" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                    登录 / 注册
-                  </Link>
-                )}
-              </Text>
-            </div>
-          </div>
-        </div>
-      )}
-    </>
-  )
+  const siderWidth = collapsed ? 80 : 240
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
       {/* 桌面端侧边栏 */}
       {!isMobile && (
         <Sider
-          width={260}
+          width={240}
           collapsible
           collapsed={collapsed}
           onCollapse={setCollapsed}
           trigger={null}
           style={{
-            background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+            background: 'var(--sidebar-bg)',
             position: 'fixed',
             left: 0,
             top: 0,
             bottom: 0,
             zIndex: 100,
-            overflow: 'auto',
+            overflow: 'hidden',
           }}
         >
-          {siderContent}
+          <SiderContent collapsed={collapsed} />
         </Sider>
       )}
 
-      {/* 移动端抽屉侧边栏 */}
+      {/* 移动端抽屉 */}
       {isMobile && (
         <Drawer
           placement="left"
           closable={false}
           onClose={() => setMobileOpen(false)}
           open={mobileOpen}
-          width={260}
-          bodyStyle={{ padding: 0, background: 'linear-gradient(180deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)' }}
+          width={240}
+          styles={{ body: { padding: 0, background: 'var(--sidebar-bg)' } }}
         >
-          {siderContent}
+          <SiderContent collapsed={false} />
         </Drawer>
       )}
 
@@ -318,15 +291,18 @@ function AppLayout() {
       <Layout
         style={{
           marginLeft: isMobile ? 0 : siderWidth,
-          transition: 'margin-left 0.3s ease',
+          transition: 'margin-left 0.25s ease',
+          background: 'var(--background-body)',
+          height: '100vh',
+          overflow: 'hidden',
         }}
-      >
+>
         {/* 移动端顶部栏 */}
         {isMobile && (
           <div
             style={{
-              padding: '12px 16px',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              padding: '10px 16px',
+              background: 'var(--sidebar-bg)',
               display: 'flex',
               alignItems: 'center',
               gap: '12px',
@@ -337,31 +313,37 @@ function AppLayout() {
           >
             <Button
               type="text"
-              icon={<MenuUnfoldOutlined style={{ color: '#fff', fontSize: '20px' }} />}
+              icon={<MenuUnfoldOutlined style={{ color: '#fff', fontSize: '18px' }} />}
               onClick={() => setMobileOpen(true)}
-              style={{ padding: '4px' }}
             />
-            <Text style={{ color: '#fff', fontSize: '16px', fontWeight: 600, flex: 1 }}>
+            <Text style={{ color: '#fff', fontSize: '15px', fontWeight: 600, flex: 1 }}>
               智能医疗管家
             </Text>
-            <Avatar
-              size={32}
-              icon={<UserOutlined />}
-              style={{ background: 'rgba(255,255,255,0.2)' }}
-            />
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '10px',
+                background: 'linear-gradient(135deg, #2563eb 0%, #0d9488 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <HeartOutlined style={{ fontSize: '16px', color: '#fff' }} />
+            </div>
           </div>
         )}
 
         <Content
           style={{
-            minHeight: 'calc(100vh - 56px)',
-            background: 'var(--background-light)',
-            padding: isMobile ? '16px' : '24px 32px',
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: 0,
           }}
-        >
-          {/* 面包屑（非移动端首页） */}
-          {location.pathname !== '/' && <PageBreadcrumb />}
-
+>
           <ErrorBoundary>
             <Suspense fallback={<PageLoader />}>
               <Routes>
@@ -394,20 +376,12 @@ function AppLayout() {
             textAlign: 'center',
             background: 'var(--background-white)',
             borderTop: '1px solid var(--border-color)',
-            padding: isMobile ? '12px 16px' : '16px 24px',
+            padding: '12px 24px',
           }}
         >
-          <Space size="large" direction={isMobile ? 'vertical' : 'horizontal'}>
-            <Text type="secondary" style={{ fontSize: '13px' }}>
-              ©2026 智能医疗管家平台
-            </Text>
-            <Text type="secondary" style={{ fontSize: '13px' }}>
-              本系统仅提供医疗信息参考，不替代医生诊断
-            </Text>
-            <Text type="secondary" style={{ fontSize: '12px', opacity: 0.6 }}>
-              v3.1.0
-            </Text>
-          </Space>
+          <Text type="secondary" style={{ fontSize: '12px' }}>
+            ©2026 智能医疗管家平台 · 本系统仅提供医疗信息参考，不替代医生诊断 · v3.1.0
+          </Text>
         </Footer>
       </Layout>
 
@@ -419,8 +393,8 @@ function AppLayout() {
           onClick={() => setCollapsed(!collapsed)}
           style={{
             position: 'fixed',
-            left: collapsed ? '72px' : '252px',
-            top: '20px',
+            left: collapsed ? '72px' : '232px',
+            top: '16px',
             zIndex: 101,
             width: '24px',
             height: '24px',
@@ -432,7 +406,7 @@ function AppLayout() {
             border: '1px solid var(--border-color)',
             borderRadius: '50%',
             boxShadow: 'var(--shadow-sm)',
-            transition: 'left 0.3s ease',
+            transition: 'left 0.25s ease',
             color: 'var(--text-secondary)',
           }}
         />

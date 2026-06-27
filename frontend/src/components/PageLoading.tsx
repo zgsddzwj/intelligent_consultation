@@ -18,7 +18,7 @@ export default function PageLoading({
 }: PageLoadingProps) {
   const spinner = (
     <Spin
-      indicator={<LoadingOutlined style={{ fontSize: size === 'large' ? 36 : size === 'default' ? 24 : 16, color: '#667eea' }} spin />}
+      indicator={<LoadingOutlined style={{ fontSize: size === 'large' ? 32 : size === 'default' ? 24 : 16, color: '#2563eb' }} spin />}
       size={size}
     />
   )
@@ -32,48 +32,47 @@ export default function PageLoading({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'rgba(255, 255, 255, 0.95)',
+        background: 'rgba(248, 250, 252, 0.95)',
         backdropFilter: 'blur(8px)',
         zIndex: 9999,
-        gap: '20px',
+        gap: '16px',
       }}>
         {/* Logo动画 */}
         <div style={{
-          width: '64px',
-          height: '64px',
-          borderRadius: '18px',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          width: '56px',
+          height: '56px',
+          borderRadius: '16px',
+          background: 'linear-gradient(135deg, #2563eb 0%, #0d9488 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
+          boxShadow: '0 8px 24px rgba(37, 99, 235, 0.2)',
           animation: 'pulse 1.5s ease-in-out infinite',
         }}>
-          <LoadingOutlined style={{ fontSize: '28px', color: '#fff' }} spin />
+          <LoadingOutlined style={{ fontSize: '24px', color: '#fff' }} spin />
         </div>
-        
+
         <span style={{
-          fontSize: '15px',
-          color: '#666',
+          fontSize: '14px',
+          color: 'var(--text-secondary)',
           fontWeight: 500,
-          letterSpacing: '0.02em',
         }}>
           {tip}
         </span>
 
         {/* 加载进度条 */}
         <div style={{
-          width: '200px',
+          width: '180px',
           height: '3px',
           borderRadius: '2px',
-          background: 'rgba(102, 126, 234, 0.15)',
+          background: 'var(--gray-200)',
           overflow: 'hidden',
         }}>
           <div style={{
             width: '40%',
             height: '100%',
             borderRadius: '2px',
-            background: 'linear-gradient(90deg, #667eea, #764ba2)',
+            background: 'linear-gradient(90deg, #2563eb, #0d9488)',
             animation: 'loadingProgress 1.5s ease-in-out infinite',
           }} />
         </div>
@@ -87,15 +86,15 @@ export default function PageLoading({
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '60px 20px',
-      gap: '16px',
-      minHeight: '300px',
+      padding: '48px 20px',
+      gap: '12px',
+      minHeight: '240px',
     }}>
       {spinner}
       {tip && (
         <span style={{
-          fontSize: '14px',
-          color: '#8e8ea0',
+          fontSize: '13px',
+          color: 'var(--text-hint)',
           fontWeight: 500,
         }}>
           {tip}

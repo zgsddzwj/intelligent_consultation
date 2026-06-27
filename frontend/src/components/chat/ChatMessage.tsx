@@ -11,17 +11,17 @@ interface ChatMessageProps {
 /** 根据风险等级返回中文标签和颜色 */
 function getRiskInfo(level: RiskLevel): { label: string; color: string; bg: string } {
   const map: Record<RiskLevel, { label: string; color: string; bg: string }> = {
-    high: { label: '高风险', color: '#ff4d4f', bg: '#fff2f0' },
-    medium: { label: '中等风险', color: '#faad14', bg: '#fffbe6' },
-    low: { label: '低风险', color: '#52c41a', bg: '#f6ffed' },
+    high: { label: '高风险', color: '#dc2626', bg: '#fef2f2' },
+    medium: { label: '中等风险', color: '#d97706', bg: '#fffbeb' },
+    low: { label: '低风险', color: '#16a34a', bg: '#f0fdf4' },
   }
-  return map[level] || { label: level, color: '#999', bg: '#f5f5f5' }
+  return map[level] || { label: level, color: '#64748b', bg: '#f8fafc' }
 }
 
 function ChatMessage({ message, index = 0 }: ChatMessageProps) {
   const isUser = message.role === 'user'
   const [copied, setCopied] = useState(false)
-  const animationDelay = Math.min(index * 80, 400)
+  const animationDelay = Math.min(index * 60, 300)
 
   const handleCopy = async () => {
     try {
@@ -35,14 +35,14 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
 
   return (
     <div
-      className="animate-fade-in-up"
+      className="chat-message-wrapper animate-fade-in-up"
       style={{
         display: 'flex',
         justifyContent: isUser ? 'flex-end' : 'flex-start',
-        marginBottom: '20px',
+        marginBottom: '16px',
         alignItems: 'flex-start',
-        gap: '12px',
-        padding: '0 16px',
+        gap: '10px',
+        padding: '0 24px',
         animationDelay: `${animationDelay}ms`,
         opacity: 0,
       }}
@@ -52,11 +52,11 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
         <Avatar
           icon={<RobotOutlined />}
           style={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            background: 'linear-gradient(135deg, #2563eb 0%, #0d9488 100%)',
             flexShrink: 0,
-            boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
+            boxShadow: '0 2px 8px rgba(37, 99, 235, 0.2)',
           }}
-          size={40}
+          size={36}
         />
       )}
 
@@ -66,8 +66,8 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
           display: 'flex',
           flexDirection: 'column',
           alignItems: isUser ? 'flex-end' : 'flex-start',
-          maxWidth: '72%',
-          minWidth: '80px',
+          maxWidth: '70%',
+          minWidth: '60px',
         }}
       >
         {/* 时间戳 */}
@@ -86,22 +86,21 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
 
         <div
           style={{
-            padding: '14px 18px',
-            borderRadius: isUser ? '20px 20px 4px 20px' : '20px 20px 20px 4px',
+            padding: '12px 16px',
+            borderRadius: isUser ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
             background: isUser
-              ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+              ? 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)'
               : 'var(--background-white)',
             color: isUser ? '#fff' : 'var(--text-primary)',
             boxShadow: isUser
-              ? '0 4px 20px rgba(102, 126, 234, 0.4)'
+              ? '0 2px 10px rgba(37, 99, 235, 0.2)'
               : 'var(--shadow-sm)',
             border: isUser ? 'none' : '1px solid var(--border-color)',
             wordBreak: 'break-word',
             whiteSpace: 'pre-wrap',
             position: 'relative',
-            fontSize: '15px',
-            lineHeight: '1.65',
-            transition: 'all var(--transition-normal)',
+            fontSize: '14px',
+            lineHeight: 1.6,
           }}
         >
           {/* 复制按钮（仅AI消息） */}
@@ -110,18 +109,17 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
               <Button
                 type="text"
                 size="small"
-                icon={copied ? <CheckOutlined style={{ color: '#52c41a' }} /> : <CopyOutlined />}
+                className="copy-btn"
+                icon={copied ? <CheckOutlined style={{ color: '#16a34a' }} /> : <CopyOutlined />}
                 onClick={handleCopy}
                 style={{
                   position: 'absolute',
-                  top: '8px',
-                  right: '8px',
-                  opacity: 0,
-                  transition: 'opacity var(--transition-fast)',
+                  top: '6px',
+                  right: '6px',
                   padding: '2px 6px',
                   height: 'auto',
+                  minHeight: 'auto',
                 }}
-                className="message-copy-btn"
               />
             </Tooltip>
           )}
@@ -132,14 +130,14 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
           {message.sources && message.sources.length > 0 && (
             <div
               style={{
-                marginTop: '12px',
-                paddingTop: '10px',
+                marginTop: '10px',
+                paddingTop: '8px',
                 borderTop: `1px solid ${isUser ? 'rgba(255, 255, 255, 0.2)' : 'var(--border-color)'}`,
                 fontSize: '12px',
                 opacity: 0.85,
               }}
             >
-              <span style={{ fontWeight: 600 }}>📚 信息来源:</span>{' '}
+              <span style={{ fontWeight: 600 }}>信息来源:</span>{' '}
               {message.sources.map((s, i) => (
                 <Tag
                   key={i}
@@ -159,7 +157,7 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
 
           {/* 风险等级标签 */}
           {message.risk_level && (
-            <div style={{ marginTop: '10px' }}>
+            <div style={{ marginTop: '8px' }}>
               <Tag
                 icon={<ExclamationCircleFilled />}
                 style={{
@@ -167,8 +165,8 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
                   color: getRiskInfo(message.risk_level as RiskLevel).color,
                   border: `1px solid ${getRiskInfo(message.risk_level as RiskLevel).color}`,
                   fontWeight: 600,
-                  fontSize: '12px',
-                  padding: '2px 10px',
+                  fontSize: '11px',
+                  padding: '2px 8px',
                 }}
               >
                 {getRiskInfo(message.risk_level as RiskLevel).label}
@@ -183,28 +181,13 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
         <Avatar
           icon={<UserOutlined />}
           style={{
-            background: 'linear-gradient(135deg, #52c41a 0%, #73d13d 100%)',
+            background: 'linear-gradient(135deg, #0d9488 0%, #14b8a6 100%)',
             flexShrink: 0,
-            boxShadow: '0 4px 12px rgba(82, 196, 26, 0.3)',
+            boxShadow: '0 2px 8px rgba(13, 148, 136, 0.2)',
           }}
-          size={40}
+          size={36}
         />
       )}
-
-      <style>{`
-        .message-copy-btn {
-          opacity: 0 !important;
-        }
-        div:hover > .message-copy-btn,
-        div:hover .message-copy-btn {
-          opacity: 0.6 !important;
-        }
-        div:hover > .message-copy-btn:hover,
-        div:hover .message-copy-btn:hover {
-          opacity: 1 !important;
-          background: var(--primary-50) !important;
-        }
-      `}</style>
     </div>
   )
 }
