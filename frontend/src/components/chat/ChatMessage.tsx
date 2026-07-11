@@ -114,36 +114,6 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
             lineHeight: 1.6,
           }}
         >
-          {/* 复制按钮 + 语音播放按钮（仅AI消息） */}
-          {!isUser && (
-            <div
-              style={{
-                position: 'absolute',
-                top: '6px',
-                right: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '2px',
-              }}
-            >
-              <VoicePlayer text={message.content} messageId={message.id} />
-              <Tooltip title={copied ? '已复制' : '复制内容'}>
-                <Button
-                  type="text"
-                  size="small"
-                  className="copy-btn"
-                  icon={copied ? <CheckOutlined style={{ color: '#16a34a' }} /> : <CopyOutlined />}
-                  onClick={handleCopy}
-                  style={{
-                    padding: '2px 6px',
-                    height: 'auto',
-                    minHeight: 'auto',
-                  }}
-                />
-              </Tooltip>
-            </div>
-          )}
-
           {/* AI 消息用 Markdown 渲染，用户消息用纯文本 */}
           {isUser ? (
             message.content
@@ -203,6 +173,41 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
             </div>
           )}
         </div>
+        )}
+
+        {/* AI 消息底部操作栏（豆包风格：播放语音 + 复制） */}
+        {!isUser && message.content && !message.isStreaming && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              marginTop: '4px',
+              padding: '0 4px',
+            }}
+          >
+            <VoicePlayer text={message.content} messageId={message.id} />
+            <Tooltip title={copied ? '已复制' : '复制内容'}>
+              <Button
+                type="text"
+                size="small"
+                className="copy-btn"
+                icon={copied ? <CheckOutlined style={{ color: '#16a34a' }} /> : <CopyOutlined />}
+                onClick={handleCopy}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '2px 8px',
+                  height: '28px',
+                  fontSize: '12px',
+                  color: copied ? '#16a34a' : '#94a3b8',
+                }}
+              >
+                <span>{copied ? '已复制' : '复制'}</span>
+              </Button>
+            </Tooltip>
+          </div>
         )}
       </div>
 
