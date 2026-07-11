@@ -393,7 +393,7 @@ async def add_security_headers(request: Request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(self), geolocation=()"
 
     if settings.ENVIRONMENT == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -531,11 +531,19 @@ async def favicon():
     return Response(status_code=204)
 
 
+# 语音文件静态服务
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+voice_dir = Path(settings.VOICE_STORAGE_DIR)
+voice_dir.mkdir(parents=True, exist_ok=True)
+app.mount("/voice_files", StaticFiles(directory=str(voice_dir)), name="voice_files")
+
 # 导入路由
-from app.api.v1 import consultation, agents, knowledge, users, image_analysis, health
+from app.api.v1 import consultation, agents, knowledge, users, image_analysis, health, speech
 app.include_router(consultation.router, prefix=f"{settings.API_V1_PREFIX}/consultation", tags=["咨询"])
 app.include_router(agents.router, prefix=f"{settings.API_V1_PREFIX}/agents", tags=["Agent"])
 app.include_router(knowledge.router, prefix=f"{settings.API_V1_PREFIX}/knowledge", tags=["知识库"])
 app.include_router(users.router, prefix=f"{settings.API_V1_PREFIX}/users", tags=["用户"])
 app.include_router(image_analysis.router, prefix=f"{settings.API_V1_PREFIX}/image", tags=["图片分析"])
 app.include_router(health.router, prefix=f"{settings.API_V1_PREFIX}", tags=["监控"])
+app.include_router(speech.router, prefix=f"{settings.API_V1_PREFIX}/speech", tags=["语音"])

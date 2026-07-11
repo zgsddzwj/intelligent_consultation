@@ -90,6 +90,10 @@ dependencies = [
 
     # Progress
     "tqdm==4.66.1",
+
+    # Speech — TTS (轻量纯Python包，无需编译)
+    "edge-tts>=6.1.0",  # TTS: 微软 Edge 在线语音合成
+    "pydub>=0.25.1",    # 音频处理工具
 ]
 
 [project.optional-dependencies]
@@ -105,6 +109,13 @@ dev = [
     "mypy",
     "bandit",
     "locust",
+]
+# ASR 语音识别（可选，需要 CMake 编译 llvmlite）
+# 安装方式: uv sync --extra speech
+# macOS 需先安装: brew install cmake
+speech = [
+    "funasr>=1.0.0",      # ASR: 阿里 FunASR Paraformer 语音识别
+    "modelscope>=1.9.0",  # FunASR 模型下载
 ]
 
 [tool.hatch.build.targets.wheel]

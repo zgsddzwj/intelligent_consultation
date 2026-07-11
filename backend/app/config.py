@@ -180,6 +180,28 @@ class Settings(BaseSettings):
     PROMPT_VERSION: str = "v1.0"
     ENABLE_PROMPT_AB_TEST: bool = False
 
+    # ===== 语音功能配置 =====
+    # ASR 语音识别
+    ASR_ENABLED: bool = True
+    ASR_MODEL: str = "paraformer-zh"  # FunASR 模型名
+    ASR_DEVICE: str = "cpu"  # "cpu" | "cuda"
+    ASR_VAD_MODEL: str = "fsmn-vad"
+    ASR_PUNC_MODEL: str = "ct-punc"
+    ASR_HOTWORDS: str = ""  # 医疗热词，逗号分隔
+    ASR_MAX_AUDIO_DURATION: int = 60  # 最大录音时长（秒）
+
+    # TTS 语音合成
+    TTS_ENABLED: bool = True
+    TTS_ENGINE: str = "edge-tts"  # "edge-tts" | "cosyvoice"
+    TTS_DEFAULT_VOICE: str = "zh-CN-XiaoxiaoNeural"  # Edge-TTS 默认音色
+    TTS_DEFAULT_RATE: str = "+0%"  # 语速
+    TTS_DEFAULT_VOLUME: str = "+0%"  # 音量
+    TTS_AUDIO_FORMAT: str = "mp3"  # "mp3" | "wav"
+
+    # 语音文件存储
+    VOICE_STORAGE_DIR: str = "./data/voice_files"  # 本地语音文件存储目录
+    VOICE_CACHE_TTL: int = 86400  # 语音缓存 24 小时
+
     @model_validator(mode='after')
     def apply_environment_defaults(self) -> 'Settings':
         """按环境应用安全默认值"""
