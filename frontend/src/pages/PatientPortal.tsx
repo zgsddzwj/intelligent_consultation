@@ -11,6 +11,7 @@ import {
   LoadingOutlined,
 } from '@ant-design/icons'
 import { ChatMessage, TypingIndicator, WelcomeScreen } from '../components/chat'
+import VoiceInput from '../components/voice/VoiceInput'
 import { consultationApi } from '../services/consultation'
 import { useConsultationStore } from '../stores/consultation'
 import { post, ApiError } from '../services/api'
@@ -119,6 +120,15 @@ export default function PatientPortal() {
 
     handleStreamChat(userMessage)
   }
+
+  /** 语音识别完成后直接发送消息 */
+  const handleVoiceSend = useCallback((text: string) => {
+    if (!text.trim() || isStreaming) return
+    const userMessage = text.trim()
+    addMessage({ role: 'user', content: userMessage })
+    setInput('')
+    handleStreamChat(userMessage)
+  }, [isStreaming, addMessage, handleStreamChat])
 
   const handleQuickSuggestion = (text: string) => {
     if (isStreaming) return
@@ -289,6 +299,14 @@ export default function PatientPortal() {
             </div>
 
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              {/* 语音输入 */}
+              <VoiceInput
+                onTranscript={(text) => setInput(text)}
+                onSend={handleVoiceSend}
+                disabled={isStreaming}
+                variant="circle"
+              />
+
               <Tooltip title="上传图片进行医疗识别">
                 <Upload beforeUpload={handleImageUpload} showUploadList={false} accept="image/*">
                   <Button

@@ -89,6 +89,9 @@ data/sample/**/*
 data/temp/
 data/cache/
 
+# 语音文件（TTS 生成的音频，不纳入版本控制）
+backend/data/voice_files/
+
 # Temporary files
 *.tmp
 *.temp

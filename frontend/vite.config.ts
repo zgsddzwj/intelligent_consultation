@@ -20,6 +20,10 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      '/voice_files': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
     },
   },
   build: {

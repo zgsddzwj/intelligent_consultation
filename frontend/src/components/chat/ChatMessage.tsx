@@ -5,6 +5,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { Message, RiskLevel } from '../../types/chat'
 import ThinkingPanel from './ThinkingPanel'
+import VoicePlayer from '../voice/VoicePlayer'
 
 interface ChatMessageProps {
   message: Message
@@ -113,25 +114,34 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
             lineHeight: 1.6,
           }}
         >
-          {/* 复制按钮（仅AI消息） */}
+          {/* 复制按钮 + 语音播放按钮（仅AI消息） */}
           {!isUser && (
-            <Tooltip title={copied ? '已复制' : '复制内容'}>
-              <Button
-                type="text"
-                size="small"
-                className="copy-btn"
-                icon={copied ? <CheckOutlined style={{ color: '#16a34a' }} /> : <CopyOutlined />}
-                onClick={handleCopy}
-                style={{
-                  position: 'absolute',
-                  top: '6px',
-                  right: '6px',
-                  padding: '2px 6px',
-                  height: 'auto',
-                  minHeight: 'auto',
-                }}
-              />
-            </Tooltip>
+            <div
+              style={{
+                position: 'absolute',
+                top: '6px',
+                right: '6px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '2px',
+              }}
+            >
+              <VoicePlayer text={message.content} messageId={message.id} />
+              <Tooltip title={copied ? '已复制' : '复制内容'}>
+                <Button
+                  type="text"
+                  size="small"
+                  className="copy-btn"
+                  icon={copied ? <CheckOutlined style={{ color: '#16a34a' }} /> : <CopyOutlined />}
+                  onClick={handleCopy}
+                  style={{
+                    padding: '2px 6px',
+                    height: 'auto',
+                    minHeight: 'auto',
+                  }}
+                />
+              </Tooltip>
+            </div>
           )}
 
           {/* AI 消息用 Markdown 渲染，用户消息用纯文本 */}

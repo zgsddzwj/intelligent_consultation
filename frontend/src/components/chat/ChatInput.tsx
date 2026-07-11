@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { Input, Button, Upload, Tooltip } from 'antd'
 import { SendOutlined, UploadOutlined } from '@ant-design/icons'
+import VoiceInput from '../voice/VoiceInput'
 
 const { TextArea } = Input
 
@@ -26,6 +27,13 @@ export default function ChatInput({ onSend, onImageUpload, loading = false }: Ch
     onSend(trimmed)
     setInput('')
   }, [input, loading, onSend])
+
+  /** 语音识别完成后直接发送 */
+  const handleVoiceSend = useCallback((text: string) => {
+    if (!text.trim() || loading) return
+    onSend(text.trim())
+    setInput('')
+  }, [loading, onSend])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -120,7 +128,14 @@ export default function ChatInput({ onSend, onImageUpload, loading = false }: Ch
         </div>
 
         {/* 操作按钮 */}
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          {/* 语音输入 */}
+          <VoiceInput
+            onTranscript={(text) => setInput(text)}
+            onSend={handleVoiceSend}
+            disabled={loading}
+          />
+
           {/* 图片上传 */}
           <Tooltip title="上传图片进行医疗术语识别（支持 JPG/PNG/GIF/WebP，最大5MB）">
             <Upload
