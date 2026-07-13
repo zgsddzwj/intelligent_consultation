@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { Button, Tooltip, message } from 'antd'
 import { SoundOutlined, PauseOutlined, LoadingOutlined } from '@ant-design/icons'
 import { speechApi } from '../../services/speech'
@@ -66,9 +66,6 @@ export default function VoicePlayer({ text }: VoicePlayerProps) {
   const [audioUrl, setAudioUrl] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // 清理 Markdown，只保留适合朗读的纯文本
-  const cleanText = useCallback(() => cleanMarkdownForTTS(text), [text])
-
   const handlePlay = useCallback(async () => {
     // 如果已有音频 URL，直接播放/暂停切换
     if (audioUrl && audioRef.current) {
@@ -84,8 +81,8 @@ export default function VoicePlayer({ text }: VoicePlayerProps) {
       return
     }
 
-    // 首次播放：请求 TTS 合成
-    const ttsText = cleanText()
+    // 首次播放：请求 TTS 合成（清理 Markdown 标记）
+    const ttsText = cleanMarkdownForTTS(text)
     if (!ttsText) return
 
     setIsLoading(true)
@@ -108,7 +105,17 @@ export default function VoicePlayer({ text }: VoicePlayerProps) {
     } finally {
       setIsLoading(false)
     }
-  }, [audioUrl, isPlaying, cleanText])
+  }, [audioUrl, isPlaying, text])
+
+  // 组件卸载时停止播放，避免音频继续播放
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current.src = ''
+      }
+    }
+  }, [])
 
   // 文本为空时不渲染
   if (!text || !text.trim()) return null

@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 
 /** SpeechRecognition 返回值 */
 interface UseSpeechRecognitionReturn {
@@ -40,11 +40,14 @@ export function useSpeechRecognition(lang: string = 'zh-CN'): UseSpeechRecogniti
 
   const recognitionRef = useRef<any>(null)
 
-  // 检测浏览器是否支持 Web Speech API
-  const SpeechRecognitionClass =
-    typeof window !== 'undefined'
-      ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-      : null
+  // 检测浏览器是否支持 Web Speech API（只计算一次）
+  const SpeechRecognitionClass = useMemo(
+    () =>
+      typeof window !== 'undefined'
+        ? (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        : null,
+    []
+  )
 
   const isSupported = !!SpeechRecognitionClass
 

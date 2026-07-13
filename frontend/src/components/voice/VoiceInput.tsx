@@ -94,6 +94,20 @@ export default function VoiceInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isListening, autoSendTriggered])
 
+  // hover 样式工具函数
+  const getHoverStyle = useCallback((isHover: boolean) => {
+    if (isCircle) {
+      return {
+        background: isHover ? 'rgba(37, 99, 235, 0.12)' : 'var(--primary-50, rgba(37, 99, 235, 0.06))',
+        borderColor: isHover ? 'var(--primary-color, #2563eb)' : 'var(--primary-200, rgba(37, 99, 235, 0.2))',
+      }
+    }
+    return {
+      background: isHover ? 'rgba(102, 126, 234, 0.2)' : 'rgba(102, 126, 234, 0.1)',
+      borderColor: isHover ? '#667eea' : 'rgba(102, 126, 234, 0.2)',
+    }
+  }, [isCircle])
+
   const handleClick = useCallback(() => {
     if (!isSupported) {
       message.warning('当前浏览器不支持语音识别，请使用 Chrome、Edge 或 Safari 浏览器')
@@ -154,24 +168,16 @@ export default function VoiceInput({
           style={buttonStyle}
           onMouseEnter={(e) => {
             if (!disabled && !isListening) {
-              if (isCircle) {
-                e.currentTarget.style.background = 'rgba(37, 99, 235, 0.12)'
-                e.currentTarget.style.borderColor = 'var(--primary-color, #2563eb)'
-              } else {
-                e.currentTarget.style.background = 'rgba(102, 126, 234, 0.2)'
-                e.currentTarget.style.borderColor = '#667eea'
-              }
+              const s = getHoverStyle(true)
+              e.currentTarget.style.background = s.background
+              e.currentTarget.style.borderColor = s.borderColor
             }
           }}
           onMouseLeave={(e) => {
             if (!disabled && !isListening) {
-              if (isCircle) {
-                e.currentTarget.style.background = 'var(--primary-50, rgba(37, 99, 235, 0.06))'
-                e.currentTarget.style.borderColor = 'var(--primary-200, rgba(37, 99, 235, 0.2))'
-              } else {
-                e.currentTarget.style.background = 'rgba(102, 126, 234, 0.1)'
-                e.currentTarget.style.borderColor = 'rgba(102, 126, 234, 0.2)'
-              }
+              const s = getHoverStyle(false)
+              e.currentTarget.style.background = s.background
+              e.currentTarget.style.borderColor = s.borderColor
             }
           }}
         />
