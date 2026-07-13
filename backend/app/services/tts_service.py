@@ -7,6 +7,7 @@ CosyVoice: 阿里开源、150ms 流式延迟、声音克隆、情感控制。
 """
 import asyncio
 import hashlib
+import json
 import os
 from pathlib import Path
 from typing import Optional
@@ -67,13 +68,18 @@ class TTSService:
         if not text or not text.strip():
             return {"audio_url": "", "duration": 0.0, "error": "文本内容为空"}
 
+        # 文本超长截断保护（Edge-TTS 单次合成上限约 3100 字符）
+        MAX_TTS_TEXT_LENGTH = 3000
+        if len(text) > MAX_TTS_TEXT_LENGTH:
+            text = text[:MAX_TTS_TEXT_LENGTH]
+            app_logger.warning(f"TTS 文本过长({len(text)}字符)，已截断至 {MAX_TTS_TEXT_LENGTH} 字符")
+
         # 检查 Redis 缓存
         cache_key = self._get_cache_key(text, voice, rate, volume)
         if redis_service.enabled:
             cached = redis_service.get(cache_key)
             if cached:
                 app_logger.debug(f"TTS 缓存命中: {cache_key}")
-                import json
                 try:
                     return json.loads(cached)
                 except (json.JSONDecodeError, TypeError):
@@ -89,7 +95,6 @@ class TTSService:
 
         # 写入 Redis 缓存
         if result.get("audio_url") and redis_service.enabled:
-            import json
             redis_service.set(cache_key, json.dumps(result, ensure_ascii=False), ttl=settings.VOICE_CACHE_TTL)
 
         return result
@@ -132,10 +137,21 @@ class TTSService:
 
     def health_check(self) -> dict:
         """健康检查"""
+        # 统计存储目录中的音频文件数量
+        file_count = 0
+        total_size = 0
+        if self._storage_dir and self._storage_dir.exists():
+            for f in self._storage_dir.iterdir():
+                if f.is_file():
+                    file_count += 1
+                    total_size += f.stat().st_size
+
         return {
             "status": "healthy" if settings.TTS_ENABLED else "disabled",
             "engine": settings.TTS_ENGINE,
             "voice": settings.TTS_DEFAULT_VOICE,
+            "storage_files": file_count,
+            "storage_size_mb": round(total_size / 1024 / 1024, 2),
         }
 
 
