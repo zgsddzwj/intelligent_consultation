@@ -6,8 +6,6 @@
 模型首次加载时会从 ModelScope 下载，之后缓存在本地。
 """
 import asyncio
-import os
-import tempfile
 from typing import Optional
 
 from app.config import get_settings
