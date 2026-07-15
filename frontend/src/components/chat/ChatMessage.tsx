@@ -1,4 +1,4 @@
-import { useState, memo } from 'react'
+import { useState, useCallback, memo } from 'react'
 import { Avatar, Tag, Tooltip, Button } from 'antd'
 import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined, ExclamationCircleFilled } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown'
@@ -27,7 +27,7 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
   const [copied, setCopied] = useState(false)
   const animationDelay = Math.min(index * 60, 300)
 
-  const handleCopy = async () => {
+  const handleCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(message.content)
       setCopied(true)
@@ -35,7 +35,10 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
     } catch {
       // 复制失败静默处理
     }
-  }
+  }, [message.content])
+
+  // 风险等级信息只计算一次
+  const riskInfo = message.risk_level ? getRiskInfo(message.risk_level as RiskLevel) : null
 
   return (
     <div
@@ -155,20 +158,20 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
           )}
 
           {/* 风险等级标签 */}
-          {message.risk_level && (
+          {riskInfo && (
             <div style={{ marginTop: '8px' }}>
               <Tag
                 icon={<ExclamationCircleFilled />}
                 style={{
-                  background: getRiskInfo(message.risk_level as RiskLevel).bg,
-                  color: getRiskInfo(message.risk_level as RiskLevel).color,
-                  border: `1px solid ${getRiskInfo(message.risk_level as RiskLevel).color}`,
+                  background: riskInfo.bg,
+                  color: riskInfo.color,
+                  border: `1px solid ${riskInfo.color}`,
                   fontWeight: 600,
                   fontSize: '11px',
                   padding: '2px 8px',
                 }}
               >
-                {getRiskInfo(message.risk_level as RiskLevel).label}
+                {riskInfo.label}
               </Tag>
             </div>
           )}
