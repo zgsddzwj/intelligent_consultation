@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Input, Button, Upload, Tooltip } from 'antd'
+import { Input, Button, Upload, Tooltip, message } from 'antd'
 import { SendOutlined, UploadOutlined } from '@ant-design/icons'
 import VoiceInput from '../voice/VoiceInput'
 
@@ -49,11 +49,12 @@ export default function ChatInput({ onSend, onImageUpload, loading = false }: Ch
     (file: File) => {
       // 图片类型校验
       if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-        // 通过 antd Upload 的错误提示
+        message.error('不支持的图片格式，请上传 JPG/PNG/GIF/WebP 格式的图片')
         return Upload.LIST_IGNORE
       }
       // 图片大小校验
       if (file.size > MAX_IMAGE_SIZE) {
+        message.error(`图片大小超过限制（最大 ${MAX_IMAGE_SIZE / 1024 / 1024}MB）`)
         return Upload.LIST_IGNORE
       }
       onImageUpload(file)
