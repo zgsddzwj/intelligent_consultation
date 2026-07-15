@@ -40,11 +40,17 @@ export const speechApi = {
   /**
    * 文字转语音 (TTS)
    * 输入文本，返回音频文件 URL
+   * @param text 待合成文本
+   * @param voice 音色名称，如 zh-CN-XiaoxiaoNeural
+   * @param rate 语速，如 +0% / -10%
+   * @param volume 音量，如 +0% / -20%
    */
-  tts: async (text: string, voice?: string): Promise<TTSResponse> => {
+  tts: async (text: string, voice?: string, rate?: string, volume?: string): Promise<TTSResponse> => {
     return post<TTSResponse>('/speech/tts', {
       text,
       voice,
+      rate,
+      volume,
     })
   },
 }
