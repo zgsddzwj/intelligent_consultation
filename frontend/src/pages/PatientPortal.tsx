@@ -111,7 +111,7 @@ export default function PatientPortal() {
     })
   }, [consultationId, addMessage, updateLastMessage, setConsultationId])
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     if (!input.trim() || isStreaming) return
 
     const userMessage = input.trim()
@@ -119,7 +119,7 @@ export default function PatientPortal() {
     setInput('')
 
     handleStreamChat(userMessage)
-  }
+  }, [input, isStreaming, addMessage, handleStreamChat])
 
   /** 语音识别完成后直接发送消息 */
   const handleVoiceSend = useCallback((text: string) => {
@@ -130,11 +130,11 @@ export default function PatientPortal() {
     handleStreamChat(userMessage)
   }, [isStreaming, addMessage, handleStreamChat])
 
-  const handleQuickSuggestion = (text: string) => {
+  const handleQuickSuggestion = useCallback((text: string) => {
     if (isStreaming) return
     addMessage({ role: 'user', content: text })
     handleStreamChat(text)
-  }
+  }, [isStreaming, addMessage, handleStreamChat])
 
   const handleImageUpload = async (file: File) => {
     try {
