@@ -189,7 +189,7 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
               padding: '0 4px',
             }}
           >
-            <VoicePlayer text={message.content} messageId={message.id} />
+            <VoicePlayer text={message.content} />
             <Tooltip title={copied ? '已复制' : '复制内容'}>
               <Button
                 type="text"

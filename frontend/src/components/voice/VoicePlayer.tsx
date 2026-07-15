@@ -6,8 +6,6 @@ import { speechApi } from '../../services/speech'
 interface VoicePlayerProps {
   /** 待播放的文本内容（可为 Markdown，会自动清理） */
   text: string
-  /** 消息唯一标识（用于缓存键，可选） */
-  messageId?: string
 }
 
 /**
