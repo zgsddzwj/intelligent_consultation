@@ -61,9 +61,14 @@ async def speech_to_text(
 
     # 保存到临时文件
     suffix = os.path.splitext(audio_file.filename or "audio.wav")[1] or ".wav"
-    with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
-        tmp.write(content)
-        tmp_path = tmp.name
+    tmp_path: Optional[str] = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+    except Exception as e:
+        app_logger.error(f"创建临时文件失败: {e}")
+        raise HTTPException(status_code=500, detail="临时文件创建失败")
 
     try:
         app_logger.info(f"ASR 请求: filename={audio_file.filename}, size={len(content)} bytes")
@@ -78,7 +83,8 @@ async def speech_to_text(
             confidence=result["confidence"],
         )
     finally:
-        os.unlink(tmp_path)
+        if tmp_path and os.path.exists(tmp_path):
+            os.unlink(tmp_path)
 
 
 @router.post("/tts", response_model=TTSResponse, summary="文字转语音", description="输入文本，返回语音播放 URL")
