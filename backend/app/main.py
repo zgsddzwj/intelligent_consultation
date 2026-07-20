@@ -539,7 +539,7 @@ voice_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/voice_files", StaticFiles(directory=str(voice_dir)), name="voice_files")
 
 # 导入路由
-from app.api.v1 import consultation, agents, knowledge, users, image_analysis, health, speech
+from app.api.v1 import consultation, agents, knowledge, users, image_analysis, health, speech, admin
 app.include_router(consultation.router, prefix=f"{settings.API_V1_PREFIX}/consultation", tags=["咨询"])
 app.include_router(agents.router, prefix=f"{settings.API_V1_PREFIX}/agents", tags=["Agent"])
 app.include_router(knowledge.router, prefix=f"{settings.API_V1_PREFIX}/knowledge", tags=["知识库"])
@@ -547,3 +547,4 @@ app.include_router(users.router, prefix=f"{settings.API_V1_PREFIX}/users", tags=
 app.include_router(image_analysis.router, prefix=f"{settings.API_V1_PREFIX}/image", tags=["图片分析"])
 app.include_router(health.router, prefix=f"{settings.API_V1_PREFIX}", tags=["监控"])
 app.include_router(speech.router, prefix=f"{settings.API_V1_PREFIX}/speech", tags=["语音"])
+app.include_router(admin.router, prefix=f"{settings.API_V1_PREFIX}/admin", tags=["管理后台"])
