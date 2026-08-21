@@ -21,6 +21,9 @@ import type { ChatRequest, Message } from '../types/chat'
 const { TextArea } = Input
 const { Text } = Typography
 
+const MAX_INPUT_LENGTH = 5000
+const INPUT_WARNING_THRESHOLD = 4500
+
 // 快捷问题建议
 const quickSuggestions = [
   { icon: <HeartOutlined />, text: '头痛怎么办', color: '#dc2626' },
@@ -43,6 +46,12 @@ export default function PatientPortal() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [hasFirstToken, setHasFirstToken] = useState(false)
   const [input, setInput] = useState('')
+  const [isComposing, setIsComposing] = useState(false) // 中文输入法组合状态
+
+  // 字数状态派生
+  const inputLength = input.length
+  const isOverWarning = inputLength > INPUT_WARNING_THRESHOLD
+  const isOverLimit = inputLength > MAX_INPUT_LENGTH
 
   // 自动滚动到底部
   useEffect(() => {
@@ -112,14 +121,18 @@ export default function PatientPortal() {
   }, [consultationId, addMessage, updateLastMessage, setConsultationId])
 
   const handleSend = useCallback(() => {
-    if (!input.trim() || isStreaming) return
+    if (!input.trim() || isStreaming || isComposing) return
+    if (input.length > MAX_INPUT_LENGTH) {
+      message.warning(`消息内容过长，请控制在 ${MAX_INPUT_LENGTH} 字符以内`)
+      return
+    }
 
     const userMessage = input.trim()
     addMessage({ role: 'user', content: userMessage })
     setInput('')
 
     handleStreamChat(userMessage)
-  }, [input, isStreaming, addMessage, handleStreamChat])
+  }, [input, isStreaming, isComposing, addMessage, handleStreamChat])
 
   /** 语音识别完成后直接发送消息 */
   const handleVoiceSend = useCallback((text: string) => {
@@ -271,9 +284,26 @@ export default function PatientPortal() {
             <div style={{ flex: 1 }}>
               <TextArea
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value
+                  // 软限制：超限时截断但不打断输入法
+                  if (!isComposing && val.length > MAX_INPUT_LENGTH) {
+                    setInput(val.slice(0, MAX_INPUT_LENGTH))
+                  } else {
+                    setInput(val)
+                  }
+                }}
+                onCompositionStart={() => setIsComposing(true)}
+                onCompositionEnd={(e) => {
+                  setIsComposing(false)
+                  // 组合结束时检查长度
+                  const val = (e.target as HTMLTextAreaElement).value
+                  if (val.length > MAX_INPUT_LENGTH) {
+                    setInput(val.slice(0, MAX_INPUT_LENGTH))
+                  }
+                }}
                 onPressEnter={(e) => {
-                  if (!e.shiftKey) {
+                  if (!e.shiftKey && !isComposing) {
                     e.preventDefault()
                     handleSend()
                   }
@@ -281,6 +311,8 @@ export default function PatientPortal() {
                 placeholder="描述您的症状或健康问题，AI 将为您提供专业建议..."
                 rows={2}
                 disabled={isStreaming}
+                maxLength={MAX_INPUT_LENGTH}
+                showCount={false}
                 style={{
                   borderRadius: '12px',
                   fontSize: '14px',
@@ -360,9 +392,9 @@ export default function PatientPortal() {
             <Text type="secondary" style={{ fontSize: '11px' }}>
               Enter 发送 · Shift+Enter 换行
             </Text>
-            {input.length > 0 && (
-              <Text style={{ fontSize: '11px', color: 'var(--primary-color)', fontWeight: 600 }}>
-                {input.length} 字符
+            {inputLength > 0 && (
+              <Text style={{ fontSize: '11px', color: isOverLimit ? '#ff4d4f' : isOverWarning ? '#faad14' : 'var(--primary-color)', fontWeight: 600 }}>
+                {inputLength} / {MAX_INPUT_LENGTH} 字符{isOverWarning && !isOverLimit && ' · 即将达到上限'}{isOverLimit && ' · 已超出'}
               </Text>
             )}
           </div>
