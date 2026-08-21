@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react'
+import React, { useState, useMemo, useCallback } from 'react'
 import { Avatar, Tag, Tooltip, Button } from 'antd'
 import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined, ExclamationCircleFilled } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown'
@@ -13,19 +13,24 @@ interface ChatMessageProps {
 }
 
 /** 根据风险等级返回中文标签和颜色 */
-function getRiskInfo(level: RiskLevel): { label: string; color: string; bg: string } {
-  const map: Record<RiskLevel, { label: string; color: string; bg: string }> = {
-    high: { label: '高风险', color: '#dc2626', bg: '#fef2f2' },
-    medium: { label: '中等风险', color: '#d97706', bg: '#fffbeb' },
-    low: { label: '低风险', color: '#16a34a', bg: '#f0fdf4' },
-  }
-  return map[level] || { label: level, color: '#64748b', bg: '#f8fafc' }
+const RISK_INFO_MAP: Record<RiskLevel, { label: string; color: string; bg: string }> = {
+  high: { label: '高风险', color: '#dc2626', bg: '#fef2f2' },
+  medium: { label: '中等风险', color: '#d97706', bg: '#fffbeb' },
+  low: { label: '低风险', color: '#16a34a', bg: '#f0fdf4' },
 }
+
+const DEFAULT_RISK_INFO = { label: '', color: '#64748b', bg: '#f8fafc' }
 
 function ChatMessage({ message, index = 0 }: ChatMessageProps) {
   const isUser = message.role === 'user'
   const [copied, setCopied] = useState(false)
   const animationDelay = Math.min(index * 60, 300)
+
+  // 缓存风险信息，避免每次渲染重新创建对象
+  const riskInfo = useMemo(
+    () => RISK_INFO_MAP[message.risk_level as RiskLevel] || DEFAULT_RISK_INFO,
+    [message.risk_level]
+  )
 
   const handleCopy = useCallback(async () => {
     try {

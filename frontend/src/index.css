@@ -804,6 +804,23 @@ button:focus-visible {
   top: 0;
 }
 
+/* ========== 聊天消息复制按钮 hover 效果 ========== */
+.message-copy-btn {
+  opacity: 0 !important;
+  transition: opacity var(--transition-fast) !important;
+}
+
+div:hover > .message-copy-btn,
+div:hover .message-copy-btn {
+  opacity: 0.6 !important;
+}
+
+div:hover > .message-copy-btn:hover,
+div:hover .message-copy-btn:hover {
+  opacity: 1 !important;
+  background: var(--primary-50) !important;
+}
+
 /* ========== 打印 ========== */
 @media print {
   body { background: white; color: black; }
