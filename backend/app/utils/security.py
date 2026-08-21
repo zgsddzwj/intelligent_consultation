@@ -1,5 +1,6 @@
-"""安全工具函数 - 极致优化版（防重放攻击、审计日志、数据加密、请求签名）"""
+"""安全工具函数 - 极致优化版（防重放攻击、审计日志、数据加密、请求签名、Token刷新）"""
 import re
+import json
 import hmac
 import hashlib
 import secrets
@@ -99,6 +100,46 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
     if payload and payload.get("type") == "access":
         return payload
     return None
+
+
+def decode_refresh_token(token: str) -> Optional[Dict[str, Any]]:
+    """解码刷新令牌（仅接受 refresh 类型）"""
+    payload = decode_token(token)
+    if payload and payload.get("type") == "refresh":
+        return payload
+    return None
+
+
+def refresh_access_token(refresh_token: str) -> Optional[Tuple[str, str]]:
+    """使用刷新令牌获取新的访问令牌和刷新令牌对
+    
+    Returns:
+        (new_access_token, new_refresh_token) 或 None（如果刷新令牌无效）
+    """
+    payload = decode_refresh_token(refresh_token)
+    if not payload:
+        return None
+    
+    # 提取用户信息
+    user_id = payload.get("sub")
+    role = payload.get("role")
+    username = payload.get("username")
+    
+    if not user_id:
+        return None
+    
+    # 生成新的令牌对
+    token_data = {
+        "sub": user_id,
+        "role": role,
+        "username": username,
+    }
+    
+    new_access = create_access_token(token_data)
+    new_refresh = create_refresh_token(token_data)
+    
+    app_logger.info(f"Token已刷新: user_id={user_id}")
+    return new_access, new_refresh
 
 
 # 医疗咨询免责声明（API 响应附加）
@@ -304,19 +345,35 @@ class DataEncryption:
 # ========== 输入净化 ==========
 
 def sanitize_input(text: str, max_length: int = 10000) -> str:
-    """净化用户输入"""
+    """净化用户输入（增强XSS防护）"""
     if not text:
         return text
-
+    
     # 长度限制
     text = text[:max_length]
-
-    # 移除危险字符
-    dangerous = ["<script", "javascript:", "onerror=", "onload=", "eval(", "expression("]
+    
+    # 移除危险字符和模式（扩展版）
+    dangerous = [
+        "<script", "</script>", "javascript:", "onerror=", "onload=",
+        "eval(", "expression(", "<iframe", "</iframe>", "<object",
+        "</object>", "<embed", "<link", "<meta", "vbscript:",
+        "data:text/html", "<base", "<form", "</form>",
+        "<input", "<textarea", "document.cookie", "window.location",
+        "<svg/onload", "<img/onerror", "<body/onload",
+    ]
+    text_lower = text.lower()
     for pattern in dangerous:
-        text = text.replace(pattern, "")
-
-    return text
+        if pattern.lower() in text_lower:
+            text = text.replace(pattern, "")
+            text_lower = text.lower()
+    
+    # 移除 HTML 事件属性（on*=
+    text = re.sub(r'\son\w+\s*=', '', text, flags=re.IGNORECASE)
+    
+    # 移除嵌套的 HTML 标签
+    text = re.sub(r'<(script|iframe|object|embed|form|input|textarea|link|meta|base)[^>]*>', '', text, flags=re.IGNORECASE)
+    
+    return text.strip()
 
 
 def validate_ip_address(ip: str) -> bool:
@@ -327,7 +384,3 @@ def validate_ip_address(ip: str) -> bool:
         return True
     except ValueError:
         return False
-
-
-# 导入json用于审计日志
-import json
