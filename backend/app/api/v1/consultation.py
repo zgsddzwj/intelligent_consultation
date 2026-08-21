@@ -1,5 +1,5 @@
 """咨询API - 增强版（统一响应格式、增强校验、分页支持、OpenAPI优化）"""
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, AsyncGenerator
@@ -16,6 +16,13 @@ from app.utils.security import DISCLAIMER
 from app.services.llm_service import llm_service
 from app.prompts import ConsultationPrompts
 from app.config import get_settings
+from app.common.exceptions import (
+    ValidationException,
+    NotFoundException,
+    DatabaseException,
+    ExternalServiceException,
+    ErrorCode,
+)
 
 settings = get_settings()
 router = APIRouter()
@@ -120,7 +127,7 @@ async def chat(
         # 1. 验证输入
         is_valid, error_msg = validate_consultation_input({"message": request.message})
         if not is_valid:
-            raise HTTPException(status_code=400, detail=error_msg)
+            raise ValidationException(error_msg, error_code=ErrorCode.VALIDATION_ERROR)
 
         # 2. 清理和脱敏用户输入
         sanitized_message = sanitize_user_input(request.message)
@@ -202,7 +209,7 @@ async def chat(
             execution_time=round(execution_time, 2)
         )
 
-    except HTTPException:
+    except (ValidationException, NotFoundException, DatabaseException, ExternalServiceException):
         raise
     except Exception as e:
         app_logger.error(f"咨询处理失败: {e}", exc_info=True)
@@ -237,7 +244,6 @@ async def chat_stream(
             iter([f"data: {json.dumps({'error': error_msg, 'type': 'error'})}\n\n"]),
             media_type="text/event-stream"
         )
-
     sanitized_message = sanitize_user_input(request.message)
 
     risk_detection = detect_high_risk_content(sanitized_message)
@@ -446,7 +452,10 @@ async def submit_feedback(request: FeedbackRequest, db: Session = Depends(get_db
 
     except Exception as e:
         app_logger.error(f"提交反馈失败: {e}")
-        raise HTTPException(status_code=500, detail="提交反馈失败，请稍后重试")
+        raise ExternalServiceException(
+            "提交反馈失败，请稍后重试",
+            error_code=ErrorCode.INTERNAL_ERROR
+        )
 
 
 @router.get("/history", response_model=PaginatedResponse, summary="获取咨询历史", description="分页获取用户咨询历史记录")
@@ -490,7 +499,10 @@ async def get_consultation_history(
 
     except Exception as e:
         app_logger.error(f"获取咨询历史失败: {e}")
-        raise HTTPException(status_code=500, detail="获取咨询历史失败")
+        raise DatabaseException(
+            "获取咨询历史失败",
+            error_code=ErrorCode.DATABASE_ERROR
+        )
 
 
 @router.get("/{consultation_id}", response_model=ConsultationHistoryResponse, summary="获取咨询详情", description="获取单条咨询记录的详细信息")
