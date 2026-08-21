@@ -1,8 +1,17 @@
 version: '3.8'
 
+# ===== 全局日志配置 =====
+x-logging: &default-logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "3"
+
 services:
   # PostgreSQL数据库
   postgres:
+    <<: *default-logging
     image: postgres:15-alpine
     container_name: medical_postgres
     restart: unless-stopped
@@ -10,6 +19,15 @@ services:
       POSTGRES_DB: medical_consultation
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=512MB
+      -c max_connections=100
+      -c work_mem=4MB
+      -c maintenance_work_mem=64MB
+      -c log_min_duration_statement=1000
+      -c timezone=Asia/Shanghai
     ports:
       - "5432:5432"
     volumes:
@@ -31,10 +49,11 @@ services:
 
   # Redis缓存
   redis:
+    <<: *default-logging
     image: redis:7-alpine
     container_name: medical_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --timeout 300 --tcp-keepalive 60 --loglevel warning
     ports:
       - "6379:6379"
     volumes:
@@ -56,6 +75,7 @@ services:
 
   # Neo4j知识图谱
   neo4j:
+    <<: *default-logging
     image: neo4j:5-community
     container_name: medical_neo4j
     restart: unless-stopped
@@ -86,6 +106,7 @@ services:
 
   # Milvus依赖：etcd
   etcd:
+    <<: *default-logging
     image: quay.io/coreos/etcd:v3.5.5
     container_name: medical_etcd
     restart: unless-stopped
@@ -106,6 +127,7 @@ services:
 
   # MinIO对象存储
   minio:
+    <<: *default-logging
     image: minio/minio:RELEASE.2024-01-16T16-07-38Z
     container_name: medical_minio
     restart: unless-stopped
@@ -135,6 +157,7 @@ services:
 
   # Milvus向量数据库
   milvus:
+    <<: *default-logging
     image: milvusdb/milvus:v2.3.4
     container_name: medical_milvus
     restart: unless-stopped
@@ -166,6 +189,7 @@ services:
 
   # 后端API
   backend:
+    <<: *default-logging
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -229,6 +253,7 @@ services:
 
   # 前端
   frontend:
+    <<: *default-logging
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -268,3 +293,6 @@ volumes:
 networks:
   medical-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
