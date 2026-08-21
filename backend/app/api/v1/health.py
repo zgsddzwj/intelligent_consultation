@@ -1,7 +1,8 @@
-"""健康检查API - 增强版（支持深度检查、依赖拓扑、性能基线）"""
+"""健康检查API - 增强版（支持深度检查、依赖拓扑、性能基线、结果缓存）"""
 import time
 import asyncio
-from typing import Dict, Any, List
+import threading
+from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -22,6 +23,12 @@ _STARTUP_TIME = time.time()
 CORE_SERVICES = {"database", "redis"}
 # 可选服务：失败仅导致功能降级
 OPTIONAL_SERVICES = {"milvus", "neo4j", "llm"}
+
+# ========== 健康检查结果缓存 ==========
+# 避免频繁探测外部服务，basic 检查缓存 10s，standard 缓存 5s，deep 不缓存
+_HEALTH_CACHE: Dict[str, Any] = {}
+_HEALTH_CACHE_LOCK = threading.Lock()
+_HEALTH_CACHE_TTL = {"basic": 10, "standard": 5, "deep": 0}
 
 
 class HealthChecker:
@@ -179,13 +186,13 @@ async def health_check(
     depth: str = "standard"
 ):
     """
-    系统健康检查 - 增强版
+    系统健康检查 - 增强版（含结果缓存）
 
     参数:
     - depth: 检查深度
-      - basic: 仅核心服务（最快）
-      - standard: 核心+可选服务（默认）
-      - deep: 深度检查（包含性能基线）
+      - basic: 仅核心服务（最快，缓存10秒）
+      - standard: 核心+可选服务（默认，缓存5秒）
+      - deep: 深度检查（不缓存，包含性能基线）
 
     返回核心依赖服务的连接状态及详细指标：
     - database: PostgreSQL数据库
@@ -199,6 +206,20 @@ async def health_check(
     - degraded: 部分可选服务异常，系统降级运行
     - unhealthy: 核心服务异常，系统不可用
     """
+    # 检查缓存
+    cache_ttl = _HEALTH_CACHE_TTL.get(depth, 0)
+    cache_key = f"health_{depth}"
+    if cache_ttl > 0:
+        with _HEALTH_CACHE_LOCK:
+            cached = _HEALTH_CACHE.get(cache_key)
+            if cached and (time.time() - cached["_cached_at"]) < cache_ttl:
+                # 返回缓存结果，但更新 uptime 和 timestamp
+                cached_data = {**cached}
+                cached_data["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+                cached_data["uptime_seconds"] = int(time.time() - _STARTUP_TIME)
+                cached_data["cached"] = True
+                return cached_data
+
     start_time = time.time()
 
     # 执行所有检查
@@ -227,7 +248,16 @@ async def health_check(
         "response_time_ms": round((time.time() - start_time) * 1000, 2),
         "check_depth": depth,
         "components": components,
+        "cached": False,
     }
+
+    # 写入缓存
+    if cache_ttl > 0:
+        with _HEALTH_CACHE_LOCK:
+            _HEALTH_CACHE[cache_key] = {
+                **response_data,
+                "_cached_at": time.time(),
+            }
 
     # 不健康时返回503
     if overall_status == "unhealthy":
