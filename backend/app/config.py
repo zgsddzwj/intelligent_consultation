@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "智能医疗管家平台"
     APP_VERSION: str = "3.3.0"
     DEBUG: bool = True
-    ENVIRONMENT: str = "development"
+    ENVIRONMENT: str = "development"  # development | staging | production
     
     # API
     API_V1_PREFIX: str = "/api/v1"
@@ -23,7 +23,7 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:5173",
-    ]
+    ]  # 生产环境应通过环境变量 CORS_ORIGINS 配置，多个源用逗号分隔
     
     # Database
     DATABASE_URL: str = ""  # 从.env读取，格式: postgresql://user:password@host:port/dbname
@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"  # DeepSeek API端点
     
     # Security
-    SECRET_KEY: str = ""  # JWT密钥，从.env读取
+    SECRET_KEY: str = ""  # JWT密钥，从.env读取；生产环境必须配置，否则自动生成（每次重启后旧token失效）
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -72,6 +72,13 @@ class Settings(BaseSettings):
     METRICS_ACCESS_TOKEN: Optional[str] = None  # 生产环境建议配置，保护 /metrics
     STARTUP_FAIL_FAST: bool = True  # 生产环境：必需依赖或密钥异常时拒绝启动
     RATE_LIMIT_FAIL_CLOSED: bool = False  # 生产环境建议 true：Redis 不可用时拒绝请求
+    
+    # Trusted Hosts (生产环境必须配置)
+    ALLOWED_HOSTS: List[str] = ["*"]  # 生产环境应配置具体域名，如 ["api.example.com"]
+    
+    # Request Limits
+    MAX_REQUEST_BODY_SIZE: int = 10 * 1024 * 1024  # 请求体最大10MB
+    REQUEST_TIMEOUT: int = 60  # 请求超时时间（秒）
     
     # Rate Limiting
     RATE_LIMIT_ENABLED: bool = True
@@ -205,9 +212,36 @@ class Settings(BaseSettings):
     @model_validator(mode='after')
     def apply_environment_defaults(self) -> 'Settings':
         """按环境应用安全默认值"""
-        if self.ENVIRONMENT == "production":
-            if not self.RATE_LIMIT_FAIL_CLOSED:
-                object.__setattr__(self, 'RATE_LIMIT_FAIL_CLOSED', True)
+        # 生产环境必须配置 SECRET_KEY
+        if not self.SECRET_KEY:
+            if self.ENVIRONMENT == "production":
+                raise ValueError(
+                    "生产环境必须配置 SECRET_KEY！"
+                    "请在 .env 文件或环境变量中设置 SECRET_KEY"
+                )
+            else:
+                import secrets
+                import warnings
+                object.__setattr__(self, 'SECRET_KEY', secrets.token_urlsafe(32))
+                warnings.warn(
+                    "SECRET_KEY 未配置，已自动生成临时密钥。"
+                    "生产环境必须显式配置 SECRET_KEY！",
+                    RuntimeWarning
+                )
+
+        # 生产环境强制关闭 DEBUG
+        if self.ENVIRONMENT == "production" and self.DEBUG:
+            import warnings
+            object.__setattr__(self, 'DEBUG', False)
+            warnings.warn(
+                "生产环境不应开启 DEBUG 模式，已自动关闭",
+                RuntimeWarning
+            )
+
+        # 生产环境强制开启 RATE_LIMIT_FAIL_CLOSED
+        if self.ENVIRONMENT == "production" and not self.RATE_LIMIT_FAIL_CLOSED:
+            object.__setattr__(self, 'RATE_LIMIT_FAIL_CLOSED', True)
+
         return self
 
 @lru_cache()
