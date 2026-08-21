@@ -1,4 +1,5 @@
 """全局异常处理器"""
+import json
 import traceback
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
@@ -14,10 +15,16 @@ from app.common.exceptions import (
     DatabaseException,
     ExternalServiceException,
     RateLimitException,
-    ErrorCode
+    CacheException,
+    ConfigException,
+    ErrorCode,
+    HTTP_STATUS_MAP,
 )
 from app.utils.logger import app_logger
 from app.common.tracing import get_request_id
+from app.config import get_settings
+
+settings = get_settings()
 
 
 def _safe_error_response(exc: Exception, status_code: int, error_code: str, message: str, details: dict = None) -> JSONResponse:
@@ -50,18 +57,10 @@ async def app_exception_handler(request: Request, exc: BaseAppException) -> JSON
         }
     )
 
-    status_code_map = {
-        ValidationException: status.HTTP_400_BAD_REQUEST,
-        NotFoundException: status.HTTP_404_NOT_FOUND,
-        UnauthorizedException: status.HTTP_401_UNAUTHORIZED,
-        ForbiddenException: status.HTTP_403_FORBIDDEN,
-        DatabaseException: status.HTTP_500_INTERNAL_SERVER_ERROR,
-        ExternalServiceException: status.HTTP_502_BAD_GATEWAY,
-        RateLimitException: status.HTTP_429_TOO_MANY_REQUESTS,
-        BusinessException: status.HTTP_400_BAD_REQUEST,
-    }
-
-    status_code = status_code_map.get(type(exc), status.HTTP_500_INTERNAL_SERVER_ERROR)
+    # 优先使用异常自带的 http_status，其次查全局映射表
+    status_code = getattr(exc, 'http_status', None) or HTTP_STATUS_MAP.get(
+        type(exc), status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
 
     return _safe_error_response(
         exc=exc,
@@ -143,15 +142,26 @@ async def general_exception_handler(request: Request, exc: Exception) -> JSONRes
         }
     )
 
+    # 记录结构化审计日志，便于 ELK / Loki 检索
+    audit_entry = {
+        "event": "unhandled_exception",
+        "exception_type": type(exc).__name__,
+        "exception_message": str(exc)[:500],
+        "path": request.url.path,
+        "method": request.method,
+        "request_id": get_request_id(),
+    }
+    app_logger.error(
+        f"未处理的异常: {type(exc).__name__} - {str(exc)}",
+        extra={**audit_entry, "traceback": stack_trace}
+    )
+
+    # 开发环境返回异常类型，生产环境完全隐藏
+    details = {"type": type(exc).__name__} if settings.DEBUG else {}
     return _safe_error_response(
         exc=exc,
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         error_code=ErrorCode.INTERNAL_ERROR,
         message="服务器内部错误，请稍后重试",
-        details={"type": type(exc).__name__} if settings.DEBUG else {}
+        details=details
     )
-
-
-# 延迟导入 settings，避免循环依赖
-from app.config import get_settings
-settings = get_settings()

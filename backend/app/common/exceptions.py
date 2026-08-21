@@ -250,5 +250,10 @@ HTTP_STATUS_MAP: Dict[Type[BaseAppException], int] = {
     ForbiddenException: 403,
     RateLimitException: 429,
     BusinessException: 400,
+    DatabaseException: 500,
+    ExternalServiceException: 502,
+    CacheException: 500,
+    DocumentProcessingException: 422,
+    ConfigException: 500,
 }
 
