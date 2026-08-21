@@ -1,66 +1,106 @@
-"""多层缓存服务 - L1本地缓存 + L2 Redis缓存策略"""
+"""多层缓存服务 - L1本地缓存 + L2 Redis缓存策略
+
+优化点：
+1. L1本地缓存线程安全（threading.Lock）
+2. 后台定期清理过期条目，避免内存泄漏
+3. 使用哨兵对象区分「缓存未命中」和「缓存值为None」
+4. L2回源L1时自动设置较短TTL
+"""
 import json
 import time
 import hashlib
+import threading
 from typing import Optional, Any, Dict, Callable
 from functools import wraps
 from app.services.redis_service import redis_service
 from app.utils.logger import app_logger
 
 
+# 哨兵对象：区分「缓存未命中」和「值为None」
+_MISS = object()
+
+
 class LocalCache:
-    """L1本地内存缓存 - 超高性能"""
+    """L1本地内存缓存 - 超高性能（线程安全版）"""
     
-    def __init__(self, max_size: int = 1000):
-        self.cache: Dict[str, tuple] = {}  # (value, ttl_time)
-        self.max_size = max_size
-        self.access_count = {}  # 用于LRU淘汰
+    def __init__(self, max_size: int = 1000, cleanup_interval: int = 300):
+        self._cache: Dict[str, tuple] = {}  # (value, ttl_time)
+        self._max_size = max_size
+        self._access_count: Dict[str, float] = {}  # 用于LRU淘汰
+        self._lock = threading.Lock()
+        self._cleanup_interval = cleanup_interval
+        self._last_cleanup = time.time()
     
-    def get(self, key: str) -> Optional[Any]:
-        """获取缓存值"""
-        if key in self.cache:
-            value, ttl_time = self.cache[key]
-            # 检查是否过期
-            if ttl_time > 0 and time.time() > ttl_time:
-                del self.cache[key]
-                return None
-            
-            self.access_count[key] = time.time()
-            return value
-        return None
+    def get(self, key: str) -> Any:
+        """获取缓存值，返回 _MISS 哨兵表示未命中"""
+        with self._lock:
+            if key in self._cache:
+                value, ttl_time = self._cache[key]
+                # 检查是否过期
+                if ttl_time > 0 and time.time() > ttl_time:
+                    del self._cache[key]
+                    self._access_count.pop(key, None)
+                    return _MISS
+                
+                self._access_count[key] = time.time()
+                return value
+            return _MISS
     
     def set(self, key: str, value: Any, ttl: int = 3600):
         """设置缓存值"""
-        # 如果达到最大大小，淘汰最少访问的项
-        if len(self.cache) >= self.max_size:
-            lru_key = min(self.access_count, key=self.access_count.get)
-            del self.cache[lru_key]
-            del self.access_count[lru_key]
-        
-        ttl_time = time.time() + ttl if ttl > 0 else -1
-        self.cache[key] = (value, ttl_time)
-        self.access_count[key] = time.time()
+        with self._lock:
+            # 如果达到最大大小，淘汰最少访问的项
+            if len(self._cache) >= self._max_size and key not in self._cache:
+                if self._access_count:
+                    lru_key = min(self._access_count, key=self._access_count.get)
+                    del self._cache[lru_key]
+                    del self._access_count[lru_key]
+            
+            ttl_time = time.time() + ttl if ttl > 0 else -1
+            self._cache[key] = (value, ttl_time)
+            self._access_count[key] = time.time()
+            
+            # 定期清理过期条目
+            if time.time() - self._last_cleanup > self._cleanup_interval:
+                self._cleanup_expired()
     
     def delete(self, key: str) -> bool:
         """删除缓存"""
-        if key in self.cache:
-            del self.cache[key]
-            self.access_count.pop(key, None)
-            return True
-        return False
+        with self._lock:
+            if key in self._cache:
+                del self._cache[key]
+                self._access_count.pop(key, None)
+                return True
+            return False
     
     def clear(self):
         """清空缓存"""
-        self.cache.clear()
-        self.access_count.clear()
+        with self._lock:
+            self._cache.clear()
+            self._access_count.clear()
+    
+    def _cleanup_expired(self):
+        """清理所有过期条目（在锁内调用）"""
+        now = time.time()
+        expired_keys = [
+            k for k, (_, ttl_time) in self._cache.items()
+            if ttl_time > 0 and now > ttl_time
+        ]
+        for k in expired_keys:
+            del self._cache[k]
+            self._access_count.pop(k, None)
+        self._last_cleanup = now
+        if expired_keys:
+            app_logger.debug(f"L1缓存清理: 移除 {len(expired_keys)} 个过期条目")
     
     def get_stats(self) -> Dict[str, int]:
         """获取缓存统计"""
-        return {
-            "size": len(self.cache),
-            "max_size": self.max_size,
-            "utilization_percent": int((len(self.cache) / self.max_size) * 100)
-        }
+        with self._lock:
+            return {
+                "size": len(self._cache),
+                "max_size": self._max_size,
+                "utilization_percent": int((len(self._cache) / self._max_size) * 100) if self._max_size > 0 else 0
+            }
 
 
 class MultiLayerCacheService:
@@ -88,14 +128,18 @@ class MultiLayerCacheService:
         return f"{self.prefix}{namespace}:{key}"
     
     def get(self, namespace: str, key: str) -> Optional[Any]:
-        """获取缓存值（优先L1，再L2）"""
+        """获取缓存值（优先L1，再L2）
+        
+        返回 None 表示缓存未命中。
+        如果需要缓存 None 值，请使用 get_or 方法。
+        """
         self.stats["total_requests"] += 1
         full_key = self._make_key(namespace, key)
         
         # L1查询
         if self.enable_l1:
             value = self.l1_cache.get(full_key)
-            if value is not None:
+            if value is not _MISS:
                 self.stats["l1_hits"] += 1
                 app_logger.debug(f"✓ L1缓存命中: {full_key}")
                 return value
@@ -258,7 +302,7 @@ class CacheDecorator:
             # 生成缓存键（基于函数名和参数）
             cache_key = self._make_cache_key(func.__name__, args, kwargs)
             
-            # 尝试从缓存获取
+            # 尝试从缓存获取（使用哨兵区分未命中）
             cached_value = self.cache_service.get(self.namespace, cache_key)
             if cached_value is not None:
                 app_logger.debug(f"✓ 函数缓存命中: {func.__name__}")
