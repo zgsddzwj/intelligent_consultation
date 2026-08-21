@@ -220,25 +220,68 @@ def validate_id_card(id_card: str) -> Tuple[bool, str]:
     return True, ""
 
 
-def extract_medical_entities(text: str) -> Dict[str, List[str]]:
-    """提取文本中的医疗实体（简单规则）"""
-    entities = {
+# ========== 医疗实体关键词扩展 ==========
+
+# 常见药品名（通用名 + 常见商品名）
+DRUG_KEYWORDS = [
+    "阿莫西林", "头孢", "青霉素", "阿奇霉素", "布洛芬", "对乙酰氨基酚",
+    "感冒灵", "板蓝根", "连花清瘟", "藿香正气", "云南白药",
+    "硝苯地平", "氨氯地平", "二甲双胍", "胰岛素", "阿司匹林",
+    "奥美拉唑", "雷尼替丁", "蒙脱石散", "双歧杆菌",
+    "氯雷他定", "西替利嗪", "红霉素", "甲硝唑", "左氧氟沙星",
+]
+
+# 常见身体部位
+BODY_PART_KEYWORDS = [
+    "头", "胸", "腹", "背", "腰", "颈", "肩", "手", "脚", "腿",
+    "眼", "耳", "鼻", "喉", "口", "牙", "胃", "肝", "肾", "肺",
+    "心", "关节", "皮肤",
+]
+
+# 剂量模式：数字 + 单位
+_DOSAGE_PATTERN = re.compile(
+    r'(\d+(?:\.\d+)?)\s*'
+    r'(mg|g|ml|l|片|粒|袋|支|滴|次|颗|丸|喷|微克|μg|mcg|iu|u)'
+    r'(?:\s*/\s*(?:次|天|日|kg|小时|h))?'
+    r'',
+    re.IGNORECASE
+)
+
+
+def extract_medical_entities(text: str) -> Dict[str, Any]:
+    """提取文本中的医疗实体（增强版：含药品、剂量、身体部位）"""
+    entities: Dict[str, Any] = {
         "symptoms": [],
         "diseases": [],
         "drugs": [],
-        "body_parts": []
+        "body_parts": [],
+        "dosages": [],
     }
-    
+
     # 常见症状关键词
     symptom_keywords = ["疼痛", "发热", "咳嗽", "头晕", "恶心", "呕吐", "腹泻", "皮疹"]
     for kw in symptom_keywords:
         if kw in text:
             entities["symptoms"].append(kw)
-    
+
     # 常见疾病关键词
     disease_keywords = ["感冒", "流感", "高血压", "糖尿病", "心脏病", "肺炎"]
     for kw in disease_keywords:
         if kw in text:
             entities["diseases"].append(kw)
-    
+
+    # 药品名提取
+    for kw in DRUG_KEYWORDS:
+        if kw in text:
+            entities["drugs"].append(kw)
+
+    # 身体部位提取
+    for kw in BODY_PART_KEYWORDS:
+        if kw in text:
+            entities["body_parts"].append(kw)
+
+    # 剂量识别
+    for match in _DOSAGE_PATTERN.finditer(text):
+        entities["dosages"].append(match.group(0).strip())
+
     return entities
