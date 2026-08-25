@@ -174,7 +174,7 @@ class HealthManagerAgent(BaseAgent):
         
         return {
             "answer": answer,
-            "sources": [r.get("source") for r in rag_result.get("results", [])],
+            "sources": [{"source": r.get("source"), "metadata": r.get("metadata", {})} for r in rag_result.get("results", []) if r.get("source")],
             "tools_used": tools_used
         }
     
@@ -267,7 +267,7 @@ class HealthManagerAgent(BaseAgent):
         return {
             "answer": answer,
             "plan_type": "health_management",
-            "sources": [r.get("source") for r in rag_result.get("results", [])],
+            "sources": [{"source": r.get("source"), "metadata": r.get("metadata", {})} for r in rag_result.get("results", []) if r.get("source")],
             "tools_used": tools_used
         }
     

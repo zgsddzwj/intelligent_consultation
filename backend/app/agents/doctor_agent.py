@@ -151,7 +151,10 @@ class DoctorAgent(BaseAgent):
         # 添加来源信息
         sources = []
         if rag_result.get("results"):
-            sources = [r.get("source") for r in rag_result["results"]]
+            sources = [{
+                "source": r.get("source"),
+                "metadata": r.get("metadata", {})
+            } for r in rag_result["results"] if r.get("source")]
 
         return {
             "answer": answer,
@@ -216,7 +219,7 @@ class DoctorAgent(BaseAgent):
             "answer": answer,
             "risk_level": risk_level,
             "diagnosis_analysis": diagnosis_result,
-            "sources": [r.get("source") for r in rag_result.get("results", [])],
+            "sources": [{"source": r.get("source"), "metadata": r.get("metadata", {})} for r in rag_result.get("results", []) if r.get("source")],
             "tools_used": tools_used
         }
     
@@ -285,7 +288,7 @@ class DoctorAgent(BaseAgent):
         
         return {
             "answer": answer,
-            "sources": [r.get("source") for r in rag_result.get("results", [])],
+            "sources": [{"source": r.get("source"), "metadata": r.get("metadata", {})} for r in rag_result.get("results", []) if r.get("source")],
             "tools_used": tools_used
         }
 

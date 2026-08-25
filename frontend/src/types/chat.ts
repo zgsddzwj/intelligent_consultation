@@ -15,6 +15,14 @@ export interface ThinkingStep {
   ts: number
 }
 
+/** 信息来源 */
+export interface SourceRef {
+  /** 来源标题 */
+  title: string
+  /** 来源链接 */
+  url?: string
+}
+
 /** 单条聊天消息 */
 export interface Message {
   /** 消息唯一ID */
@@ -24,7 +32,7 @@ export interface Message {
   /** 消息内容 */
   content: string
   /** 信息来源引用 */
-  sources?: string[]
+  sources?: SourceRef[]
   /** 风险等级 */
   risk_level?: RiskLevel
   /** 消息时间戳 (ISO格式) */
@@ -58,7 +66,7 @@ export interface ChatResponse {
   /** 会话ID */
   consultation_id: number
   /** 信息来源引用 */
-  sources: string[]
+  sources: SourceRef[]
   /** 风险等级 */
   risk_level?: RiskLevel
   /** 执行耗时(ms) */
@@ -76,7 +84,7 @@ export interface ChatStreamEvent {
   /** 会话ID */
   consultation_id?: number
   /** 信息来源 */
-  sources?: string[]
+  sources?: SourceRef[]
   /** 错误信息 */
   error?: string
 }

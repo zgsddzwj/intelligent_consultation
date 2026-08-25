@@ -1,15 +1,65 @@
-import React, { useState, useMemo, useCallback } from 'react'
+import React, { memo, useState, useMemo, useCallback } from 'react'
 import { Avatar, Tag, Tooltip, Button } from 'antd'
-import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined, ExclamationCircleFilled } from '@ant-design/icons'
+import { UserOutlined, RobotOutlined, CopyOutlined, CheckOutlined, ExclamationCircleFilled, LinkOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import type { Message, RiskLevel } from '../../types/chat'
+import type { Message, RiskLevel, SourceRef } from '../../types/chat'
 import ThinkingPanel from './ThinkingPanel'
 import VoicePlayer from '../voice/VoicePlayer'
 
 interface ChatMessageProps {
   message: Message
   index?: number
+}
+
+/** 匹配内联来源标注，如 [来源：xxx] / [来源:xxx] / [来源1]xxx / [来源N：xxx] */
+function matchInlineSources(content: string): { cleaned: string; sources: SourceRef[] } {
+  const sources: SourceRef[] = []
+  const seen = new Set<string>()
+
+  // 每次都创建新的 RegExp 实例，避免 g 标志的 lastIndex 复用问题
+  const re = /\[来源\s*\d*\s*[：:]\s*([^\]]+?)\]/g
+
+  const cleaned = content.replace(re, (_match, title: string) => {
+    const t = title.trim()
+    if (t && !seen.has(t)) {
+      seen.add(t)
+      sources.push({ title: t })
+    }
+    return ''
+  })
+
+  return { cleaned, sources }
+}
+
+/** 匹配独立的免责声明段（以"免责声明"或"本回答仅供参考"开头的行） */
+function matchDisclaimer(content: string): { cleaned: string; disclaimer: string | null } {
+  const re = /(?:\n+|^)\s*(?:【?免责声明】?[\s\S]*$|本回答仅供参考[\s\S]*$)$/
+  const dMatch = content.match(re)
+  if (dMatch) {
+    return {
+      cleaned: content.slice(0, dMatch.index).trim(),
+      disclaimer: dMatch[0].trim(),
+    }
+  }
+  return { cleaned: content, disclaimer: null }
+}
+
+/** 从正文内容中提取内联来源标注和免责声明，返回清洗后的正文和来源列表 */
+function extractSourcesAndClean(content: string): {
+  body: string
+  inlineSources: SourceRef[]
+  disclaimer: string | null
+} {
+  const { cleaned: s1, sources: inlineSources } = matchInlineSources(content)
+
+  // 清理移除来源后可能残留的多余空格
+  let cleaned = s1.replace(/[ \t]+\n/g, '\n').replace(/  +/g, ' ')
+
+  // 提取免责声明
+  const { cleaned: finalBody, disclaimer } = matchDisclaimer(cleaned)
+
+  return { body: finalBody.trim(), inlineSources, disclaimer }
 }
 
 /** 根据风险等级返回中文标签和颜色 */
@@ -32,18 +82,36 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
     [message.risk_level]
   )
 
+  // 是否显示风险标签
+  const showRiskTag = !!message.risk_level
+
+  // 从 AI 回复中提取内联来源标注和免责声明，与 message.sources 合并
+  const { body, allSources, disclaimer } = useMemo(() => {
+    if (isUser) {
+      return { body: message.content, allSources: [] as SourceRef[], disclaimer: null }
+    }
+    const { body: cleanedBody, inlineSources, disclaimer: d } = extractSourcesAndClean(message.content)
+    // 合并来源：优先 SSE sources，补充内联提取的来源
+    const seen = new Set<string>()
+    const all: SourceRef[] = []
+    for (const s of [...(message.sources || []), ...inlineSources]) {
+      if (s.title && !seen.has(s.title)) {
+        seen.add(s.title)
+        all.push(s)
+      }
+    }
+    return { body: cleanedBody, allSources: all, disclaimer: d }
+  }, [message.content, message.sources, isUser])
+
   const handleCopy = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(message.content)
+      await navigator.clipboard.writeText(body || message.content)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
       // 复制失败静默处理
     }
-  }, [message.content])
-
-  // 是否显示风险标签
-  const showRiskTag = !!message.risk_level
+  }, [body, message.content])
 
   return (
     <div
@@ -128,37 +196,8 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
           ) : (
             <div className="markdown-body">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {message.content}
+                {body}
               </ReactMarkdown>
-            </div>
-          )}
-
-          {/* 信息来源 */}
-          {message.sources && message.sources.length > 0 && (
-            <div
-              style={{
-                marginTop: '10px',
-                paddingTop: '8px',
-                borderTop: `1px solid ${isUser ? 'rgba(255, 255, 255, 0.2)' : 'var(--border-color)'}`,
-                fontSize: '12px',
-                opacity: 0.85,
-              }}
-            >
-              <span style={{ fontWeight: 600 }}>信息来源:</span>{' '}
-              {message.sources.map((s, i) => (
-                <Tag
-                  key={i}
-                  style={{
-                    margin: '2px 4px 2px 0',
-                    fontSize: '11px',
-                    background: isUser ? 'rgba(255,255,255,0.15)' : 'var(--primary-50)',
-                    color: isUser ? '#fff' : 'var(--primary-600)',
-                    border: 'none',
-                  }}
-                >
-                  {s}
-                </Tag>
-              ))}
             </div>
           )}
 
@@ -181,6 +220,99 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
             </div>
           )}
         </div>
+        )}
+
+        {/* 参考来源面板 —— 与正文视觉分离，独立卡片样式 */}
+        {!isUser && allSources.length > 0 && (
+          <div
+            style={{
+              marginTop: '6px',
+              padding: '10px 14px',
+              borderRadius: '10px',
+              background: 'var(--primary-50, #eff6ff)',
+              border: '1px solid var(--primary-100, #dbeafe)',
+              maxWidth: '100%',
+              width: '100%',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                marginBottom: '8px',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: 'var(--primary-700, #1d4ed8)',
+              }}
+            >
+              <LinkOutlined />
+              <span>参考资料</span>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {allSources.map((s, i) => {
+                const href = s.url || `https://www.google.com/search?q=${encodeURIComponent(s.title)}`
+                return (
+                  <a
+                    key={i}
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '4px',
+                      padding: '3px 10px',
+                      fontSize: '11px',
+                      background: '#fff',
+                      color: '#2563eb',
+                      border: '1px solid #bfdbfe',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      textDecoration: 'none',
+                      transition: 'all 0.2s',
+                      maxWidth: '240px',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = '#eff6ff'
+                      e.currentTarget.style.borderColor = '#2563eb'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = '#fff'
+                      e.currentTarget.style.borderColor = '#bfdbfe'
+                    }}
+                  >
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      [{i + 1}] {s.title}
+                    </span>
+                    <LinkOutlined style={{ fontSize: '10px', opacity: 0.6, flexShrink: 0 }} />
+                  </a>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* 免责声明 —— 独立面板，与正文区分 */}
+        {!isUser && disclaimer && (
+          <div
+            style={{
+              marginTop: '6px',
+              padding: '8px 12px',
+              borderRadius: '8px',
+              background: 'rgba(245, 158, 11, 0.08)',
+              border: '1px solid rgba(245, 158, 11, 0.2)',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '6px',
+              fontSize: '11px',
+              color: '#92400e',
+              lineHeight: 1.5,
+            }}
+          >
+            <InfoCircleOutlined style={{ marginTop: '2px', flexShrink: 0, color: '#d97706' }} />
+            <span>{disclaimer}</span>
+          </div>
         )}
 
         {/* AI 消息底部操作栏（豆包风格：播放语音 + 复制） */}

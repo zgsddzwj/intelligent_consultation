@@ -38,11 +38,17 @@ class ChatRequest(BaseModel):
     user_id: Optional[int] = Field(None, ge=1, description="用户ID")
 
 
+class SourceItem(BaseModel):
+    """单个信息来源"""
+    title: str = Field(..., description="来源标题")
+    url: Optional[str] = Field(None, description="来源链接")
+
+
 class ChatResponse(BaseModel):
     """聊天响应"""
     answer: str = Field(..., description="AI回答内容")
     consultation_id: int = Field(..., description="咨询记录ID")
-    sources: List[str] = Field(default=[], description="参考来源")
+    sources: List[SourceItem] = Field(default=[], description="参考来源")
     risk_level: Optional[str] = Field(None, description="风险等级")
     execution_time: Optional[float] = Field(None, description="执行耗时(秒)")
 
@@ -91,11 +97,38 @@ def _create_consultation_record(db: Session, user_id: Optional[int]) -> Consulta
     return consultation
 
 
+def _build_source_items(
+    rag_results: List[Dict[str, Any]],
+    max_sources: int = 5
+) -> List[SourceItem]:
+    """从 RAG 检索结果构建结构化来源列表"""
+    seen_titles: set = set()
+    items: List[SourceItem] = []
+
+    for r in rag_results:
+        title = r.get("source") or r.get("title")
+        if not title or title in seen_titles:
+            continue
+        seen_titles.add(title)
+
+        # 从 metadata 中提取 URL（如果有）
+        url = None
+        metadata = r.get("metadata") or {}
+        if isinstance(metadata, dict):
+            url = metadata.get("url") or metadata.get("link") or metadata.get("source_url")
+
+        items.append(SourceItem(title=title, url=url))
+        if len(items) >= max_sources:
+            break
+
+    return items
+
+
 def _update_consultation_messages(
     consultation: Consultation,
     user_message: str,
     assistant_answer: str,
-    sources: List[str],
+    sources: List[SourceItem],
     risk_level: Optional[str] = None
 ) -> None:
     """更新咨询记录的消息列表"""
@@ -104,7 +137,7 @@ def _update_consultation_messages(
     messages.append({
         "role": "assistant",
         "content": assistant_answer,
-        "sources": sources,
+        "sources": [s.model_dump() for s in sources],
         "risk_level": risk_level
     })
     consultation.messages = messages
@@ -186,13 +219,22 @@ async def chat(
         if result.get("answer"):
             result["answer"] += f"\n\n{DISCLAIMER}"
 
-        # 8. 更新咨询记录
+        # 8. 构建结构化来源
+        raw_sources = result.get("sources", [])
+        if raw_sources and isinstance(raw_sources[0], dict):
+            source_items = _build_source_items(raw_sources)
+        elif raw_sources and isinstance(raw_sources[0], str):
+            source_items = [SourceItem(title=s) for s in raw_sources if s]
+        else:
+            source_items = []
+
+        # 9. 更新咨询记录
         if consultation:
             try:
                 _update_consultation_messages(
                     consultation, request.message,
                     result.get("answer", ""),
-                    result.get("sources", []),
+                    source_items,
                     result.get("risk_level")
                 )
                 db.commit()
@@ -204,7 +246,7 @@ async def chat(
         return ChatResponse(
             answer=result.get("answer", "抱歉，处理您的咨询时遇到问题，请稍后重试。"),
             consultation_id=consultation_id,
-            sources=result.get("sources", []),
+            sources=source_items,
             risk_level=result.get("risk_level"),
             execution_time=round(execution_time, 2)
         )
@@ -293,7 +335,7 @@ async def chat_stream(
 
             # 执行 RAG 检索（单次，包含 KG）
             rag_context = ""
-            sources = []
+            source_items = []
             tools_used = []
 
             try:
@@ -308,7 +350,7 @@ async def chat_stream(
 
                 if result.get("results"):
                     rag_context = rag_tool.format_context(result)
-                    sources = [r.get("source") for r in result["results"] if r.get("source")]
+                    source_items = _build_source_items(result["results"])
                     tools_used.append("rag_search")
 
                     # 检查是否有 KG 结果
@@ -320,8 +362,9 @@ async def chat_stream(
                     if kg_results:
                         tools_used.append("knowledge_graph")
 
-                    if sources:
-                        yield f"data: {json.dumps({'type': 'sources', 'sources': sources[:5]})}\n\n"
+                    if source_items:
+                        sources_payload = [s.model_dump() for s in source_items]
+                        yield f"data: {json.dumps({'type': 'sources', 'sources': sources_payload})}\n\n"
 
             except asyncio.TimeoutError:
                 app_logger.warning("RAG检索超时，使用基础prompt")
@@ -396,7 +439,7 @@ async def chat_stream(
             if consultation:
                 try:
                     _update_consultation_messages(
-                        consultation, request.message, full_answer, sources
+                        consultation, request.message, full_answer, source_items
                     )
                     db.commit()
                 except Exception as db_error:

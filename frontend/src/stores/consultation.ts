@@ -11,12 +11,20 @@ export interface ThinkingStep {
 }
 
 /**
+ * 信息来源
+ */
+export interface SourceRef {
+  title: string
+  url?: string
+}
+
+/**
  * 消息接口定义
  */
 export interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
-  sources?: string[]
+  sources?: SourceRef[]
   risk_level?: string
   timestamp?: string
   id?: string

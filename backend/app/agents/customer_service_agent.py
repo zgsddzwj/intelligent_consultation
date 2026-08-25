@@ -126,7 +126,7 @@ class CustomerServiceAgent(BaseAgent):
         return {
             "answer": answer,
             "type": request_type,
-            "sources": [r.get("source") for r in rag_result.get("results", [])],
+            "sources": [{"source": r.get("source"), "metadata": r.get("metadata", {})} for r in rag_result.get("results", []) if r.get("source")],
             "tools_used": tools_used
         }
     

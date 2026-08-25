@@ -15,6 +15,14 @@ export interface ChatRequest {
 }
 
 /**
+ * 信息来源
+ */
+export interface SourceRef {
+  title: string
+  url?: string
+}
+
+/**
  * 聊天响应数据
  */
 export interface ChatResponse {
@@ -23,7 +31,7 @@ export interface ChatResponse {
   /** 会话ID */
   consultation_id: number
   /** 信息来源引用 */
-  sources: string[]
+  sources: SourceRef[]
   /** 风险等级 */
   risk_level?: string
   /** 执行耗时(ms) */
@@ -39,7 +47,7 @@ export interface ChatStreamEvent {
   type: 'start' | 'first_token' | 'message' | 'sources' | 'thinking' | 'done' | 'error'
   content?: string
   consultation_id?: number
-  sources?: string[]
+  sources?: SourceRef[]
   error?: string
 }
 
@@ -51,7 +59,7 @@ export interface ChatStreamCallbacks {
   onThinking?: (content: string) => void
   onFirstToken?: () => void
   onMessage?: (chunk: string) => void
-  onSources?: (sources: string[]) => void
+  onSources?: (sources: SourceRef[]) => void
   onDone?: (consultationId?: number) => void
   onError?: (error: string) => void
 }
