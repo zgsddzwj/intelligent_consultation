@@ -2,6 +2,8 @@
 import asyncio
 import time
 import threading
+import hashlib
+import json
 from typing import Dict, Any, TypedDict, Annotated, Optional, List
 from functools import lru_cache
 from langgraph.graph import StateGraph, END
@@ -513,7 +515,10 @@ class AgentOrchestrator:
                 trace_id: Optional[str] = None) -> Dict[str, Any]:
         context = context or {}
 
-        context_hash = str(hash(str(sorted(context.items()))))[:8]
+        # 使用 hashlib 替代 Python hash()，保证跨进程一致性
+        # Python hash() 受 PYTHONHASHSEED 影响，不同进程结果不同
+        context_str = json.dumps(context, sort_keys=True, ensure_ascii=False, default=str)
+        context_hash = hashlib.md5(context_str.encode()).hexdigest()[:8]
 
         cached = self._get_cached_state(user_input, context_hash)
         if cached:
