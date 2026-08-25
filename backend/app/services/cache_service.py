@@ -19,6 +19,9 @@ from app.utils.logger import app_logger
 # 哨兵对象：区分「缓存未命中」和「值为None」
 _MISS = object()
 
+# 哨兵对象：用于在缓存中存储 None 值（CacheDecorator 专用）
+_CACHED_NONE_SENTINEL = object()
+
 
 class LocalCache:
     """L1本地内存缓存 - 超高性能（线程安全版）"""
@@ -306,19 +309,20 @@ class CacheDecorator:
             cached_value = self.cache_service.get(self.namespace, cache_key)
             if cached_value is not None:
                 app_logger.debug(f"✓ 函数缓存命中: {func.__name__}")
-                return cached_value
+                # 还原哨兵包装的 None 值
+                return None if cached_value is _CACHED_NONE_SENTINEL else cached_value
             
             # 执行函数
             result = func(*args, **kwargs)
             
-            # 缓存结果
-            if result is not None:
-                self.cache_service.set(
-                    self.namespace,
-                    cache_key,
-                    result,
-                    l2_ttl=self.ttl
-                )
+            # 缓存结果（包括 None 值，用哨兵包装）
+            cache_value = result if result is not None else _CACHED_NONE_SENTINEL
+            self.cache_service.set(
+                self.namespace,
+                cache_key,
+                cache_value,
+                l2_ttl=self.ttl
+            )
             
             return result
         

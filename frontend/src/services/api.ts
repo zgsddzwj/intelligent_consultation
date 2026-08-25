@@ -1,4 +1,5 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError, AxiosInterceptorManager, InternalAxiosRequestConfig } from 'axios'
+import { clearAuthToken } from './auth'
 
 declare module 'axios' {
   interface InternalAxiosRequestConfig {
@@ -233,8 +234,7 @@ apiClient.interceptors.response.use(
 
       switch (status) {
         case 401:
-          localStorage.removeItem('auth_token')
-          localStorage.removeItem('auth_user')
+          clearAuthToken()
           if (!window.location.pathname.startsWith('/login')) {
             window.location.href = '/login'
           }

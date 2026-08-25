@@ -182,11 +182,14 @@ def get_pagination_params(
     order_by: str = "-created_at"
 ):
     """获取分页参数"""
+    # 计算一次，避免重复 max/min 调用
+    safe_page = max(1, page)
+    safe_page_size = min(max(1, page_size), 100)  # 限制最大100条
     return {
-        "page": max(1, page),
-        "page_size": min(max(1, page_size), 100),  # 限制最大100条
-        "offset": (max(1, page) - 1) * min(max(1, page_size), 100),
-        "limit": min(max(1, page_size), 100),
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "offset": (safe_page - 1) * safe_page_size,
+        "limit": safe_page_size,
         "order_by": order_by
     }
 

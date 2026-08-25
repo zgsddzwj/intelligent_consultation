@@ -146,6 +146,10 @@ class ContextManagerV2:
         
         # 对话状态
         self._conversation_states: Dict[str, ConversationState] = {}
+        self._state_last_access: Dict[str, float] = {}  # 会话最后访问时间
+        self._state_ttl = 3600  # 会话状态过期时间（秒）
+        self._last_cleanup = time.time()
+        self._cleanup_interval = 600  # 每10分钟清理一次
         
         # 动态Token预算（根据对话阶段调整）
         self._token_budget_phases = {
@@ -233,9 +237,29 @@ class ContextManagerV2:
     
     def _get_or_create_state(self, session_id: str) -> ConversationState:
         """获取或创建对话状态"""
+        # 定期清理过期会话状态
+        now = time.time()
+        if now - self._last_cleanup > self._cleanup_interval:
+            self._cleanup_expired_states()
+        
         if session_id not in self._conversation_states:
             self._conversation_states[session_id] = ConversationState()
+        self._state_last_access[session_id] = now
         return self._conversation_states[session_id]
+    
+    def _cleanup_expired_states(self):
+        """清理过期的会话状态，防止内存泄漏"""
+        now = time.time()
+        expired = [
+            sid for sid, last_access in self._state_last_access.items()
+            if now - last_access > self._state_ttl
+        ]
+        for sid in expired:
+            del self._conversation_states[sid]
+            del self._state_last_access[sid]
+        self._last_cleanup = now
+        if expired:
+            app_logger.info(f"清理过期会话状态: {len(expired)} 个")
     
     def _update_conversation_state(self, state: ConversationState, 
                                    query: str, intent: str, entities: List[str]):
@@ -628,8 +652,8 @@ class ContextManagerV2:
     
     def clear_session(self, session_id: str):
         """清空指定会话的状态和缓存"""
-        if session_id in self._conversation_states:
-            del self._conversation_states[session_id]
+        self._conversation_states.pop(session_id, None)
+        self._state_last_access.pop(session_id, None)
         self._summary_cache.clear()
         app_logger.info(f"会话 {session_id} 的上下文状态已清空")
     

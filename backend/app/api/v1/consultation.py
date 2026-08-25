@@ -511,14 +511,23 @@ async def get_consultation(
     consultation_repo: ConsultationRepository = Depends(get_consultation_repository)
 ):
     """获取咨询详情"""
-    consultation = consultation_repo.get_by_id_or_raise(consultation_id)
+    try:
+        consultation = consultation_repo.get_by_id_or_raise(consultation_id)
 
-    return ConsultationHistoryResponse(
-        id=consultation.id,
-        user_id=consultation.user_id,
-        agent_type=consultation.agent_type.value,
-        status=consultation.status.value,
-        messages=consultation.messages or [],
-        created_at=consultation.created_at.isoformat() if consultation.created_at else "",
-        updated_at=consultation.updated_at.isoformat() if consultation.updated_at else ""
-    )
+        return ConsultationHistoryResponse(
+            id=consultation.id,
+            user_id=consultation.user_id,
+            agent_type=consultation.agent_type.value,
+            status=consultation.status.value,
+            messages=consultation.messages or [],
+            created_at=consultation.created_at.isoformat() if consultation.created_at else "",
+            updated_at=consultation.updated_at.isoformat() if consultation.updated_at else ""
+        )
+    except (NotFoundException, DatabaseException):
+        raise
+    except Exception as e:
+        app_logger.error(f"获取咨询详情失败: {e}", exc_info=True)
+        raise DatabaseException(
+            "获取咨询详情失败",
+            error_code=ErrorCode.DATABASE_ERROR
+        )

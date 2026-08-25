@@ -14,6 +14,9 @@ from app.utils.logger import app_logger
 class DoctorAgent(BaseAgent):
     """医生Agent - 提供医疗诊断建议、用药咨询等"""
     
+    # 历史消息截断长度，防止单条消息过长影响上下文
+    _HISTORY_TRUNCATE_LENGTH = 200
+    
     def __init__(self):
         super().__init__(
             name="doctor",
@@ -86,8 +89,8 @@ class DoctorAgent(BaseAgent):
             role = "用户" if msg.get("role") == "user" else "AI助手"
             content = msg.get("content", "")
             # 简单的截断，防止历史记录过长
-            if len(content) > 200:
-                content = content[:200] + "..."
+            if len(content) > self._HISTORY_TRUNCATE_LENGTH:
+                content = content[:self._HISTORY_TRUNCATE_LENGTH] + "..."
             history_text += f"{role}: {content}\n"
         
         return history_text + "\n"
