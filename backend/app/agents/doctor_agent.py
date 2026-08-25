@@ -92,6 +92,15 @@ class DoctorAgent(BaseAgent):
         
         return history_text + "\n"
 
+    def _build_full_context(self, context: Dict, rag_context: str, kg_context: str = "") -> str:
+        """整合历史记录、RAG上下文和知识图谱上下文为完整上下文
+        
+        消除三个 _handle_* 方法中重复的上下文拼装逻辑。
+        """
+        history_text = self._format_history(context)
+        base_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
+        return f"{history_text}{base_context}" if history_text else base_context
+
     def _handle_general_consultation(self, question: str, context: Dict, trace_id: Optional[str] = None) -> Dict[str, Any]:
         """处理一般咨询（单次RAG检索，KG结果从RAG中提取，避免重复查询）"""
         tools_used = []
@@ -123,9 +132,7 @@ class DoctorAgent(BaseAgent):
             app_logger.warning(f"RAG检索失败: {e}")
 
         # 整合上下文
-        history_text = self._format_history(context)
-        base_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
-        full_context = f"{history_text}{base_context}" if history_text else base_context
+        full_context = self._build_full_context(context, rag_context, kg_context)
 
         # 生成回答
         prompt = ConsultationPrompts.format_medical_prompt(full_context, question)
@@ -184,10 +191,8 @@ class DoctorAgent(BaseAgent):
             rag_context = ""
         
         # 4. 整合上下文
-        history_text = self._format_history(context)
-        base_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
-        full_context = f"{history_text}{base_context}" if history_text else base_context
-        
+        full_context = self._build_full_context(context, rag_context, kg_context)
+
         # 5. 生成诊断建议
         prompt = ConsultationPrompts.format_diagnosis_prompt(question, full_context)
         answer = self.llm.generate(
@@ -259,10 +264,8 @@ class DoctorAgent(BaseAgent):
             rag_context = ""
         
         # 4. 整合上下文
-        history_text = self._format_history(context)
-        base_context = f"{rag_context}\n\n{kg_context}" if kg_context else rag_context
-        full_context = f"{history_text}{base_context}" if history_text else base_context
-        
+        full_context = self._build_full_context(context, rag_context, kg_context)
+
         # 5. 生成用药建议
         # 如果有明确的药物，传递给Prompt
         drug_info_str = ", ".join(found_drugs) if found_drugs else (drug_names[0] if drug_names else None)
