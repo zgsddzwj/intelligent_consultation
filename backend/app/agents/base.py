@@ -95,6 +95,7 @@ class BaseAgent(ABC):
         self.timeout = timeout
         self.llm = llm_service
         self.tools: List[Any] = []
+        self._tool_map: Dict[str, Any] = {}  # 工具名到实例的映射，O(1)查找
         self.stats = {
             "total_calls": 0,
             "successful_calls": 0,
@@ -131,29 +132,26 @@ class BaseAgent(ABC):
         if not hasattr(tool, 'execute') or not callable(getattr(tool, 'execute')):
             raise ValueError(f"工具缺少execute方法: {tool.name}")
         
-        existing_names = [t.name for t in self.tools]
-        if tool.name in existing_names:
+        if tool.name in self._tool_map:
             app_logger.warning(f"Agent {self.name}: 工具 {tool.name} 已存在，将被替换")
             self.tools = [t for t in self.tools if t.name != tool.name]
         
         self.tools.append(tool)
+        self._tool_map[tool.name] = tool
         app_logger.debug(f"Agent {self.name} 注册工具: {tool.name}")
     
     def remove_tool(self, tool_name: str) -> bool:
         """移除已注册的工具"""
-        original_len = len(self.tools)
+        if tool_name not in self._tool_map:
+            return False
         self.tools = [t for t in self.tools if t.name != tool_name]
-        removed = len(self.tools) < original_len
-        if removed:
-            app_logger.debug(f"Agent {self.name} 移除工具: {tool_name}")
-        return removed
+        del self._tool_map[tool_name]
+        app_logger.debug(f"Agent {self.name} 移除工具: {tool_name}")
+        return True
     
     def get_tool(self, tool_name: str) -> Any:
-        """获取指定工具"""
-        for tool in self.tools:
-            if tool.name == tool_name:
-                return tool
-        return None
+        """获取指定工具（O(1)字典查找）"""
+        return self._tool_map.get(tool_name)
     
     def list_tools(self) -> List[Dict[str, str]]:
         """列出所有已注册的工具"""
@@ -212,12 +210,8 @@ class BaseAgent(ABC):
         start_time = time.time()
         last_error = None
         
-        # 查找工具
-        tool = None
-        for t in self.tools:
-            if t.name == tool_name:
-                tool = t
-                break
+        # 查找工具（O(1)字典查找）
+        tool = self._tool_map.get(tool_name)
         
         if not tool:
             error_msg = f"工具 '{tool_name}' 在Agent '{self.name}' 中不存在。可用工具: {[t.name for t in self.tools]}"
