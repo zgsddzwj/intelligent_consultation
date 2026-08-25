@@ -57,6 +57,14 @@ export interface ChatStreamCallbacks {
 }
 
 /**
+ * 流式聊天选项
+ */
+export interface ChatStreamOptions {
+  /** AbortSignal 用于取消请求 */
+  signal?: AbortSignal
+}
+
+/**
  * 历史记录项
  */
 export interface ConsultationHistoryItem {
@@ -113,8 +121,13 @@ export const consultationApi = {
   /**
    * 流式对话（SSE POST，支持 thinking）
    * 使用 fetch + ReadableStream 解析 SSE，支持 POST body
+   * 支持 AbortController 取消请求
    */
-  chatStream: async (data: ChatRequest, callbacks: ChatStreamCallbacks): Promise<void> => {
+  chatStream: async (
+    data: ChatRequest,
+    callbacks: ChatStreamCallbacks,
+    options?: ChatStreamOptions
+  ): Promise<void> => {
     const token = localStorage.getItem('auth_token')
     const baseURL = import.meta.env.DEV ? 'http://localhost:8000' : ''
     const url = `${baseURL}/api/v1/consultation/chat/stream`
@@ -127,6 +140,7 @@ export const consultationApi = {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(data),
+        signal: options?.signal,
       })
 
       if (!response.ok) {
@@ -189,6 +203,10 @@ export const consultationApi = {
         }
       }
     } catch (error) {
+      // AbortError 不触发 onError（属于正常取消）
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        return
+      }
       callbacks.onError?.(error instanceof Error ? error.message : '网络错误')
     }
   },
