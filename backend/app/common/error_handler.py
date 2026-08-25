@@ -130,19 +130,8 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException) 
 
 async def general_exception_handler(request: Request, exc: Exception) -> JSONResponse:
     """通用异常处理器（兜底）"""
-    # 记录详细堆栈到日志
+    # 记录详细堆栈到日志（只记录一次，避免重复）
     stack_trace = traceback.format_exc()
-    app_logger.exception(
-        f"未处理的异常: {type(exc).__name__} - {str(exc)}",
-        extra={
-            "path": request.url.path,
-            "method": request.method,
-            "request_id": get_request_id(),
-            "traceback": stack_trace
-        }
-    )
-
-    # 记录结构化审计日志，便于 ELK / Loki 检索
     audit_entry = {
         "event": "unhandled_exception",
         "exception_type": type(exc).__name__,

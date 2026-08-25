@@ -36,6 +36,9 @@ def _estimate_tokens(text: str) -> int:
     if not text:
         return 0
 
+    # 预定义标点集合（避免每次循环都做 in 判断）
+    _PUNCTUATION = frozenset(' .,!?;:，。！？；：、""''（）【】《】')
+
     chinese_chars = 0
     ascii_chars = 0
     punctuation_count = 0
@@ -45,13 +48,14 @@ def _estimate_tokens(text: str) -> int:
         if 0x4E00 <= code_point <= 0x9FFF:
             chinese_chars += 1
         elif code_point < 128:
-            if char in ' .,!?;:，。！？；：、""''（）【】《》':
+            if char in _PUNCTUATION:
                 punctuation_count += 1
             else:
                 ascii_chars += 1
         else:
             chinese_chars += 1
 
+    # 中文约1.5字符/token，ASCII约4字符/token，标点约2字符/token
     chinese_tokens = int(chinese_chars / 1.5) + (1 if chinese_chars % 1.5 > 0 else 0)
     ascii_tokens = int(ascii_chars / 4.0) + (1 if ascii_chars % 4 > 0 else 0)
     punct_tokens = int(punctuation_count / 2.0) + (1 if punctuation_count % 2 > 0 else 0)

@@ -1,12 +1,36 @@
 """事务管理工具"""
 from functools import wraps
-from typing import Callable, Any
+from typing import Callable, Any, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from contextlib import contextmanager
 from app.database.session import SessionLocal
 from app.utils.logger import app_logger
 from app.common.exceptions import DatabaseException
+
+
+def _resolve_db(db_param: str, args: tuple, kwargs: dict) -> Tuple[Session, bool]:
+    """从函数参数中解析数据库会话，返回 (db, should_close)"""
+    db = kwargs.get(db_param) or (args[0] if args and hasattr(args[0], db_param) else None)
+    if db is None:
+        db = SessionLocal()
+        kwargs[db_param] = db
+        return db, True
+    return db, False
+
+
+def _commit_transaction(db: Session, read_only: bool, func_name: str):
+    """提交事务（非只读时）"""
+    if not read_only:
+        db.commit()
+        app_logger.debug(f"事务提交成功: {func_name}")
+
+
+def _rollback_transaction(db: Session, read_only: bool, func_name: str, error: Exception):
+    """回滚事务并记录日志"""
+    if not read_only:
+        db.rollback()
+    app_logger.error(f"事务回滚: {func_name}, {error}")
 
 
 @contextmanager
@@ -57,34 +81,21 @@ def transactional(db_param: str = "db", read_only: bool = False):
             pass
     """
     def decorator(func: Callable) -> Callable:
+        import asyncio
+        is_async = asyncio.iscoroutinefunction(func)
+
         @wraps(func)
         async def async_wrapper(*args, **kwargs):
-            # 获取数据库会话
-            db = kwargs.get(db_param) or (args[0] if args and hasattr(args[0], db_param) else None)
-            
-            if db is None:
-                # 如果没有传入db，创建新的会话
-                db = SessionLocal()
-                kwargs[db_param] = db
-                should_close = True
-            else:
-                should_close = False
-            
+            db, should_close = _resolve_db(db_param, args, kwargs)
             try:
                 result = await func(*args, **kwargs)
-                if not read_only:
-                    db.commit()
-                    app_logger.debug(f"事务提交成功: {func.__name__}")
+                _commit_transaction(db, read_only, func.__name__)
                 return result
             except SQLAlchemyError as e:
-                if not read_only:
-                    db.rollback()
-                app_logger.error(f"事务回滚: {func.__name__}, {e}")
+                _rollback_transaction(db, read_only, func.__name__, e)
                 raise DatabaseException(f"数据库操作失败: {str(e)}", error_code="4002")
             except Exception as e:
-                if not read_only:
-                    db.rollback()
-                app_logger.error(f"事务回滚（未知错误）: {func.__name__}, {e}")
+                _rollback_transaction(db, read_only, func.__name__, e)
                 raise
             finally:
                 if should_close:
@@ -92,43 +103,22 @@ def transactional(db_param: str = "db", read_only: bool = False):
         
         @wraps(func)
         def sync_wrapper(*args, **kwargs):
-            # 获取数据库会话
-            db = kwargs.get(db_param) or (args[0] if args and hasattr(args[0], db_param) else None)
-            
-            if db is None:
-                # 如果没有传入db，创建新的会话
-                db = SessionLocal()
-                kwargs[db_param] = db
-                should_close = True
-            else:
-                should_close = False
-            
+            db, should_close = _resolve_db(db_param, args, kwargs)
             try:
                 result = func(*args, **kwargs)
-                if not read_only:
-                    db.commit()
-                    app_logger.debug(f"事务提交成功: {func.__name__}")
+                _commit_transaction(db, read_only, func.__name__)
                 return result
             except SQLAlchemyError as e:
-                if not read_only:
-                    db.rollback()
-                app_logger.error(f"事务回滚: {func.__name__}, {e}")
+                _rollback_transaction(db, read_only, func.__name__, e)
                 raise DatabaseException(f"数据库操作失败: {str(e)}", error_code="4002")
             except Exception as e:
-                if not read_only:
-                    db.rollback()
-                app_logger.error(f"事务回滚（未知错误）: {func.__name__}, {e}")
+                _rollback_transaction(db, read_only, func.__name__, e)
                 raise
             finally:
                 if should_close:
                     db.close()
         
-        # 判断是否为异步函数
-        import asyncio
-        if asyncio.iscoroutinefunction(func):
-            return async_wrapper
-        else:
-            return sync_wrapper
+        return async_wrapper if is_async else sync_wrapper
     
     return decorator
 
