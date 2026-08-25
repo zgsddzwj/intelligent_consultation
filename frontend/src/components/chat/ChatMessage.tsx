@@ -42,8 +42,8 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
     }
   }, [message.content])
 
-  // 风险等级信息只计算一次
-  const riskInfo = message.risk_level ? getRiskInfo(message.risk_level as RiskLevel) : null
+  // 是否显示风险标签
+  const showRiskTag = !!message.risk_level
 
   return (
     <div
@@ -163,7 +163,7 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
           )}
 
           {/* 风险等级标签 */}
-          {riskInfo && (
+          {showRiskTag && (
             <div style={{ marginTop: '8px' }}>
               <Tag
                 icon={<ExclamationCircleFilled />}
