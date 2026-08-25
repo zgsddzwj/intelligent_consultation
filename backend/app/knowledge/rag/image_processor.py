@@ -1,4 +1,7 @@
-"""图片处理器 - PDF图片提取、OCR识别、多模态理解"""
+"""图片处理器 - PDF图片提取、OCR识别、多模态理解
+
+统一使用硟基流动（SiliconFlow）多模态视觉模型，兼容 OpenAI API 格式。
+"""
 from typing import List, Dict, Any, Optional
 from pathlib import Path
 import base64
@@ -7,12 +10,9 @@ from PIL import Image
 import pdfplumber
 from app.utils.logger import app_logger
 from app.prompts import ImagePrompts, KnowledgePrompts
-import dashscope
-from dashscope import MultiModalConversation
 from app.config import get_settings
 
 settings = get_settings()
-dashscope.api_key = settings.QWEN_API_KEY
 
 
 class ImageProcessor:
@@ -161,7 +161,7 @@ class ImageProcessor:
             return {"text": "", "confidence": 0.0, "error": str(e)}
     
     def understand_image_with_llm(self, image_path: str, query: str = ImagePrompts.IMAGE_UNDERSTAND_DEFAULT) -> Dict[str, Any]:
-        """使用Qwen-VL理解图片内容"""
+        """使用硟基流动视觉模型理解图片内容"""
         if not self.multimodal_enabled:
             return {"description": "", "error": "多模态功能未启用"}
         
@@ -172,37 +172,52 @@ class ImageProcessor:
             
             image_base64 = base64.b64encode(image_bytes).decode('utf-8')
             
-            # 使用Qwen-VL
+            # 使用硟基流动视觉模型（OpenAI兼容格式）
+            from openai import OpenAI
+            client = OpenAI(
+                api_key=settings.SILICONFLOW_API_KEY,
+                base_url=settings.SILICONFLOW_BASE_URL,
+                timeout=30,
+                max_retries=2,
+            )
+            
             messages = [
                 {
                     "role": "user",
                     "content": [
                         {
-                            "image": f"data:image/jpeg;base64,{image_base64}"
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{image_base64}"
+                            }
                         },
                         {
+                            "type": "text",
                             "text": query
                         }
                     ]
                 }
             ]
             
-            response = MultiModalConversation.call(
-                model="qwen-vl-max",
-                messages=messages
+            response = client.chat.completions.create(
+                model=settings.SILICONFLOW_VISION_MODEL,
+                messages=messages,
+                max_tokens=2000,
             )
             
-            if response.status_code == 200:
-                description = response.output.choices[0].message.content
-                return {
-                    "description": description,
-                    "model": "qwen-vl-max"
-                }
-            else:
-                return {
-                    "description": "",
-                    "error": f"Qwen-VL调用失败: {response.message}"
-                }
+            if response.choices and len(response.choices) > 0:
+                choice = response.choices[0]
+                if choice.message and choice.message.content:
+                    description = choice.message.content
+                    return {
+                        "description": description,
+                        "model": settings.SILICONFLOW_VISION_MODEL
+                    }
+            
+            return {
+                "description": "",
+                "error": "视觉模型返回内容为空"
+            }
                 
         except Exception as e:
             app_logger.error(f"图片理解失败: {e}")

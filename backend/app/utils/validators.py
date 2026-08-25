@@ -167,10 +167,8 @@ def validate_environment() -> Tuple[bool, List[str]]:
         errors.append("SECRET_KEY: JWT密钥未配置")
     
     # LLM配置检查
-    if settings.LLM_PROVIDER == "qwen" and not settings.QWEN_API_KEY:
-        errors.append("QWEN_API_KEY: 使用Qwen但未配置API Key")
-    elif settings.LLM_PROVIDER == "deepseek" and not settings.DEEPSEEK_API_KEY:
-        errors.append("DEEPSEEK_API_KEY: 使用DeepSeek但未配置API Key")
+    if settings.LLM_PROVIDER == "siliconflow" and not settings.SILICONFLOW_API_KEY:
+        errors.append("SILICONFLOW_API_KEY: 使用硅基流动但未配置API Key")
     
     # 可选配置警告
     if not settings.REDIS_URL:

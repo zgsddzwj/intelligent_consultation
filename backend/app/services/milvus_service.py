@@ -33,7 +33,7 @@ class MilvusService:
         self.host = settings.MILVUS_HOST
         self.port = settings.MILVUS_PORT
         self.collection_name = settings.MILVUS_COLLECTION_NAME
-        self.dimension = 1024  # Qwen embedding维度
+        self.dimension = 1024  # 硅基流动 embedding维度
         self._collection: Optional[Collection] = None
         self._connected = False
         self._max_retries = 1  # 快速失败

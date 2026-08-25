@@ -21,7 +21,7 @@ def check_env_file():
 
     settings = get_settings()
     checks = [
-        ("QWEN_API_KEY", settings.QWEN_API_KEY, "your_qwen_api_key_here"),
+        ("SILICONFLOW_API_KEY", settings.SILICONFLOW_API_KEY, "your-siliconflow-api-key"),
         ("DATABASE_URL", settings.DATABASE_URL, ""),
         ("REDIS_URL", settings.REDIS_URL, ""),
     ]
@@ -63,7 +63,7 @@ def check_dependencies():
         "fastapi": "FastAPI",
         "langchain": "LangChain",
         "neo4j": "Neo4j驱动",
-        "dashscope": "DashScope",
+        "openai": "OpenAI SDK (硅基流动兼容)",
         "pymilvus": "Milvus驱动",
         "redis": "Redis驱动",
         "sqlalchemy": "SQLAlchemy",

@@ -1,6 +1,7 @@
-"""LLM服务 - 极致优化版（连接池、批量推理、智能降级、Token精确计费）"""
-import dashscope
-from dashscope import Generation
+"""LLM服务 - 极致优化版（连接池、批量推理、智能降级、Token精确计费）
+
+统一使用硅基流动（SiliconFlow）作为唯一 LLM Provider，兼容 OpenAI API 格式。
+"""
 from typing import List, Dict, Optional, Any, AsyncGenerator, Tuple
 import time
 import asyncio
@@ -22,8 +23,6 @@ def _get_semantic_cache():
     from app.services.semantic_cache import semantic_cache
     return semantic_cache
 
-if settings.LLM_PROVIDER == "qwen":
-    dashscope.api_key = settings.QWEN_API_KEY
 
 llm_circuit_breaker = get_circuit_breaker("llm_service", failure_threshold=5, recovery_timeout=60)
 
@@ -152,16 +151,14 @@ class LLMConnectionPool:
             return client
 
     def _create_client(self, provider: str):
-        if provider == "deepseek":
+        if provider == "siliconflow":
             from openai import OpenAI
             return OpenAI(
-                api_key=settings.DEEPSEEK_API_KEY,
-                base_url=settings.DEEPSEEK_BASE_URL,
+                api_key=settings.SILICONFLOW_API_KEY,
+                base_url=settings.SILICONFLOW_BASE_URL,
                 timeout=DEFAULT_REQUEST_TIMEOUT,
                 max_retries=2,
             )
-        elif provider == "qwen":
-            return None  # Qwen使用dashscope全局配置
         return None
 
     def execute_async(self, func, *args, **kwargs):
@@ -175,15 +172,13 @@ class LLMConnectionPool:
 class LLMService:
     """LLM服务类 - 极致优化版（多Provider、连接池、批量推理、智能降级）"""
 
-    # 模型定价表（每1K tokens，单位：元）
+    # 模型定价表（每1K tokens，单位：元）- 硅基流动模型
     PRICING = {
-        "qwen-turbo": {"input": 0.002, "output": 0.006},
-        "qwen-plus": {"input": 0.004, "output": 0.012},
-        "qwen-max": {"input": 0.02, "output": 0.06},
-        "qwen-vl-max": {"input": 0.02, "output": 0.06},
-        "deepseek-chat": {"input": 0.001, "output": 0.002},
-        "deepseek-coder": {"input": 0.001, "output": 0.002},
-        "deepseek-reasoner": {"input": 0.004, "output": 0.016},
+        "deepseek-ai/DeepSeek-V3": {"input": 0.002, "output": 0.008},
+        "deepseek-ai/DeepSeek-R1": {"input": 0.004, "output": 0.016},
+        "Qwen/Qwen2.5-72B-Instruct": {"input": 0.004, "output": 0.012},
+        "Qwen/Qwen2.5-VL-72B-Instruct": {"input": 0.004, "output": 0.012},
+        "BAAI/bge-large-zh-v1.5": {"input": 0.0007, "output": 0.0},
     }
 
     def __init__(self):
@@ -199,19 +194,14 @@ class LLMService:
         app_logger.info(f"LLM服务初始化完成，主Provider: {self.primary_provider}, 降级Provider: {self.fallback_provider}")
 
     def _init_provider(self, provider: str):
-        if provider == "deepseek":
-            self.model = settings.DEEPSEEK_MODEL
-            self.api_key = settings.DEEPSEEK_API_KEY
-            self.base_url = settings.DEEPSEEK_BASE_URL
-            self.client = self.connection_pool.get_client("deepseek")
-        elif provider == "qwen":
-            self.model = settings.QWEN_MODEL
-            self.api_key = settings.QWEN_API_KEY
-            self.client = None
-            dashscope.api_key = self.api_key
+        if provider == "siliconflow":
+            self.model = settings.SILICONFLOW_MODEL
+            self.api_key = settings.SILICONFLOW_API_KEY
+            self.base_url = settings.SILICONFLOW_BASE_URL
+            self.client = self.connection_pool.get_client("siliconflow")
         else:
             raise LLMServiceException(
-                f"不支持的LLM Provider: {provider}",
+                f"不支持的LLM Provider: {provider}，当前仅支持 siliconflow",
                 error_code=ErrorCode.LLM_SERVICE_ERROR
             )
 
@@ -226,59 +216,19 @@ class LLMService:
         llm_metrics.record_provider_switch()
         return True
 
-    def _parse_qwen_response(self, response, method_name: str = "unknown") -> str:
-        if response.status_code != 200:
-            error_msg = getattr(response, 'message', f"HTTP {response.status_code}")
-            raise Exception(f"Qwen {method_name} API调用失败: status_code={response.status_code}, message={error_msg}")
-
-        if not response.output:
-            raise Exception(f"Qwen {method_name} 响应格式异常: output为空")
-
-        result = None
-
-        if hasattr(response.output, 'choices') and response.output.choices:
-            choices = response.output.choices
-            if len(choices) > 0:
-                choice = choices[0]
-                if (choice.message and
-                    hasattr(choice.message, 'content') and
-                    choice.message.content):
-                    result = choice.message.content
-
-        if not result and hasattr(response.output, 'text') and response.output.text:
-            result = response.output.text
-
-        if not result:
-            raise Exception(
-                f"Qwen {method_name} 响应格式异常: "
-                f"无法从choices或text字段获取内容"
-            )
-
-        return result
-
-    def _parse_deepseek_response(self, response, method_name: str = "unknown") -> str:
+    def _parse_siliconflow_response(self, response, method_name: str = "unknown") -> str:
+        """解析硅基流动（OpenAI兼容）响应"""
         if not response.choices or len(response.choices) == 0:
-            raise Exception(f"DeepSeek {method_name} 响应格式异常: choices为空")
+            raise Exception(f"SiliconFlow {method_name} 响应格式异常: choices为空")
 
         choice = response.choices[0]
         if not choice.message or not choice.message.content:
-            raise Exception(f"DeepSeek {method_name} 响应内容为空")
+            raise Exception(f"SiliconFlow {method_name} 响应内容为空")
 
         return choice.message.content
 
-    def _call_qwen_api(self, messages: List[Dict], temperature: float = 0.7,
-                       max_tokens: int = 2000, **kwargs):
-        response = Generation.call(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            **kwargs
-        )
-        return self._parse_qwen_response(response, "generate")
-
-    def _call_deepseek_api(self, messages: List[Dict], temperature: float = 0.7,
-                           max_tokens: int = 2000, **kwargs):
+    def _call_siliconflow_api(self, messages: List[Dict], temperature: float = 0.7,
+                              max_tokens: int = 2000, **kwargs):
         response = self.client.chat.completions.create(
             model=self.model,
             messages=messages,
@@ -286,14 +236,12 @@ class LLMService:
             max_tokens=max_tokens,
             **kwargs
         )
-        return self._parse_deepseek_response(response, "generate")
+        return self._parse_siliconflow_response(response, "generate")
 
     def _call_provider(self, messages: List[Dict], temperature: float = 0.7,
                        max_tokens: int = 2000, **kwargs) -> str:
-        if self.primary_provider == "deepseek":
-            return self._call_deepseek_api(messages, temperature, max_tokens, **kwargs)
-        elif self.primary_provider == "qwen":
-            return self._call_qwen_api(messages, temperature, max_tokens, **kwargs)
+        if self.primary_provider == "siliconflow":
+            return self._call_siliconflow_api(messages, temperature, max_tokens, **kwargs)
         else:
             raise Exception(f"不支持的Provider: {self.primary_provider}")
 
@@ -329,24 +277,11 @@ class LLMService:
 
     def _extract_stream_content(self, chunk, provider: str) -> Optional[str]:
         try:
-            if provider == "deepseek":
+            if provider == "siliconflow":
                 if chunk.choices and len(chunk.choices) > 0:
                     delta = chunk.choices[0].delta
                     if delta and delta.content:
                         return delta.content
-            elif provider == "qwen":
-                if hasattr(chunk, 'status_code') and chunk.status_code == 200:
-                    content = None
-                    if (chunk.output and hasattr(chunk.output, 'choices') and
-                        chunk.output.choices and len(chunk.output.choices) > 0):
-                        choice = chunk.output.choices[0]
-                        if (choice.message and
-                            hasattr(choice.message, 'content') and
-                            choice.message.content):
-                            content = choice.message.content
-                    if not content and chunk.output and hasattr(chunk.output, 'text'):
-                        content = chunk.output.text
-                    return content
         except Exception as e:
             app_logger.debug(f"提取流式内容失败 ({provider}): {e}")
         return None
@@ -548,7 +483,7 @@ class LLMService:
         try:
             messages = self._build_messages(system_prompt, prompt)
 
-            if self.primary_provider == "deepseek":
+            if self.primary_provider == "siliconflow":
                 stream = self.client.chat.completions.create(
                     model=self.model,
                     messages=messages,
@@ -559,37 +494,13 @@ class LLMService:
                 )
 
                 for chunk in stream:
-                    content = self._extract_stream_content(chunk, "deepseek")
+                    content = self._extract_stream_content(chunk, "siliconflow")
                     if content:
                         chunk_count += 1
                         if first_token_time is None:
                             first_token_time = time.time()
                         full_output += content
                         yield content
-
-            elif self.primary_provider == "qwen":
-                responses = Generation.call(
-                    model=self.model,
-                    messages=messages,
-                    temperature=temperature,
-                    max_tokens=max_tokens,
-                    stream=True,
-                    **kwargs
-                )
-
-                for response in responses:
-                    content = self._extract_stream_content(response, "qwen")
-                    if content:
-                        chunk_count += 1
-                        if first_token_time is None:
-                            first_token_time = time.time()
-                        full_output += content
-                        yield content
-                    else:
-                        if hasattr(response, 'status_code') and response.status_code != 200:
-                            error_msg = getattr(response, 'message', f"HTTP {response.status_code}")
-                            app_logger.error(f"Qwen流式生成错误: {error_msg}")
-                            break
             else:
                 raise Exception(f"不支持的Provider: {self.primary_provider}")
 

@@ -5,7 +5,7 @@ import os
 os.environ.setdefault("ENVIRONMENT", "testing")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing")
-os.environ.setdefault("QWEN_API_KEY", "test-key")
+os.environ.setdefault("SILICONFLOW_API_KEY", "test-key")
 os.environ.setdefault("STARTUP_FAIL_FAST", "false")
 os.environ.setdefault("ENABLE_AUTH_MIDDLEWARE", "false")
 os.environ.setdefault("RATE_LIMIT_ENABLED", "false")

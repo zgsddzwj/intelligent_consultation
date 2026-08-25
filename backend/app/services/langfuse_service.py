@@ -308,7 +308,7 @@ def trace_llm_call(func: Callable) -> Callable:
         # 提取参数
         prompt = kwargs.get("prompt") or (args[0] if args else "")
         system_prompt = kwargs.get("system_prompt")
-        model = kwargs.get("model") or settings.QWEN_MODEL
+        model = kwargs.get("model") or settings.SILICONFLOW_MODEL
         temperature = kwargs.get("temperature", settings.LLM_DEFAULT_TEMPERATURE)
         max_tokens = kwargs.get("max_tokens", settings.LLM_DEFAULT_MAX_TOKENS)
 

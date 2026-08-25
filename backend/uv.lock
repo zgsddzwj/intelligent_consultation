@@ -675,18 +675,6 @@ wheels = [
 ]
 
 [[package]]
-name = "dashscope"
-version = "1.17.0"
-source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "requests" },
-]
-wheels = [
-    { url = "https://mirrors.aliyun.com/pypi/packages/83/f0/df4e7044b9414b099a534cbb9de769a492f656cf7d1d900515b294782894/dashscope-1.17.0-py3-none-any.whl", hash = "sha256:fdc007d37a9b108178b00f50a0d3776ddda3bbad5d124f6183028fdb51d609cc" },
-]
-
-[[package]]
 name = "dataclasses-json"
 version = "0.6.7"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple/" }
@@ -1319,7 +1307,6 @@ dependencies = [
     { name = "bcrypt" },
     { name = "boto3" },
     { name = "cryptography" },
-    { name = "dashscope" },
     { name = "edge-tts" },
     { name = "fastapi" },
     { name = "flagembedding" },
@@ -1393,7 +1380,6 @@ requires-dist = [
     { name = "black", marker = "extra == 'dev'" },
     { name = "boto3", specifier = "==1.34.0" },
     { name = "cryptography", specifier = "==41.0.7" },
-    { name = "dashscope", specifier = "==1.17.0" },
     { name = "edge-tts", specifier = ">=6.1.0" },
     { name = "fastapi", specifier = "==0.109.2" },
     { name = "flagembedding", specifier = "==1.2.0" },
@@ -1414,7 +1400,7 @@ requires-dist = [
     { name = "mypy", marker = "extra == 'dev'" },
     { name = "neo4j", specifier = "==5.17.0" },
     { name = "numpy", specifier = "==1.24.3" },
-    { name = "openai", specifier = "==1.12.0" },
+    { name = "openai", specifier = ">=1.12.0" },
     { name = "oss2", specifier = "==2.18.4" },
     { name = "paddleocr", specifier = "==2.7.0.3" },
     { name = "pandas", specifier = "==2.1.4" },

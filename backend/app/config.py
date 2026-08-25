@@ -46,18 +46,15 @@ class Settings(BaseSettings):
     MILVUS_COLLECTION_NAME: str = "medical_documents"
     
     # LLM Provider Configuration
-    LLM_PROVIDER: str = "deepseek"  # "deepseek" | "qwen" - 从.env读取
+    LLM_PROVIDER: str = "siliconflow"  # 统一使用硅基流动
     FALLBACK_LLM_PROVIDER: str = ""  # 降级Provider，留空表示不降级
-    
-    # LLM - Qwen (阿里云百炼)
-    QWEN_API_KEY: str = ""  # 从.env读取
-    QWEN_MODEL: str = "qwen-turbo"  # 从.env读取，默认qwen-turbo
-    QWEN_EMBEDDING_MODEL: str = "text-embedding-v2"  # 从.env读取
-    
-    # LLM - DeepSeek (兼容OpenAI API)
-    DEEPSEEK_API_KEY: str = ""  # 从.env读取
-    DEEPSEEK_MODEL: str = "deepseek-chat"  # 从.env读取，默认deepseek-chat
-    DEEPSEEK_BASE_URL: str = "https://api.deepseek.com"  # DeepSeek API端点
+
+    # LLM - 硅基流动 (SiliconFlow, 兼容OpenAI API)
+    SILICONFLOW_API_KEY: str = ""  # 从.env读取
+    SILICONFLOW_BASE_URL: str = "https://api.siliconflow.cn/v1"  # 硅基流动 API端点
+    SILICONFLOW_MODEL: str = "deepseek-ai/DeepSeek-V3"  # 默认对话模型
+    SILICONFLOW_EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"  # 默认嵌入模型
+    SILICONFLOW_VISION_MODEL: str = "Qwen/Qwen2.5-VL-72B-Instruct"  # 默认多模态视觉模型
     
     # Security
     SECRET_KEY: str = ""  # JWT密钥，从.env读取；生产环境必须配置，否则自动生成（每次重启后旧token失效）
@@ -153,13 +150,13 @@ class Settings(BaseSettings):
     # Table/Image Description Configuration
     ENABLE_TABLE_DESCRIPTION: bool = False
     TABLE_DESCRIPTION_API_KEY: Optional[str] = None
-    TABLE_DESCRIPTION_MODEL: str = "deepseek-chat"
-    TABLE_DESCRIPTION_BASE_URL: str = "https://api.deepseek.com"
+    TABLE_DESCRIPTION_MODEL: str = "deepseek-ai/DeepSeek-V3"
+    TABLE_DESCRIPTION_BASE_URL: str = "https://api.siliconflow.cn/v1"
     
     ENABLE_IMAGE_DESCRIPTION: bool = False
     IMAGE_DESCRIPTION_API_KEY: Optional[str] = None
-    IMAGE_DESCRIPTION_MODEL: str = "gpt-4o"
-    IMAGE_DESCRIPTION_BASE_URL: str = "https://api.openai.com/v1"
+    IMAGE_DESCRIPTION_MODEL: str = "Qwen/Qwen2.5-VL-72B-Instruct"
+    IMAGE_DESCRIPTION_BASE_URL: str = "https://api.siliconflow.cn/v1"
     
     # Export Configuration
     PDF_EXPORT_DIR: str = "./data/pdf_exports"

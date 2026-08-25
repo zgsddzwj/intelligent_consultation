@@ -37,7 +37,7 @@ class SemanticCache:
                 # 创建集合
                 fields = [
                     FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-                    FieldSchema(name="query_embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),  # Qwen embedding维度
+                    FieldSchema(name="query_embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),  # 硅基流动 embedding维度
                     FieldSchema(name="query_text", dtype=DataType.VARCHAR, max_length=1000),
                     FieldSchema(name="response", dtype=DataType.VARCHAR, max_length=10000),
                     FieldSchema(name="metadata", dtype=DataType.JSON),

@@ -18,8 +18,7 @@ class EnvValidator:
     
     # 条件必需的环境变量（根据功能启用情况）
     CONDITIONAL_VARS = {
-        "QWEN_API_KEY": "使用通义千问LLM服务",
-        "DEEPSEEK_API_KEY": "使用DeepSeek LLM服务",
+        "SILICONFLOW_API_KEY": "使用硅基流动LLM服务",
         "NEO4J_URI": "使用Neo4j知识图谱",
         "MILVUS_HOST": "使用Milvus向量数据库",
     }

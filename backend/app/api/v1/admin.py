@@ -360,10 +360,8 @@ async def get_system_metrics(db: Session = Depends(get_db)):
         components["milvus"] = {"status": "unhealthy", "error": str(e)[:100]}
 
     # LLM
-    if settings.LLM_PROVIDER == "deepseek" and settings.DEEPSEEK_API_KEY:
-        components["llm"] = {"status": "healthy", "provider": "deepseek"}
-    elif settings.LLM_PROVIDER == "qwen" and settings.QWEN_API_KEY:
-        components["llm"] = {"status": "healthy", "provider": "qwen"}
+    if settings.LLM_PROVIDER == "siliconflow" and settings.SILICONFLOW_API_KEY:
+        components["llm"] = {"status": "healthy", "provider": "siliconflow"}
     else:
         components["llm"] = {"status": "unhealthy", "error": "未配置"}
 

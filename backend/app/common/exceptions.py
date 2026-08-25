@@ -120,7 +120,7 @@ class ExternalServiceException(BaseAppException):
 class LLMServiceException(ExternalServiceException):
     """LLM服务异常
     
-    用于Qwen/DeepSeek等LLM服务调用失败。
+    用于硅基流动（SiliconFlow）等LLM服务调用失败。
     """
     def __init__(self, message: str, error_code: str = None, details: Dict[str, Any] = None):
         default_code = error_code or ErrorCode.LLM_SERVICE_ERROR

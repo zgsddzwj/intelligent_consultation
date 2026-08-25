@@ -149,64 +149,72 @@ def _parse_diagnosis_json(raw_text: str) -> Dict[str, Any]:
 
 
 @retry(max_attempts=2, delay=1.0, backoff=2.0, exceptions=(Exception,))
-def _call_qwen_vl(image_base64: str, prompt: str) -> str:
+def _call_vision_model(image_base64: str, prompt: str) -> str:
     """
-    调用Qwen-VL进行图片分析（带重试机制）
+    调用硅基流动多模态视觉模型进行图片分析（带重试机制）
+    使用 OpenAI 兼容 API 格式
     """
-    import dashscope
-    from dashscope import MultiModalConversation
+    from openai import OpenAI
 
-    dashscope.api_key = settings.QWEN_API_KEY
+    client = OpenAI(
+        api_key=settings.SILICONFLOW_API_KEY,
+        base_url=settings.SILICONFLOW_BASE_URL,
+        timeout=30,
+        max_retries=2,
+    )
 
     messages = [
         {
             "role": "user",
             "content": [
-                {"image": f"data:image/jpeg;base64,{image_base64}"},
-                {"text": prompt}
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{image_base64}"
+                    }
+                },
+                {
+                    "type": "text",
+                    "text": prompt
+                }
             ]
         }
     ]
 
     start_time = time.time()
     try:
-        response = MultiModalConversation.call(
-            model="qwen-vl-max",
+        response = client.chat.completions.create(
+            model=settings.SILICONFLOW_VISION_MODEL,
             messages=messages,
-            timeout=30
+            max_tokens=2000,
         )
 
         latency = time.time() - start_time
-        app_logger.info(f"Qwen-VL调用完成，耗时: {latency:.2f}s")
+        app_logger.info(f"视觉模型调用完成，耗时: {latency:.2f}s")
 
-        if response.status_code != 200:
-            error_msg = getattr(response, 'message', f"HTTP {response.status_code}")
+        if not response.choices or len(response.choices) == 0:
             raise LLMServiceException(
-                f"图片分析失败: {error_msg}",
-                error_code=ErrorCode.LLM_SERVICE_ERROR,
-                details={"status_code": response.status_code, "latency": latency}
-            )
-
-        if (not response.output or
-            not hasattr(response.output, 'choices') or
-            not response.output.choices or
-            len(response.output.choices) == 0 or
-            not response.output.choices[0].message or
-            not response.output.choices[0].message.content):
-            raise LLMServiceException(
-                "Qwen-VL返回内容为空",
+                "视觉模型响应格式异常: choices为空",
                 error_code=ErrorCode.LLM_SERVICE_ERROR,
                 details={"latency": latency}
             )
 
-        return response.output.choices[0].message.content
+        choice = response.choices[0]
+        if not choice.message or not choice.message.content:
+            raise LLMServiceException(
+                "视觉模型返回内容为空",
+                error_code=ErrorCode.LLM_SERVICE_ERROR,
+                details={"latency": latency}
+            )
+
+        return choice.message.content
 
     except LLMServiceException:
         raise
     except Exception as e:
         latency = time.time() - start_time
         raise LLMServiceException(
-            f"Qwen-VL调用异常: {str(e)}",
+            f"视觉模型调用异常: {str(e)}",
             error_code=ErrorCode.LLM_SERVICE_ERROR,
             details={"error_type": type(e).__name__, "latency": latency}
         )
@@ -224,7 +232,7 @@ async def analyze_medical_image(
 
     功能：
     - 文件格式和大小验证
-    - 使用Qwen-VL多模态模型进行图片理解
+    - 使用硅基流动多模态视觉模型进行图片理解
     - 结构化医疗术语提取（多策略JSON解析）
     - 重试机制保障可靠性
     """
@@ -242,8 +250,8 @@ async def analyze_medical_image(
 
         image_base64 = base64.b64encode(image_content).decode('utf-8')
 
-        # 使用Qwen-VL进行图片分析
-        analysis_text = _call_qwen_vl(image_base64, prompt)
+        # 使用硅基流动视觉模型进行图片分析
+        analysis_text = _call_vision_model(image_base64, prompt)
 
         # 使用LLM进一步提取结构化医疗术语
         extraction_prompt = KnowledgePrompts.format_image_terms_classify_prompt(analysis_text)
@@ -402,8 +410,8 @@ async def diagnose_from_image(
         # 构建多模态诊断 Prompt
         diagnosis_prompt = ImagePrompts.format_diagnosis_report_prompt(patient_context)
 
-        # 调用 Qwen-VL 进行诊断
-        raw_result = _call_qwen_vl(image_base64, diagnosis_prompt)
+        # 调用硅基流动视觉模型进行诊断
+        raw_result = _call_vision_model(image_base64, diagnosis_prompt)
         parsed = _parse_diagnosis_json(raw_result)
 
         # 构建响应

@@ -17,7 +17,7 @@ uv sync --extra dev
 # 最小配置
 DATABASE_URL=sqlite:///./test.db
 REDIS_URL=redis://localhost:6379/0
-QWEN_API_KEY=your_key_here
+SILICONFLOW_API_KEY=your_key_here
 ```
 
 ## 运行测试

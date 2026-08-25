@@ -143,10 +143,8 @@ async def _check_milvus():
 
 async def _check_llm():
     """轻量级LLM健康检查（仅验证配置，不实际调用）"""
-    if settings.LLM_PROVIDER == "qwen" and settings.QWEN_API_KEY:
-        return {"status": "healthy", "provider": "qwen", "model": settings.QWEN_MODEL}
-    elif settings.LLM_PROVIDER == "deepseek" and settings.DEEPSEEK_API_KEY:
-        return {"status": "healthy", "provider": "deepseek", "model": settings.DEEPSEEK_MODEL}
+    if settings.LLM_PROVIDER == "siliconflow" and settings.SILICONFLOW_API_KEY:
+        return {"status": "healthy", "provider": "siliconflow", "model": settings.SILICONFLOW_MODEL}
     return {"status": "unhealthy", "error": "LLM未配置"}
 
 
