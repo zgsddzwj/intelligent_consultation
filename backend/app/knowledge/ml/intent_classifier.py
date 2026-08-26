@@ -20,6 +20,26 @@ class IntentClassifier:
         "disease_info": "疾病信息",
         "general": "一般咨询"
     }
+
+    # 规则分类关键词（预编译为frozenset，避免每次调用重新创建列表）
+    RULE_KEYWORDS = {
+        "diagnosis": frozenset({"是什么病", "可能", "会不会", "是不是", "诊断"}),
+        "medication": frozenset({"用药", "药物", "药", "服用", "剂量", "怎么吃"}),
+        "examination": frozenset({"检查", "化验", "检测", "需要做什么"}),
+        "health_management": frozenset({"管理", "注意", "预防", "保健", "生活方式"}),
+        "symptom_inquiry": frozenset({"症状", "表现", "会怎样", "有什么症状"}),
+        "disease_info": frozenset({"什么是", "介绍", "了解", "信息"}),
+    }
+
+    # 规则匹配优先级顺序（先匹配的优先级高）
+    RULE_PRIORITY = (
+        "diagnosis",
+        "medication",
+        "examination",
+        "health_management",
+        "symptom_inquiry",
+        "disease_info",
+    )
     
     def __init__(self, model_dir: str = "./models/intent"):
         """
@@ -86,57 +106,20 @@ class IntentClassifier:
         return np.array(features, dtype=np.float32)
     
     def classify_with_rules(self, query: str) -> Dict[str, Any]:
-        """基于规则的意图分类（备用方法）"""
+        """基于规则的意图分类（使用预编译关键词集合优化）"""
         query_lower = query.lower()
-        
-        # 诊断相关
-        if any(word in query_lower for word in ["是什么病", "可能", "会不会", "是不是", "诊断"]):
-            return {
-                "intent": "diagnosis",
-                "intent_name": self.INTENT_TYPES["diagnosis"],
-                "confidence": 0.8
-            }
-        
-        # 用药相关
-        if any(word in query_lower for word in ["用药", "药物", "药", "服用", "剂量", "怎么吃"]):
-            return {
-                "intent": "medication",
-                "intent_name": self.INTENT_TYPES["medication"],
-                "confidence": 0.8
-            }
-        
-        # 检查相关
-        if any(word in query_lower for word in ["检查", "化验", "检测", "需要做什么"]):
-            return {
-                "intent": "examination",
-                "intent_name": self.INTENT_TYPES["examination"],
-                "confidence": 0.8
-            }
-        
-        # 健康管理
-        if any(word in query_lower for word in ["管理", "注意", "预防", "保健", "生活方式"]):
-            return {
-                "intent": "health_management",
-                "intent_name": self.INTENT_TYPES["health_management"],
-                "confidence": 0.8
-            }
-        
-        # 症状询问
-        if any(word in query_lower for word in ["症状", "表现", "会怎样", "有什么症状"]):
-            return {
-                "intent": "symptom_inquiry",
-                "intent_name": self.INTENT_TYPES["symptom_inquiry"],
-                "confidence": 0.8
-            }
-        
-        # 疾病信息
-        if any(word in query_lower for word in ["什么是", "介绍", "了解", "信息"]):
-            return {
-                "intent": "disease_info",
-                "intent_name": self.INTENT_TYPES["disease_info"],
-                "confidence": 0.8
-            }
-        
+
+        for intent in self.RULE_PRIORITY:
+            keywords = self.RULE_KEYWORDS[intent]
+            # 遍历关键词检查是否存在于查询中
+            for word in keywords:
+                if word in query_lower:
+                    return {
+                        "intent": intent,
+                        "intent_name": self.INTENT_TYPES[intent],
+                        "confidence": 0.8
+                    }
+
         # 默认
         return {
             "intent": "general",
