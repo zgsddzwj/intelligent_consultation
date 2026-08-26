@@ -127,46 +127,76 @@ class SemanticCache:
             return None
     
     def _get_from_redis(self, query: str, query_embedding: List[float], top_k: int) -> Optional[Dict[str, Any]]:
-        """从Redis获取缓存（降级方案，使用SCAN避免阻塞）"""
+        """从Redis获取缓存（降级方案，使用SCAN避免阻塞，向量化批量计算相似度）"""
         try:
-            # 使用SCAN命令获取所有缓存键（避免KEYS命令阻塞Redis）
             from app.infrastructure.cache import _scan_keys
             cache_keys = _scan_keys("semantic_cache:*", count=200)
-            
-            best_match = None
-            best_similarity = 0.0
-            
+
+            # 批量收集有效的缓存数据
+            valid_entries = []
             for key in cache_keys[:100]:  # 限制检查数量
                 try:
                     cached_data = redis_service.get_json(key)
                     if not cached_data:
                         continue
-                    
+
                     cached_embedding = cached_data.get("embedding")
                     if not cached_embedding:
                         continue
-                    
-                    # 计算余弦相似度
-                    similarity = self._cosine_similarity(query_embedding, cached_embedding)
-                    
-                    if similarity > best_similarity and similarity >= self.similarity_threshold:
-                        best_similarity = similarity
-                        best_match = {
-                            "response": cached_data.get("response"),
-                            "metadata": cached_data.get("metadata", {}),
-                            "similarity": similarity,
-                            "query_text": cached_data.get("query_text")
-                        }
-                        
-                except Exception as e:
+
+                    valid_entries.append(cached_data)
+                except Exception:
                     continue
-            
-            if best_match:
+
+            if not valid_entries:
+                return None
+
+            # 向量化批量计算余弦相似度
+            query_vec = np.array(query_embedding).flatten()
+
+            # 构建嵌入矩阵 (N, D)
+            embeddings_matrix = np.array([
+                np.array(entry["embedding"]).flatten()
+                for entry in valid_entries
+            ])
+
+            # 维度不匹配的条目直接跳过
+            if embeddings_matrix.shape[1] != query_vec.shape[0]:
+                # 逐条过滤维度匹配的
+                valid_entries = [
+                    entry for entry in valid_entries
+                    if len(np.array(entry["embedding"]).flatten()) == query_vec.shape[0]
+                ]
+                if not valid_entries:
+                    return None
+                embeddings_matrix = np.array([
+                    np.array(entry["embedding"]).flatten()
+                    for entry in valid_entries
+                ])
+
+            # 批量计算余弦相似度: cos_sim = (A · B) / (||A|| * ||B||)
+            dot_products = embeddings_matrix @ query_vec
+            norms = np.linalg.norm(embeddings_matrix, axis=1) * np.linalg.norm(query_vec)
+            # 避免除零
+            norms = np.where(norms == 0, 1e-10, norms)
+            similarities = dot_products / norms
+
+            # 找到最高相似度且超过阈值的条目
+            best_idx = int(np.argmax(similarities))
+            best_similarity = float(similarities[best_idx])
+
+            if best_similarity >= self.similarity_threshold:
+                best_match_entry = valid_entries[best_idx]
                 app_logger.info(f"Redis语义缓存命中，相似度: {best_similarity:.3f}")
-                return best_match
-            
+                return {
+                    "response": best_match_entry.get("response"),
+                    "metadata": best_match_entry.get("metadata", {}),
+                    "similarity": best_similarity,
+                    "query_text": best_match_entry.get("query_text")
+                }
+
             return None
-            
+
         except Exception as e:
             app_logger.warning(f"Redis语义缓存查询失败: {e}")
             return None
