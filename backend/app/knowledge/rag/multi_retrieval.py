@@ -88,20 +88,27 @@ class MultiRetrieval:
         
         return final_results
     
+    @staticmethod
+    def _make_dedup_key(text: str) -> str:
+        """生成去重键 - 使用全文SHA256哈希，避免截断前100字符导致的误判"""
+        import hashlib
+        return hashlib.sha256(text.encode()).hexdigest()[:16]
+
     def _deduplicate_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """去重结果"""
-        seen_texts = set()
+        """去重结果 - 基于全文哈希，避免截断前N字符导致的误判"""
+        seen_keys = set()
         unique_results = []
-        
+
         for result in results:
             text = result.get("text", "")
-            # 使用文本的前100个字符作为去重key
-            text_key = text[:100] if len(text) > 100 else text
-            
-            if text_key not in seen_texts:
-                seen_texts.add(text_key)
+            if not text:
+                continue
+            dedup_key = self._make_dedup_key(text)
+
+            if dedup_key not in seen_keys:
+                seen_keys.add(dedup_key)
                 unique_results.append(result)
-        
+
         return unique_results
     
     def retrieve(self, query: str, top_k: int = 10, 
