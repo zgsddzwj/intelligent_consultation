@@ -11,6 +11,11 @@ class BGEReranker:
     _instance = None
     _lock = threading.Lock()
 
+    # 单个文档送入模型的最大字符数，防止超长文本导致OOM
+    MAX_DOC_CHARS = 2048
+    # 批量评分时每批的最大文档数，避免显存溢出
+    BATCH_SIZE = 32
+
     def __new__(cls, model_name: str = "BAAI/bge-reranker-base"):
         """单例：相同模型名只加载一次"""
         with cls._lock:
@@ -61,23 +66,31 @@ class BGEReranker:
             return []
         
         try:
-            # 构建查询-文档对
+            # 构建查询-文档对，对超长文档做截断保护
             pairs = []
             for doc in documents:
                 doc_text = doc.get("text", "")
                 if doc_text:
+                    # 截断超长文档，防止OOM
+                    if len(doc_text) > self.MAX_DOC_CHARS:
+                        doc_text = doc_text[:self.MAX_DOC_CHARS]
                     pairs.append([query, doc_text])
             
             if not pairs:
                 return documents
             
-            # 批量评分
-            scores = self.model.compute_score(pairs, normalize=True)
+            # 分批评分，避免大批文档导致显存溢出
+            all_scores = []
+            for i in range(0, len(pairs), self.BATCH_SIZE):
+                batch = pairs[i:i + self.BATCH_SIZE]
+                batch_scores = self.model.compute_score(batch, normalize=True)
+                # 单个结果时返回标量，需转为列表
+                if not isinstance(batch_scores, list):
+                    batch_scores = [batch_scores]
+                all_scores.extend(batch_scores)
             
-            # 如果是单个分数，转换为列表
-            if not isinstance(scores, list):
-                scores = [scores]
-            
+            scores = all_scores
+
             # 更新文档分数
             for i, doc in enumerate(documents):
                 if i < len(scores):
