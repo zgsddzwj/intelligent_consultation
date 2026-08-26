@@ -154,43 +154,30 @@ class AdvancedRAG:
         
         return result
     
+    # 分数字段到权重的映射（权重总和应为1.0，不足时按比例归一化）
+    SCORE_WEIGHTS = {
+        "relevance_score": 0.3,
+        "bge_score": 0.3,
+        "ml_score": 0.2,
+        "optimized_score": 0.2,
+        "rrf_score": 0.1,
+        "combined_score": 0.1,  # 与rrf_score互斥，只会命中一个
+    }
+
     def _final_ranking(self, documents: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """最终排序 - 综合所有分数"""
+        """最终排序 - 综合所有分数，使用预定义权重映射并归一化"""
         for doc in documents:
-            # 收集所有分数
-            scores = []
-            
-            # 相关性分数
-            if "relevance_score" in doc:
-                scores.append(doc["relevance_score"] * 0.3)
-            
-            # Rerank分数
-            if "bge_score" in doc:
-                scores.append(doc["bge_score"] * 0.3)
-            
-            # ML分数
-            if "ml_score" in doc:
-                scores.append(doc["ml_score"] * 0.2)
-            
-            # 排序优化分数
-            if "optimized_score" in doc:
-                scores.append(doc["optimized_score"] * 0.2)
-            
-            # 原始分数
-            if "rrf_score" in doc:
-                scores.append(doc["rrf_score"] * 0.1)
-            elif "combined_score" in doc:
-                scores.append(doc["combined_score"] * 0.1)
-            
-            # 计算最终分数
-            if scores:
-                doc["final_score"] = sum(scores)
-            else:
-                doc["final_score"] = 0.0
-        
-        # 按最终分数排序
+            weighted_sum = 0.0
+            total_weight = 0.0
+
+            for score_field, weight in self.SCORE_WEIGHTS.items():
+                if score_field in doc:
+                    weighted_sum += doc[score_field] * weight
+                    total_weight += weight
+
+            doc["final_score"] = (weighted_sum / total_weight) if total_weight > 0 else 0.0
+
         documents.sort(key=lambda x: x.get("final_score", 0.0), reverse=True)
-        
         return documents
     
     def format_context(self, result: Dict[str, Any]) -> str:
