@@ -1,5 +1,6 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError, AxiosInterceptorManager, InternalAxiosRequestConfig } from 'axios'
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse, AxiosError, InternalAxiosRequestConfig } from 'axios'
 import { clearAuthToken } from './auth'
+import type { ApiResponse } from '../types/chat'
 
 declare module 'axios' {
   interface InternalAxiosRequestConfig {
@@ -9,20 +10,8 @@ declare module 'axios' {
   }
 }
 
-/**
- * API响应统一格式
- */
-export interface ApiResponse<T = any> {
-  success: boolean
-  data: T
-  message?: string
-  error?: {
-    code: string
-    message: string
-    details?: Record<string, any>
-    request_id?: string
-  }
-}
+// 复用 types/chat 中的统一响应结构（详见 src/types/chat.ts）
+export type { ApiResponse }
 
 /**
  * API错误类型
@@ -289,25 +278,27 @@ function shouldRetry(error: AxiosError, config: InternalAxiosRequestConfig): boo
 }
 
 // ===== 便捷请求方法 =====
+// 说明：响应拦截器已统一解包 ApiResponse 并直接返回 data 字段，
+// 此处通过 as 断言对齐类型（运行时行为一致）
 
 export function get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
-  return apiClient.get(url, config)
+  return apiClient.get(url, config) as Promise<T>
 }
 
 export function post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-  return apiClient.post(url, data, config)
+  return apiClient.post(url, data, config) as Promise<T>
 }
 
 export function put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-  return apiClient.put(url, data, config)
+  return apiClient.put(url, data, config) as Promise<T>
 }
 
 export function del<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
-  return apiClient.delete(url, config)
+  return apiClient.delete(url, config) as Promise<T>
 }
 
 export function patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
-  return apiClient.patch(url, data, config)
+  return apiClient.patch(url, data, config) as Promise<T>
 }
 
 // ===== 工具函数导出 =====

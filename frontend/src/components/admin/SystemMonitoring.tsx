@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react'
 import {
-  Card, Spin, message, Tag, Table, Progress, Row, Col,
+  Card, Spin, message, Tag, Table, Row, Col,
   Statistic, Alert, Button, Space, Typography,
 } from 'antd'
 import {

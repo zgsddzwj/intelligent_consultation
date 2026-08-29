@@ -1,11 +1,9 @@
 import { useState, lazy, Suspense } from 'react'
-import { Tabs, Typography, Space, Button, Spin } from 'antd'
+import { Tabs, Space, Spin } from 'antd'
 import {
   SettingOutlined, UserOutlined, DatabaseOutlined,
   SecurityScanOutlined, MonitorOutlined, ExportOutlined,
 } from '@ant-design/icons'
-
-const { Text } = Typography
 
 // 懒加载子组件
 const UserManagement = lazy(() => import('../components/admin/UserManagement'))

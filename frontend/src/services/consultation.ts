@@ -1,66 +1,40 @@
 import { post, get } from './api'
+import type {
+  ChatRequest,
+  SourceRef,
+  ChatResponse,
+  ChatStreamEvent,
+  ConsultationHistoryItem,
+  ConsultationDetail,
+} from '../types/chat'
 
-/**
- * 聊天请求参数
- */
-export interface ChatRequest {
-  /** 用户消息内容 */
-  message: string
-  /** 会话ID（续聊时传入） */
-  consultation_id?: number
-  /** 额外上下文信息 */
-  context?: Record<string, any>
-  /** 用户ID */
-  user_id?: number
-}
-
-/**
- * 信息来源
- */
-export interface SourceRef {
-  title: string
-  url?: string
-}
-
-/**
- * 聊天响应数据
- */
-export interface ChatResponse {
-  /** AI回复内容 */
-  answer: string
-  /** 会话ID */
-  consultation_id: number
-  /** 信息来源引用 */
-  sources: SourceRef[]
-  /** 风险等级 */
-  risk_level?: string
-  /** 执行耗时(ms) */
-  execution_time?: number
-  /** 意图识别结果 */
-  intent?: string
-}
-
-/**
- * 流式聊天响应（含 thinking 事件）
- */
-export interface ChatStreamEvent {
-  type: 'start' | 'first_token' | 'message' | 'sources' | 'thinking' | 'done' | 'error'
-  content?: string
-  consultation_id?: number
-  sources?: SourceRef[]
-  error?: string
+// 统一复用 types/chat 中的共享类型，避免重复维护两套相同结构
+export type {
+  ChatRequest,
+  SourceRef,
+  ChatResponse,
+  ChatStreamEvent,
+  ConsultationHistoryItem,
+  ConsultationDetail,
 }
 
 /**
  * 流式聊天回调
  */
 export interface ChatStreamCallbacks {
+  /** 开始对话 */
   onStart?: (consultationId?: number) => void
+  /** 思考过程 */
   onThinking?: (content: string) => void
+  /** 首个token到达 */
   onFirstToken?: () => void
+  /** 消息片段 */
   onMessage?: (chunk: string) => void
+  /** 信息来源 */
   onSources?: (sources: SourceRef[]) => void
+  /** 对话完成 */
   onDone?: (consultationId?: number) => void
+  /** 发生错误 */
   onError?: (error: string) => void
 }
 
@@ -70,32 +44,6 @@ export interface ChatStreamCallbacks {
 export interface ChatStreamOptions {
   /** AbortSignal 用于取消请求 */
   signal?: AbortSignal
-}
-
-/**
- * 历史记录项
- */
-export interface ConsultationHistoryItem {
-  id: number
-  user_message: string
-  assistant_response: string
-  created_at: string
-  status: 'active' | 'completed' | 'archived'
-}
-
-/**
- * 会话详情
- */
-export interface ConsultationDetail {
-  id: number
-  messages: Array<{
-    role: 'user' | 'assistant'
-    content: string
-    timestamp: string
-  }>
-  summary?: string
-  created_at: string
-  updated_at: string
 }
 
 /**

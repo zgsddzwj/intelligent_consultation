@@ -4,7 +4,7 @@ import {
   Popconfirm, Tooltip, Switch, Row, Col, Card, Statistic,
 } from 'antd'
 import {
-  UserOutlined, SearchOutlined, DeleteOutlined,
+  SearchOutlined, DeleteOutlined,
   ReloadOutlined, TeamOutlined, CheckCircleOutlined, StopOutlined,
 } from '@ant-design/icons'
 import { adminApi, type AdminUser } from '../../services/admin'

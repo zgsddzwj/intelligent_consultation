@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react'
-import { Row, Col, Card, Statistic, Spin, message, Table, Tag, Progress } from 'antd'
+import { Row, Col, Card, Statistic, Spin, message, Table, Progress } from 'antd'
 import {
   DatabaseOutlined, FileTextOutlined, TeamOutlined,
   MessageOutlined, CloudServerOutlined,

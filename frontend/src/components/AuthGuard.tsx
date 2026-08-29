@@ -22,7 +22,7 @@ export default function AuthGuard({
   allowedRoles,
 }: AuthGuardProps) {
   const location = useLocation()
-  const [authVersion, setAuthVersion] = useState(0)
+  const [, setAuthVersion] = useState(0)
 
   // 监听跨标签页 storage 变化和自定义 logout 事件
   useEffect(() => {
