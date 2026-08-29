@@ -225,6 +225,3 @@ medical_consultation_template_v2 = PromptTemplate(
 )
 
 prompt_engineer.register_template(medical_consultation_template_v2)
-
-# 保持向后兼容：v1.0 模板仍然可用
-from .medical_consultation_legacy import medical_consultation_template_v1

@@ -196,6 +196,3 @@ diagnosis_template_v2 = PromptTemplate(
 )
 
 prompt_engineer.register_template(diagnosis_template_v2)
-
-# 保持向后兼容
-from .diagnosis_assistant_legacy import diagnosis_template_v1

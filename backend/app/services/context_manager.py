@@ -678,7 +678,3 @@ class ContextManagerV2:
 
 # 全局实例（v2.0）
 context_manager = ContextManagerV2()
-
-# 保持向后兼容
-from .context_manager_legacy import ContextManager as ContextManagerV1
-context_manager_v1 = ContextManagerV1()
