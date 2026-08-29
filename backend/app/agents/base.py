@@ -218,8 +218,8 @@ class BaseAgent(ABC):
             if span:
                 try:
                     span.end(metadata={"success": False, "error": error_msg})
-                except Exception:
-                    pass
+                except Exception as e:
+                    app_logger.debug(f"Langfuse span上报失败: {e}")
             raise ValueError(error_msg)
         
         # 带重试的执行
@@ -245,8 +245,8 @@ class BaseAgent(ABC):
                             "result_size": len(str(result)),
                             "attempts": attempt + 1
                         })
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        app_logger.debug(f"Langfuse span上报失败: {e}")
                 
                 app_logger.debug(
                     f"工具执行成功: {tool_name} (尝试 {attempt + 1}/{max_retries + 1}, "
@@ -286,8 +286,8 @@ class BaseAgent(ABC):
                     "execution_time": execution_time,
                     "attempts": max_retries + 1
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                app_logger.debug(f"Langfuse span上报失败: {e}")
         
         app_logger.error(
             f"工具执行最终失败: {tool_name} (已尝试 {max_retries + 1} 次)"

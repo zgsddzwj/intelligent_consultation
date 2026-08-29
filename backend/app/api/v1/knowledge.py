@@ -190,7 +190,7 @@ async def upload_document(
         raise
     except Exception as e:
         app_logger.error(f"上传文档失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="文档上传失败，请稍后重试")
 
 
 @router.get("/documents/{document_id}/download")
@@ -236,7 +236,7 @@ async def download_document(
         raise
     except Exception as e:
         app_logger.error(f"下载文档失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="文档下载失败，请稍后重试")
 
 
 @router.delete("/documents/{document_id}")
@@ -291,7 +291,7 @@ async def delete_document(
     except Exception as e:
         app_logger.error(f"删除文档失败: {e}")
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="文档删除失败，请稍后重试")
 
 
 @router.post("/search", response_model=SearchResponse)
@@ -307,7 +307,7 @@ async def search_knowledge(request: SearchRequest):
         )
     except Exception as e:
         app_logger.error(f"搜索失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="搜索失败，请稍后重试")
 
 
 @router.post("/graph/query")
@@ -338,7 +338,7 @@ async def query_knowledge_graph(request: GraphQueryRequest):
             
     except Exception as e:
         app_logger.error(f"知识图谱查询失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="知识图谱查询失败，请稍后重试")
 
 
 @router.post("/graph/visualization")
@@ -503,7 +503,7 @@ async def get_graph_visualization(request: GraphVisualizationRequest):
         return {"nodes": [], "links": [], "neo4j_available": False}
     except Exception as e:
         app_logger.error(f"获取图谱可视化数据失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="获取图谱可视化数据失败，请稍后重试")
 
 
 @router.get("/graph/departments")
@@ -547,7 +547,7 @@ async def add_kg_entity(request: KGEntityCreateRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         app_logger.error(f"添加KG实体失败: {e}")
-        raise HTTPException(status_code=500, detail=f"知识图谱更新失败: {e}")
+        raise HTTPException(status_code=500, detail="知识图谱更新失败，请稍后重试")
 
 
 @router.delete("/graph/entities")
@@ -562,7 +562,7 @@ async def delete_kg_entity(request: KGEntityDeleteRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         app_logger.error(f"删除KG实体失败: {e}")
-        raise HTTPException(status_code=500, detail=f"知识图谱更新失败: {e}")
+        raise HTTPException(status_code=500, detail="知识图谱更新失败，请稍后重试")
 
 
 @router.post("/graph/relationships")
@@ -585,7 +585,7 @@ async def add_kg_relationship(request: KGRelationshipCreateRequest):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         app_logger.error(f"添加KG关系失败: {e}")
-        raise HTTPException(status_code=500, detail=f"知识图谱更新失败: {e}")
+        raise HTTPException(status_code=500, detail="知识图谱更新失败，请稍后重试")
 
 
 @router.post("/graph/update-from-text")
@@ -601,7 +601,7 @@ async def update_kg_from_text(text: str, source: str = "manual"):
         return result
     except Exception as e:
         app_logger.error(f"文本驱动KG更新失败: {e}")
-        raise HTTPException(status_code=500, detail=f"知识图谱更新失败: {e}")
+        raise HTTPException(status_code=500, detail="知识图谱更新失败，请稍后重试")
 
 
 @router.get("/graph/audit-log")
@@ -614,4 +614,4 @@ async def get_kg_audit_log(limit: int = 50):
         return {"logs": logs, "count": len(logs)}
     except Exception as e:
         app_logger.error(f"获取KG审计日志失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="获取审计日志失败，请稍后重试")

@@ -239,8 +239,8 @@ async def get_data_stats(db: Session = Depends(get_db)):
     try:
         result = db.execute(text("SELECT pg_database_size(current_database())")).scalar()
         db_size = result or 0
-    except Exception:
-        pass
+    except Exception as e:
+        app_logger.warning(f"获取数据库大小失败: {e}")
 
     return DataStatsResponse(
         users={

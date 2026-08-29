@@ -242,8 +242,8 @@ class AgentOrchestrator:
                                 "method": "ml",
                                 "execution_time": time.time() - start_time
                             })
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            app_logger.debug(f"Langfuse span上报失败: {e}")
 
                     return state
                 except Exception as e:
@@ -276,8 +276,8 @@ class AgentOrchestrator:
                     "method": "rule",
                     "execution_time": time.time() - start_time
                 })
-            except Exception:
-                pass
+            except Exception as e:
+                app_logger.debug(f"Langfuse span上报失败: {e}")
 
         return state
 
@@ -328,8 +328,8 @@ class AgentOrchestrator:
                         "execution_time": duration,
                         "tools_used": result.get("tools_used", [])
                     })
-                except Exception:
-                    pass
+                except Exception as e:
+                    app_logger.debug(f"Langfuse span上报失败: {e}")
 
             return state
         except Exception as e:
@@ -342,8 +342,8 @@ class AgentOrchestrator:
                         "error_message": str(e),
                         "execution_time": duration
                     })
-                except Exception:
-                    pass
+                except Exception as span_err:
+                    app_logger.debug(f"Langfuse span上报失败: {span_err}")
             raise
 
     def _route_to_health_manager(self, state: AgentState) -> AgentState:
@@ -499,8 +499,8 @@ class AgentOrchestrator:
                             "timestamp": time.time()
                         }
                     })
-                except Exception:
-                    pass
+                except Exception as ops_err:
+                    app_logger.debug(f"运营记录处理失败: {ops_err}")
 
             threading.Thread(target=_log_operations, daemon=True).start()
         except Exception as e:
@@ -589,8 +589,8 @@ class AgentOrchestrator:
                             "execution_time": execution_time
                         }
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    app_logger.debug(f"Langfuse span上报失败: {e}")
 
             return {
                 "answer": "处理请求时发生错误，请稍后重试。",

@@ -457,8 +457,8 @@ async def diagnose_from_image(
                             "finding": item_name,
                             "kg_data": results[:5]
                         })
-                except Exception:
-                    pass
+                except Exception as e:
+                    app_logger.debug(f"KG关联查询失败: {item_name} - {e}")
 
             response.kg_references = kg_refs
         except Exception as kg_err:

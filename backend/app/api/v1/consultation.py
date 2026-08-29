@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, AsyncGenerator
 import json
 import asyncio
+import queue
+import threading
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_consultation_repository, get_orchestrator
 from app.infrastructure.repositories.consultation_repository import ConsultationRepository
@@ -321,7 +323,6 @@ async def chat_stream(
             yield f"data: {json.dumps({'type': 'thinking', 'content': '正在分析您的问题...'})}\n\n"
 
             # 简单意图分类（规则，不调 LLM）
-            user_lower = sanitized_message.lower()
             consultation_type = "general"
             if any(kw in sanitized_message for kw in ["症状", "诊断", "可能", "疼", "痛", "发烧", "发热"]):
                 consultation_type = "diagnosis"
@@ -385,9 +386,6 @@ async def chat_stream(
 
             # 流式生成（stream_generate 是同步 generator，用线程消费）
             try:
-                import queue
-                import threading
-
                 chunk_queue: queue.Queue = queue.Queue()
                 _sentinel = object()
 
@@ -401,6 +399,7 @@ async def chat_stream(
                         ):
                             chunk_queue.put(chunk)
                     except Exception as e:
+                        app_logger.error(f"流式生成线程异常: {e}")
                         chunk_queue.put(e)
                     finally:
                         chunk_queue.put(_sentinel)
@@ -411,7 +410,9 @@ async def chat_stream(
                 while True:
                     try:
                         item = await asyncio.to_thread(chunk_queue.get, timeout=60.0)
-                    except Exception:
+                    except queue.Empty:
+                        app_logger.warning("流式生成超时（60秒无产出），终止本次生成")
+                        yield f"data: {json.dumps({'type': 'error', 'error': '生成超时，请稍后重试'})}\n\n"
                         break
 
                     if item is _sentinel:
