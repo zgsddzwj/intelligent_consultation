@@ -380,7 +380,7 @@ function AppLayout() {
           }}
         >
           <Text type="secondary" style={{ fontSize: '12px' }}>
-            ©2026 智能医疗管家平台 · 本系统仅提供医疗信息参考，不替代医生诊断 · v3.1.0
+            ©2026 智能医疗管家平台 · 本系统仅提供医疗信息参考，不替代医生诊断 · v3.3.0
           </Text>
         </Footer>
       </Layout>

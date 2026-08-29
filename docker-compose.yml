@@ -215,7 +215,7 @@ services:
       - DEBUG=false
       - LOG_LEVEL=INFO
       - SECRET_KEY=${SECRET_KEY:?请在 backend/.env 或环境变量中设置 SECRET_KEY}
-      - QWEN_API_KEY=${QWEN_API_KEY:?请在 backend/.env 或环境变量中设置 QWEN_API_KEY}
+      - SILICONFLOW_API_KEY=${SILICONFLOW_API_KEY:?请在 backend/.env 或环境变量中设置 SILICONFLOW_API_KEY}
       - ENABLE_AUTH_MIDDLEWARE=${ENABLE_AUTH_MIDDLEWARE:-false}
       - CORS_ORIGINS=${CORS_ORIGINS:-["http://localhost:3000","http://localhost:5173"]}
       - TRUSTED_HOSTS=${TRUSTED_HOSTS:-["localhost","127.0.0.1"]}

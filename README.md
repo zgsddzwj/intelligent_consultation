@@ -216,7 +216,7 @@ cd intelligent_consultation
 
 # 2. 配置环境变量
 cp backend/.env.example backend/.env
-# 编辑 backend/.env，至少配置 QWEN_API_KEY 或 DEEPSEEK_API_KEY
+# 编辑 backend/.env，至少配置 SILICONFLOW_API_KEY
 
 # 3. 启动全部服务
 chmod +x scripts/start.sh && ./scripts/start.sh

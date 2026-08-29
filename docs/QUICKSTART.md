@@ -19,13 +19,13 @@ cd intelligent_consultation
 
 ## 3. 配置环境变量
 
-`.env` 文件已创建在 `backend/.env`，包含阿里云百炼API密钥配置。
+`.env` 文件已创建在 `backend/.env`，包含硅基流动（SiliconFlow）API密钥配置。
 
 如需修改，编辑 `backend/.env` 文件：
 
 ```bash
 # 必需：LLM API密钥
-QWEN_API_KEY=your_api_key_here
+SILICONFLOW_API_KEY=your_api_key_here
 
 # 可选：其他服务连接配置（Docker Compose启动时通常使用默认值）
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/medical
@@ -35,7 +35,7 @@ MILVUS_HOST=localhost
 MILVUS_PORT=19530
 ```
 
-**⚠️ 重要**：确保 `QWEN_API_KEY` 已正确配置！
+**⚠️ 重要**：确保 `SILICONFLOW_API_KEY` 已正确配置！
 
 ## 4. 启动服务
 
@@ -209,8 +209,8 @@ curl http://localhost:8000/health
 ```
 
 ### API密钥错误
-- 确认 `backend/.env` 中 `QWEN_API_KEY` 正确
-- 检查密钥是否有效（访问[阿里云百炼控制台](https://bailian.console.aliyun.com/)）
+- 确认 `backend/.env` 中 `SILICONFLOW_API_KEY` 正确
+- 检查密钥是否有效（访问[硅基流动控制台](https://cloud.siliconflow.cn/)）
 
 ### ML模型训练失败
 ```bash

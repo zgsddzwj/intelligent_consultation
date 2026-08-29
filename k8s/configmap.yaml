@@ -46,9 +46,9 @@ data:
   # 文件上传配置
   MAX_UPLOAD_SIZE: "10485760"  # 10MB
   
-  # LLM配置
-  QWEN_MODEL: "qwen-turbo"
-  QWEN_EMBEDDING_MODEL: "text-embedding-v2"
+  # LLM配置（硅基流动 SiliconFlow，统一 Provider）
+  SILICONFLOW_MODEL: "deepseek-ai/DeepSeek-V3"
+  SILICONFLOW_EMBEDDING_MODEL: "BAAI/bge-large-zh-v1.5"
   
   # 高级RAG配置
   ENABLE_ADVANCED_RAG: "true"
@@ -61,7 +61,7 @@ data:
 
   # 多模态诊断配置
   ENABLE_MULTIMODAL_DIAGNOSIS: "true"
-  QWEN_VL_MODEL: "qwen-vl-max"
+  SILICONFLOW_VISION_MODEL: "Qwen/Qwen2.5-VL-72B-Instruct"
   
   # 上下文管理
   CONTEXT_MAX_TOKENS: "8000"

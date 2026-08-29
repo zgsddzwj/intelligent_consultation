@@ -150,7 +150,7 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
           ENVIRONMENT: testing
           SECRET_KEY: test-secret-key-for-ci
-          QWEN_API_KEY: test-key
+          SILICONFLOW_API_KEY: test-key
           STARTUP_FAIL_FAST: "false"
           RATE_LIMIT_ENABLED: "false"
         run: |
@@ -163,7 +163,7 @@ jobs:
           REDIS_URL: redis://localhost:6379/0
           ENVIRONMENT: testing
           SECRET_KEY: test-secret-key-for-ci
-          QWEN_API_KEY: test-key
+          SILICONFLOW_API_KEY: test-key
           STARTUP_FAIL_FAST: "false"
           RATE_LIMIT_ENABLED: "false"
         run: |
@@ -260,7 +260,7 @@ jobs:
             -e REDIS_URL=redis://localhost:6379/0 \
             -e ENVIRONMENT=testing \
             -e SECRET_KEY=smoke-test-secret-key \
-            -e QWEN_API_KEY=smoke-test-key \
+            -e SILICONFLOW_API_KEY=smoke-test-key \
             -e STARTUP_FAIL_FAST=false \
             -e RATE_LIMIT_ENABLED=false \
             -e ENABLE_AUTH_MIDDLEWARE=false \

@@ -31,7 +31,7 @@ uv sync
 在 `.env` 文件中配置：
 
 ```env
-QWEN_API_KEY=sk-xxxxxx
+SILICONFLOW_API_KEY=sk-xxxxxx
 # 向量数据库与知识图谱配置...
 ```
 

@@ -117,11 +117,11 @@ spec:
             configMapKeyRef:
               name: medical-config
               key: MILVUS_PORT
-        - name: QWEN_API_KEY
+        - name: SILICONFLOW_API_KEY
           valueFrom:
             secretKeyRef:
               name: medical-secrets
-              key: QWEN_API_KEY
+              key: SILICONFLOW_API_KEY
         - name: SECRET_KEY
           valueFrom:
             secretKeyRef:

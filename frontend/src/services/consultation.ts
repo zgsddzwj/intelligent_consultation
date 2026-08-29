@@ -137,7 +137,8 @@ export const consultationApi = {
     options?: ChatStreamOptions
   ): Promise<void> => {
     const token = localStorage.getItem('auth_token')
-    const baseURL = import.meta.env.DEV ? 'http://localhost:8000' : ''
+    // 优先使用环境变量配置的后端地址，未配置时开发环境直连本地后端
+    const baseURL = import.meta.env.VITE_API_BASE_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '')
     const url = `${baseURL}/api/v1/consultation/chat/stream`
 
     try {

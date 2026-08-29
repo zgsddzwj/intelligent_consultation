@@ -216,7 +216,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 if (import.meta.env.DEV) {
   console.log(
-    '%c🏥 智能医疗管家平台 %cv3.0',
+    '%c🏥 智能医疗管家平台 %cv3.3.0',
     'color: #2563eb; font-size: 20px; font-weight: bold;',
     'color: #94a3b8; font-size: 12px;'
   )

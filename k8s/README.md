@@ -56,7 +56,7 @@ docker push ghcr.io/zgsddzwj/intelligent_consultation/frontend:latest
 # 编辑 secrets.yaml，修改所有密码和密钥
 # 或者使用 kubectl 命令创建：
 kubectl create secret generic medical-secrets \
-  --from-literal=QWEN_API_KEY='your-key' \
+  --from-literal=SILICONFLOW_API_KEY='your-key' \
   --from-literal=POSTGRES_PASSWORD='your-password' \
   --from-literal=NEO4J_PASSWORD='your-password' \
   --from-literal=LANGFUSE_PUBLIC_KEY='your-key' \

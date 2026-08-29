@@ -24,7 +24,7 @@ git clone https://github.com/zgsddzwj/intelligent_consultation.git
 cd intelligent_consultation
 
 # 配置环境变量（编辑 backend/.env）
-# 确保 QWEN_API_KEY 已设置
+# 确保 SILICONFLOW_API_KEY 已设置
 
 # 启动所有服务
 docker-compose up -d
@@ -161,7 +161,7 @@ kubectl logs -f deployment/backend -n medical-platform
 
 | 变量名 | 说明 | 示例 |
 |--------|------|------|
-| `QWEN_API_KEY` | 阿里云百炼LLM API密钥 | `sk-xxxxxxxx` |
+| `SILICONFLOW_API_KEY` | 硅基流动LLM API密钥 | `sk-xxxxxxxx` |
 
 ### 数据库连接
 

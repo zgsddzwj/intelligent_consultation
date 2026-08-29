@@ -29,9 +29,9 @@ if [ ! -f "backend/.env" ]; then
     if [ -f "backend/.env.example" ]; then
         echo "正在从 backend/.env.example 创建 backend/.env ..."
         cp backend/.env.example backend/.env
-        echo "请编辑 backend/.env，至少设置 SECRET_KEY 和 QWEN_API_KEY"
+        echo "请编辑 backend/.env，至少设置 SECRET_KEY 和 SILICONFLOW_API_KEY"
     else
-        echo "请创建 backend/.env 并配置 SECRET_KEY、QWEN_API_KEY"
+        echo "请创建 backend/.env 并配置 SECRET_KEY、SILICONFLOW_API_KEY"
     fi
 fi
 
