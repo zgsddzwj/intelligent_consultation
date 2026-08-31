@@ -129,6 +129,18 @@ class ServiceFactory:
         return cls._instances["hybrid_search"]
     
     @classmethod
+    def get_rag_tool(cls):
+        """获取RAG检索工具（线程安全单例，避免每请求重建整个检索栈）"""
+        if "rag_tool" not in cls._instances:
+            with cls._lock:
+                if "rag_tool" not in cls._instances:
+                    from app.agents.tools.rag_tool import RAGTool
+                    app_logger.info("正在创建 RAGTool 实例...")
+                    cls._instances["rag_tool"] = RAGTool()
+                    app_logger.info("RAGTool 实例创建完成")
+        return cls._instances["rag_tool"]
+
+    @classmethod
     def reset(cls, service_name: str = None):
         """重置服务实例（用于测试或配置变更后）"""
         if service_name:

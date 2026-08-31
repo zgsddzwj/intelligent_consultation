@@ -8,7 +8,7 @@ import asyncio
 import queue
 import threading
 from sqlalchemy.orm import Session
-from app.dependencies import get_db, get_consultation_repository, get_orchestrator
+from app.dependencies import get_db, get_consultation_repository, get_orchestrator, ServiceFactory
 from app.infrastructure.repositories.consultation_repository import ConsultationRepository
 from app.agents.orchestrator import AgentOrchestrator
 from app.models.consultation import Consultation, ConsultationStatus, AgentType
@@ -340,9 +340,8 @@ async def chat_stream(
             tools_used = []
 
             try:
-                # 使用 RAGTool 直接检索（不经过 orchestrator，避免重复 LLM 调用）
-                from app.agents.tools.rag_tool import RAGTool
-                rag_tool = RAGTool()
+                # 使用 RAGTool 直接检索（单例复用，不经过 orchestrator，避免每请求重建检索栈）
+                rag_tool = ServiceFactory.get_rag_tool()
 
                 result = await asyncio.wait_for(
                     asyncio.to_thread(rag_tool.execute, sanitized_message, 5),

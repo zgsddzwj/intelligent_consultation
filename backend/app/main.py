@@ -124,21 +124,25 @@ async def _check_postgresql():
 
 async def _check_redis():
     from app.services.redis_service import redis_service
-    result = redis_service.health_check()
-    return result
+    # 同步网络IO移入线程池，避免阻塞事件循环
+    return await asyncio.to_thread(redis_service.health_check)
 
 
 async def _check_neo4j():
     from app.knowledge.graph.neo4j_client import get_neo4j_client
-    client = get_neo4j_client()
-    health = client.health_check()
-    return health if isinstance(health, dict) else {"status": "healthy" if health else "unhealthy"}
+
+    def _ping():
+        client = get_neo4j_client()
+        health = client.health_check()
+        return health if isinstance(health, dict) else {"status": "healthy" if health else "unhealthy"}
+
+    return await asyncio.to_thread(_ping)
 
 
 async def _check_milvus():
     from app.services.milvus_service import get_milvus_service
     milvus = get_milvus_service()
-    return milvus.health_check()
+    return await asyncio.to_thread(milvus.health_check)
 
 
 async def _check_llm():

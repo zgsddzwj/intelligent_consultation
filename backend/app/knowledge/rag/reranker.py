@@ -20,17 +20,18 @@ class BGEReranker:
         """单例：相同模型名只加载一次"""
         with cls._lock:
             if cls._instance is not None:
-                # 已有实例且模型名一致则复用
-                if cls._instance.model_name == model_name and cls._instance._loaded:
+                # 已有实例则直接复用（加载失败也复用，避免每请求抢锁重试下载）
+                if cls._instance.model_name == model_name:
                     return cls._instance
             instance = super().__new__(cls)
             instance.model_name = model_name
             instance.model = None
             instance.tokenizer = None
             instance._loaded = False
-            instance._load_model()
             cls._instance = instance
-            return instance
+        # 模型加载耗时较长，移到锁外执行，避免长时间持锁阻塞并发构造
+        instance._load_model()
+        return instance
     
     def _load_model(self):
         """加载BGE-Reranker模型"""
