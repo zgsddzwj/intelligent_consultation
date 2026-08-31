@@ -1,37 +1,10 @@
 import { create } from 'zustand'
 import { persist, subscribeWithSelector } from 'zustand/middleware'
 import { devtools } from 'zustand/middleware'
+import type { Message } from '../types/chat'
 
-/**
- * 思考步骤
- */
-export interface ThinkingStep {
-  content: string
-  ts: number
-}
-
-/**
- * 信息来源
- */
-export interface SourceRef {
-  title: string
-  url?: string
-}
-
-/**
- * 消息接口定义
- */
-export interface Message {
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  sources?: SourceRef[]
-  risk_level?: string
-  timestamp?: string
-  id?: string
-  isStreaming?: boolean
-  thinkingSteps?: ThinkingStep[]
-  isThinking?: boolean
-}
+// 统一复用 types/chat 中的共享类型，避免重复维护两套相同结构
+export type { Message }
 
 /**
  * 会话状态接口 - 分层设计

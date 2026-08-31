@@ -16,7 +16,7 @@ import { consultationApi } from '../services/consultation'
 import { useConsultationStore } from '../stores/consultation'
 import { post, ApiError } from '../services/api'
 import { getAuthUser } from '../services/auth'
-import type { ChatRequest, Message } from '../types/chat'
+import type { ChatRequest } from '../types/chat'
 
 const { TextArea } = Input
 const { Text } = Typography

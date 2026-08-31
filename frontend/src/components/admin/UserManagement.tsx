@@ -26,6 +26,8 @@ export default function UserManagement() {
   const [pageSize, setPageSize] = useState(10)
   const [roleFilter, setRoleFilter] = useState<string>('')
   const [keyword, setKeyword] = useState('')
+  // 仅点击搜索/回车后才生效的关键字，避免每敲一个字符就发一次请求
+  const [appliedKeyword, setAppliedKeyword] = useState('')
   const [selectedRowKeys, setSelectedRowKeys] = useState<number[]>([])
   const [editModalVisible, setEditModalVisible] = useState(false)
   const [editingUser, setEditingUser] = useState<AdminUser | null>(null)
@@ -40,7 +42,7 @@ export default function UserManagement() {
         page,
         page_size: pageSize,
         role: roleFilter || undefined,
-        keyword: keyword || undefined,
+        keyword: appliedKeyword || undefined,
       })
       setUsers(res.users || [])
       setTotal(res.total)
@@ -50,7 +52,7 @@ export default function UserManagement() {
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, roleFilter, keyword])
+  }, [page, pageSize, roleFilter, appliedKeyword])
 
   useEffect(() => {
     fetchUsers()
@@ -58,8 +60,8 @@ export default function UserManagement() {
 
   const handleSearch = useCallback(() => {
     setPage(1)
-    fetchUsers()
-  }, [fetchUsers])
+    setAppliedKeyword(keyword)
+  }, [keyword])
 
   const handleEdit = useCallback((user: AdminUser) => {
     setEditingUser(user)
@@ -256,7 +258,7 @@ export default function UserManagement() {
         <Button type="primary" icon={<SearchOutlined />} onClick={handleSearch}>
           搜索
         </Button>
-        <Button icon={<ReloadOutlined />} onClick={() => { setKeyword(''); setRoleFilter(''); setPage(1); fetchUsers() }}>
+        <Button icon={<ReloadOutlined />} onClick={() => { setKeyword(''); setAppliedKeyword(''); setRoleFilter(''); setPage(1) }}>
           重置
         </Button>
         {selectedRowKeys.length > 0 && (
