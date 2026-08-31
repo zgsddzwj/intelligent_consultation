@@ -258,7 +258,7 @@ export default function PatientPortal() {
               {messages.map((item, index) => (
                 <ChatMessage
                   key={item.id || index}
-                  message={{ ...item, id: item.id || String(index) } as Message}
+                  message={item}
                   index={index}
                 />
               ))}

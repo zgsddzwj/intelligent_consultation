@@ -62,6 +62,9 @@ function extractSourcesAndClean(content: string): {
   return { body: finalBody.trim(), inlineSources, disclaimer }
 }
 
+/** Markdown 渲染插件（模块级常量，保持引用稳定以复用解析管线） */
+const REMARK_PLUGINS = [remarkGfm]
+
 /** 根据风险等级返回中文标签和颜色 */
 const RISK_INFO_MAP: Record<RiskLevel, { label: string; color: string; bg: string }> = {
   high: { label: '高风险', color: '#dc2626', bg: '#fef2f2' },
@@ -102,6 +105,12 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
     }
     return { body: cleanedBody, allSources: all, disclaimer: d }
   }, [message.content, message.sources, isUser])
+
+  // 时间戳只依赖 message.timestamp 计算，避免流式期间每次重渲染都跳动
+  const timeText = useMemo(
+    () => new Date(message.timestamp ?? Date.now()).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }),
+    [message.timestamp]
+  )
 
   const handleCopy = useCallback(async () => {
     try {
@@ -159,9 +168,7 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
             padding: '0 4px',
           }}
         >
-          {message.timestamp
-            ? new Date(message.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-            : new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+          {timeText}
                 </span>
 
         {/* 思考过程面板（DeepSeek 风格可折叠） */}
@@ -195,7 +202,7 @@ function ChatMessage({ message, index = 0 }: ChatMessageProps) {
             message.content
           ) : (
             <div className="markdown-body">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              <ReactMarkdown remarkPlugins={REMARK_PLUGINS}>
                 {body}
               </ReactMarkdown>
             </div>
