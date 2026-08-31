@@ -1,5 +1,6 @@
 """Agent编排器 - 极致优化版（状态缓存、并行路由、执行统计、工作流可视化）"""
 import asyncio
+import copy
 import time
 import threading
 import hashlib
@@ -523,7 +524,7 @@ class AgentOrchestrator:
         cached = self._get_cached_state(user_input, context_hash)
         if cached:
             app_logger.info("编排器状态缓存命中")
-            return cached.get("result", {})
+            return copy.deepcopy(cached.get("result", {}))
 
         trace = None
         if langfuse_service.enabled and not trace_id:
@@ -568,7 +569,8 @@ class AgentOrchestrator:
 
             self._set_cached_state(user_input, context_hash, final_state)
 
-            return result
+            # 深拷贝返回，避免调用方原地修改（如追加免责声明）污染缓存中的状态
+            return copy.deepcopy(result)
 
         except Exception as e:
             success = False

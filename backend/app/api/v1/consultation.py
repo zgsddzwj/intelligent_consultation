@@ -512,10 +512,10 @@ async def get_consultation_history(
     """获取咨询历史 - 增强版（支持分页）"""
     try:
         if user_id:
-            consultations = consultation_repo.get_by_user_id(user_id, limit=page_size, offset=(page - 1) * page_size)
+            consultations = consultation_repo.get_by_user_id(user_id, limit=page_size, skip=(page - 1) * page_size)
             total = consultation_repo.count_by_user_id(user_id)
         else:
-            consultations = consultation_repo.get_all(limit=page_size, offset=(page - 1) * page_size, order_by="-created_at")
+            consultations = consultation_repo.get_all(limit=page_size, skip=(page - 1) * page_size, order_by="-created_at")
             total = consultation_repo.count_all()
 
         items = [

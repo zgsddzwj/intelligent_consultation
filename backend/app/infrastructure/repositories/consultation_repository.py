@@ -27,6 +27,21 @@ class ConsultationRepository(BaseRepository[Consultation]):
         except Exception as e:
             self._handle_error("根据用户ID查询咨询失败", e)
     
+    def count_by_user_id(
+        self,
+        user_id: int,
+        status: Optional[ConsultationStatus] = None
+    ) -> int:
+        """根据用户ID统计咨询记录数"""
+        filters = {"user_id": user_id}
+        if status:
+            filters["status"] = status
+        return self.count(filters)
+
+    def count_all(self) -> int:
+        """统计所有咨询记录数"""
+        return self.count()
+
     def get_by_agent_type(
         self,
         agent_type: AgentType,
