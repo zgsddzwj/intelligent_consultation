@@ -182,10 +182,17 @@ export const useConsultationStore = create<ConsultationState>()(
             messages: state.messages,
             consultationId: state.consultationId,
           }),
+          // 恢复时清理流式瞬态标志，避免刷新后消息永久卡在"思考中"
+          onRehydrateStorage: () => (state) => {
+            state?.messages?.forEach((m) => {
+              m.isStreaming = false
+              m.isThinking = false
+            })
+          },
         }
       )
     ),
-    { name: 'ConsultationStore', enabled: process.env.NODE_ENV === 'development' }
+    { name: 'ConsultationStore', enabled: import.meta.env.DEV }
   )
 )
 
