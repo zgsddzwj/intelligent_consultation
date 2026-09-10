@@ -147,8 +147,13 @@ def validate_image_file(content_type: str, file_size: int, max_size: int = 10 * 
 
 # ========== 环境校验 ==========
 
-def validate_environment() -> Tuple[bool, List[str]]:
-    """验证运行环境配置是否完整"""
+def validate_environment() -> Tuple[bool, List[str], List[str]]:
+    """验证运行环境配置是否完整
+
+    Returns:
+        (is_valid, errors, warnings)：errors 为阻断性错误，warnings 仅为可选功能缺失提示，
+        两者分离以避免生产 fail-fast 把可降级项误判为启动阻断。
+    """
     from app.config import get_settings
     settings = get_settings()
 
@@ -157,7 +162,7 @@ def validate_environment() -> Tuple[bool, List[str]]:
 
     # 测试环境跳过严格校验（CI/单元测试使用）
     if settings.ENVIRONMENT in ("testing", "test"):
-        return True, warnings
+        return True, errors, warnings
 
     # 必需配置
     if not settings.DATABASE_URL:
@@ -180,7 +185,7 @@ def validate_environment() -> Tuple[bool, List[str]]:
     if not settings.LANGFUSE_PUBLIC_KEY or not settings.LANGFUSE_SECRET_KEY:
         warnings.append("Langfuse密钥未配置，可观测性功能将不可用")
     
-    return len(errors) == 0, errors + warnings
+    return len(errors) == 0, errors, warnings
 
 
 # ========== 医疗专用验证 ==========

@@ -3,6 +3,7 @@
 更新日期: 2025-01
 """
 import asyncio
+import hmac
 import time
 from contextlib import asynccontextmanager
 from typing import Dict, Any, List
@@ -202,8 +203,11 @@ async def lifespan(app: FastAPI):
     app_logger.info(f"🚀 {settings.APP_NAME} v{settings.APP_VERSION} 启动中...")
     app_logger.info(f"环境: {settings.ENVIRONMENT} | 调试模式: {settings.DEBUG}")
 
-    # 1. 环境配置校验
-    is_valid, env_errors = validate_environment()
+    # 1. 环境配置校验（错误与警告分离：警告为可降级项，不阻断启动）
+    is_valid, env_errors, env_warnings = validate_environment()
+    for warn in env_warnings:
+        app_logger.warning(f"环境配置警告: {warn}")
+    _startup_state["warnings"].extend(env_warnings)
     if not is_valid:
         app_logger.error("❌ 环境配置校验失败:")
         for err in env_errors:
@@ -336,16 +340,6 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(Exception, general_exception_handler)
 
-# 配置CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-    allow_headers=["*"],
-    max_age=600,
-)
-
 # 生产环境安全中间件
 if settings.ENVIRONMENT == "production":
     app.add_middleware(
@@ -384,6 +378,17 @@ if settings.RATE_LIMIT_ENABLED:
 if settings.ENABLE_AUTH_MIDDLEWARE:
     from app.api.middleware.auth import AuthMiddleware
     app.add_middleware(AuthMiddleware)
+
+# CORS 最后注册（成为最外层中间件），确保认证/限流产生的401/429响应
+# 以及浏览器 preflight OPTIONS 均携带 Access-Control-* 响应头
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+    allow_headers=["*"],
+    max_age=600,
+)
 
 
 @app.middleware("http")
@@ -488,14 +493,20 @@ async def liveness_check():
 
 @app.get("/metrics", tags=["监控"])
 async def metrics(request: Request):
-    """Prometheus指标端点（生产环境需 METRICS_ACCESS_TOKEN）"""
+    """Prometheus指标端点（生产环境必须配置 METRICS_ACCESS_TOKEN，否则直接404）"""
     if settings.METRICS_ACCESS_TOKEN:
         token = request.headers.get("X-Metrics-Token") or request.query_params.get("token")
-        if token != settings.METRICS_ACCESS_TOKEN:
+        if not token or not hmac.compare_digest(token, settings.METRICS_ACCESS_TOKEN):
             return JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "Invalid metrics token"},
             )
+    elif settings.ENVIRONMENT == "production":
+        # 生产环境未配置访问令牌时禁止暴露指标（与 /startup 保护逻辑对齐）
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"detail": "Not Found"},
+        )
     from app.infrastructure.monitoring import get_metrics
     return get_metrics()
 
