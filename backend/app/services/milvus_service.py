@@ -10,6 +10,7 @@ from pymilvus import (
 )
 from typing import List, Dict, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import json
 import time
 import threading
 from app.config import get_settings
@@ -56,17 +57,12 @@ class MilvusService:
                 return
             except Exception:
                 pass
-            
+
             connections.connect(
                 alias="default",
                 host=self.host,
                 port=self.port,
                 timeout=3,
-                # 连接池配置
-                pool="QueuePool",
-                pool_size=10,
-                max_overflow=20,
-                pool_recycle=3600
             )
             self._connect_logged = False  # 连接成功，重置日志标记
             app_logger.info(f"✓ 已连接到Milvus: {self.host}:{self.port}")
@@ -75,7 +71,7 @@ class MilvusService:
                 app_logger.warning(f"Milvus连接失败（可选服务，不影响核心功能）: {self.host}:{self.port} - {e}")
                 self._connect_logged = True
             raise
-    
+
     def _ensure_collection(self):
         """确保集合存在（支持自动创建）"""
         try:
@@ -83,7 +79,7 @@ class MilvusService:
                 self._collection = Collection(self.collection_name)
                 # 异步加载到内存
                 self._async_load_collection()
-                app_logger.info(f"✓ 集合 {self.collection_name} 已存在，共 {self._collection.num_entities} 个向量")
+                app_logger.info(f"✓ 集合 {self.collection_name} 已存在")
             else:
                 self._create_collection()
         except Exception as e:
@@ -147,11 +143,11 @@ class MilvusService:
     def _ensure_connection(self) -> bool:
         """确保连接可用（支持自动重连，懒加载，失败缓存）"""
         if self._connected and self._collection:
-            try:
-                _ = self._collection.num_entities
+            # 本地连接状态检查（无RPC开销）；
+            # 旧实现用 num_entities() 探测，等于每次操作前多打一次Milvus统计查询
+            if connections.has_connection("default"):
                 return True
-            except Exception:
-                self._connected = False
+            self._connected = False
 
         # 失败缓存：如果最近失败过，直接返回 False 不重试
         import time as _time
@@ -198,7 +194,8 @@ class MilvusService:
                     batch_texts,
                     batch_doc_ids,
                     batch_sources,
-                    [str(m) for m in batch_metadatas],
+                    # JSON序列化（旧实现str(m)产生Python repr，下游无法json.loads解析）
+                    [json.dumps(m, ensure_ascii=False) for m in batch_metadatas],
                     [int(time.time() * 1000) for _ in batch_texts],
                 ]
                 
