@@ -109,11 +109,15 @@ _health_checker = HealthChecker()
 
 
 async def _check_database():
-    """数据库健康检查"""
+    """数据库健康检查（同步IO放入线程池，避免阻塞事件循环）"""
     from app.database.session import engine
     db_start = time.time()
-    with engine.connect() as conn:
-        conn.execute(text("SELECT 1"))
+
+    def _probe():
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+
+    await asyncio.to_thread(_probe)
     return {
         "status": "healthy",
         "response_time_ms": round((time.time() - db_start) * 1000, 2),
@@ -121,9 +125,9 @@ async def _check_database():
 
 
 async def _check_redis():
-    """Redis健康检查"""
+    """Redis健康检查（同步IO放入线程池）"""
     redis_start = time.time()
-    info = redis_service.health_check()
+    info = await asyncio.to_thread(redis_service.health_check)
     if info.get("status") == "healthy":
         return {
             "status": "healthy",
@@ -135,10 +139,14 @@ async def _check_redis():
 
 
 async def _check_milvus():
-    """Milvus健康检查"""
+    """Milvus健康检查（同步IO放入线程池）"""
     milvus_start = time.time()
-    milvus = get_milvus_service()
-    info = milvus.health_check()
+
+    def _probe():
+        milvus = get_milvus_service()
+        return milvus.health_check()
+
+    info = await asyncio.to_thread(_probe)
     if info.get("status") == "healthy":
         return {
             "status": "healthy",
@@ -150,10 +158,14 @@ async def _check_milvus():
 
 
 async def _check_neo4j():
-    """Neo4j健康检查"""
+    """Neo4j健康检查（同步IO放入线程池）"""
     neo4j_start = time.time()
-    neo4j = get_neo4j_client()
-    info = neo4j.health_check()
+
+    def _probe():
+        neo4j = get_neo4j_client()
+        return neo4j.health_check()
+
+    info = await asyncio.to_thread(_probe)
     if info.get("status") == "healthy":
         return {
             "status": "healthy",
@@ -180,7 +192,6 @@ _health_checker.register("llm", _check_llm, category="optional", timeout=2.0)
 
 @router.get("/health", status_code=status.HTTP_200_OK)
 async def health_check(
-    db: Session = Depends(get_db),
     depth: str = "standard"
 ):
     """
@@ -269,19 +280,25 @@ async def health_check(
 
 
 @router.get("/health/ready", status_code=status.HTTP_200_OK)
-async def readiness_probe(db: Session = Depends(get_db)):
+async def readiness_probe():
     """
     K8s Readiness Probe 专用端点
 
     仅检查核心服务，确保Pod可以接收流量。
     """
+    def _probe_database():
+        from app.database.session import engine
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+
     try:
-        db.execute(text("SELECT 1"))
+        await asyncio.to_thread(_probe_database)
     except Exception:
         return {"status": "not ready", "reason": "database unavailable"}
 
     try:
-        if redis_service.health_check().get("status") != "healthy":
+        info = await asyncio.to_thread(redis_service.health_check)
+        if info.get("status") != "healthy":
             return {"status": "not ready", "reason": "redis unavailable"}
     except Exception:
         return {"status": "not ready", "reason": "redis unavailable"}
@@ -301,11 +318,11 @@ async def liveness_probe():
 
 
 @router.get("/health/deep", status_code=status.HTTP_200_OK)
-async def deep_health_check(db: Session = Depends(get_db)):
+async def deep_health_check():
     """
     深度健康检查
 
     执行所有检查项，包含性能基线和详细指标。
     适用于运维排查和容量规划。
     """
-    return await health_check(db=db, depth="deep")
+    return await health_check(depth="deep")
