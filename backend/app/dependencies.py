@@ -151,6 +151,57 @@ class ServiceFactory:
 
 # ========== FastAPI依赖函数 ==========
 
+# ========== 认证依赖 ==========
+
+def get_current_user(request: Request) -> dict:
+    """获取当前认证用户（自足式：优先取认证中间件注入的状态，否则自行解析JWT）
+
+    Returns:
+        {"user_id": int, "username": str, "role": str}
+
+    Raises:
+        HTTPException: 401 未认证
+    """
+    from fastapi import HTTPException
+    from app.utils.security import decode_access_token
+
+    user_id = getattr(request.state, "user_id", None)
+    user_role = getattr(request.state, "user_role", None)
+    username = getattr(request.state, "username", None)
+
+    if user_id is None:
+        authorization = request.headers.get("Authorization", "")
+        if authorization.lower().startswith("bearer "):
+            payload = decode_access_token(authorization.split(" ", 1)[1])
+            if payload:
+                user_id = payload.get("sub")
+                user_role = payload.get("role")
+                username = payload.get("username")
+
+    if user_id is None:
+        raise HTTPException(status_code=401, detail="未认证：缺少有效的访问令牌")
+
+    try:
+        user_id = int(user_id)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="认证信息无效")
+
+    return {"user_id": user_id, "username": username, "role": user_role}
+
+
+def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
+    """要求管理员角色（用于 /admin 等敏感端点）"""
+    from fastapi import HTTPException
+    from app.utils.logger import app_logger
+
+    if current_user.get("role") != "admin":
+        app_logger.warning(
+            f"非管理员访问管理端点被拒绝: user_id={current_user['user_id']}, role={current_user.get('role')}"
+        )
+        raise HTTPException(status_code=403, detail="需要管理员权限")
+    return current_user
+
+
 def get_current_user_id(request: Request) -> Optional[int]:
     """从请求中获取当前用户ID（JWT 优先，开发环境可降级）"""
     from app.config import get_settings

@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 
-from app.dependencies import get_db, get_user_repository
+from app.dependencies import get_db, get_user_repository, require_admin
 from app.infrastructure.repositories.user_repository import UserRepository
 from app.models.user import User, UserRole
 from app.models.consultation import Consultation, ConsultationStatus, AgentType
@@ -22,7 +22,8 @@ from app.utils.logger import app_logger
 from app.common.exceptions import NotFoundException, ValidationException, ErrorCode
 from app.common.transaction import transactional
 
-router = APIRouter()
+# 全部管理端点要求管理员角色（JWT认证 + role=admin 校验）
+router = APIRouter(dependencies=[Depends(require_admin)])
 settings = get_settings()
 
 # 应用启动时间
