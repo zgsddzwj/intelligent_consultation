@@ -150,6 +150,18 @@ export default function PatientPortal() {
   }, [isStreaming, addMessage, handleStreamChat])
 
   const handleImageUpload = async (file: File) => {
+    // 图片类型校验（后端仅支持 JPG/PNG/GIF/WebP/BMP）
+    const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      message.error('不支持的图片格式，请上传 JPG/PNG/GIF/WebP 格式的图片')
+      return false
+    }
+    // 图片大小校验（后端限制5MB）
+    if (file.size > 5 * 1024 * 1024) {
+      message.error('图片大小超过限制（最大 5MB）')
+      return false
+    }
+
     try {
       const formData = new FormData()
       formData.append('file', file)

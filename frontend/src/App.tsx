@@ -1,6 +1,6 @@
 import { Suspense, lazy, useState, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, useLocation, useNavigate, Link } from 'react-router-dom'
-import { Layout, Menu, Typography, Avatar, Drawer, Button, Spin } from 'antd'
+import { Layout, Menu, Typography, Avatar, Drawer, Button, Spin, Result } from 'antd'
 import ErrorBoundary from './components/ErrorBoundary'
 import AuthGuard from './components/AuthGuard'
 import {
@@ -230,6 +230,7 @@ function SiderContent({ collapsed }: { collapsed: boolean }) {
 
 // 应用布局组件
 function AppLayout() {
+  const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(false)
@@ -365,6 +366,21 @@ function AppLayout() {
                   }
                 />
                 <Route path="/knowledge-graph" element={<KnowledgeGraph />} />
+                <Route
+                  path="*"
+                  element={
+                    <Result
+                      status="404"
+                      title="404"
+                      subTitle="抱歉，您访问的页面不存在"
+                      extra={
+                        <Button type="primary" onClick={() => navigate('/')}>
+                          返回首页
+                        </Button>
+                      }
+                    />
+                  }
+                />
               </Routes>
             </Suspense>
           </ErrorBoundary>
@@ -418,6 +434,7 @@ function AppLayout() {
 // 根组件
 function App() {
   const location = useLocation()
+  const navigate = useNavigate()
   const isLoginPage = location.pathname === '/login'
 
   if (isLoginPage) {
@@ -426,6 +443,21 @@ function App() {
         <Suspense fallback={<PageLoader />}>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route
+              path="*"
+              element={
+                <Result
+                  status="404"
+                  title="404"
+                  subTitle="抱歉，您访问的页面不存在"
+                  extra={
+                    <Button type="primary" onClick={() => navigate('/')}>
+                      返回首页
+                    </Button>
+                  }
+                />
+              }
+            />
           </Routes>
         </Suspense>
       </ErrorBoundary>
