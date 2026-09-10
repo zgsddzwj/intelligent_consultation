@@ -1,13 +1,15 @@
 """优化的Redis服务 - 支持连接池和智能重连"""
 import redis
 import json
-import asyncio
 from typing import Optional, Any, Dict
 from redis.connection import ConnectionPool
 from app.config import get_settings
 from app.utils.logger import app_logger
 
 settings = get_settings()
+
+# TTL哨兵：区分"调用方未传ttl"与"显式传None表示永久存储"
+_DEFAULT_TTL = object()
 
 
 class RedisServiceOptimized:
@@ -54,35 +56,12 @@ class RedisServiceOptimized:
             self.client = None
             self.enabled = False
     
-    async def _ensure_connection_async(self) -> bool:
-        """异步方式确保连接可用"""
-        for attempt in range(self._max_retries):
-            if self.client:
-                try:
-                    self.client.ping()
-                    return True
-                except Exception as e:
-                    app_logger.warning(f"Redis ping失败 (尝试 {attempt + 1}/{self._max_retries}): {e}")
-            
-            if attempt < self._max_retries - 1:
-                await asyncio.sleep(self._retry_delay)
-                self._init_pool()
-        
-        return False
-    
     def _ensure_connection(self) -> bool:
-        """同步方式确保连接可用"""
+        """确保客户端可用（不做前置PING——连接池+health_check_interval已负责保活，
+        旧实现每个操作前先PING一次，Redis往返次数翻倍）"""
         if not self.client:
             self._init_pool()
-            return self.client is not None
-        
-        try:
-            self.client.ping()
-            return True
-        except Exception as e:
-            app_logger.warning(f"Redis连接失败，尝试重新初始化: {e}")
-            self._init_pool()
-            return self.client is not None
+        return self.client is not None
     
     def get(self, key: str) -> Optional[str]:
         """获取值"""
@@ -95,17 +74,27 @@ class RedisServiceOptimized:
             app_logger.error(f"Redis GET错误 [{key}]: {e}")
             return None
     
-    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> bool:
-        """设置值，支持自动TTL"""
+    def set(self, key: str, value: Any, ttl: Optional[int] = _DEFAULT_TTL) -> bool:
+        """设置值
+
+        TTL语义：
+        - ttl 未传 → 使用默认缓存TTL（REDIS_CACHE_TTL）
+        - ttl=None → 永久存储（旧实现 None 会被 `or` 吞成默认TTL，模板等永久数据静默过期）
+        - ttl=N   → 过期N秒
+        """
         if not self._ensure_connection():
             return False
-        
+
         try:
             if isinstance(value, (dict, list)):
                 value = json.dumps(value, ensure_ascii=False)
-            
-            ttl = ttl or getattr(settings, 'REDIS_CACHE_TTL', 3600)
-            self.client.setex(key, ttl, value)
+
+            if ttl is _DEFAULT_TTL:
+                ttl = getattr(settings, 'REDIS_CACHE_TTL', 3600)
+            if ttl is None:
+                self.client.set(key, value)
+            else:
+                self.client.setex(key, ttl, value)
             return True
         except redis.RedisError as e:
             app_logger.error(f"Redis SET错误 [{key}]: {e}")
@@ -164,8 +153,8 @@ class RedisServiceOptimized:
                 return None
         return None
     
-    def set_json(self, key: str, value: dict, ttl: Optional[int] = None) -> bool:
-        """设置JSON值"""
+    def set_json(self, key: str, value: dict, ttl: Optional[int] = _DEFAULT_TTL) -> bool:
+        """设置JSON值（TTL语义同 set）"""
         return self.set(key, value, ttl)
     
     def incr(self, key: str, increment: int = 1) -> Optional[int]:
