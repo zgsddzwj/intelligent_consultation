@@ -6,68 +6,48 @@ import re
 
 
 class SemanticRetriever:
-    """语义检索器 - 使用LLM进行查询扩展和语义理解"""
-    
+    """语义检索器 - 基于向量相似度的语义级召回
+
+    说明：查询扩展采用轻量规则实现（分词/别名映射），
+    不再发起LLM调用——旧实现每次扩展白白消耗一次完整LLM请求且结果从未被使用。
+    """
+
     def __init__(self):
         self.embedder = Embedder()
-        self._llm = None
-        self._medical_terms_cache = {}
 
-    @property
-    def llm(self):
-        """延迟导入 LLMService，避免循环导入"""
-        if self._llm is None:
-            from app.services.llm_service import LLMService
-            self._llm = LLMService()
-        return self._llm
-    
+    # 常见医疗口语/缩写到规范术语的轻量映射（规则化查询扩展，无网络开销）
+    _SYNONYM_MAP = {
+        "高血压": ["血压高", "hypertension"],
+        "糖尿病": ["血糖高", "diabetes"],
+        "发烧": ["发热", "体温升高"],
+        "感冒": ["上呼吸道感染"],
+        "拉肚子": ["腹泻"],
+        "头疼": ["头痛"],
+        "心梗": ["心肌梗死"],
+        "中风": ["脑卒中", "脑梗"],
+    }
+
     def expand_query(self, query: str) -> Dict[str, Any]:
-        """查询扩展 - 生成同义词和相关术语"""
-        try:
-            prompt = f"""
-请分析以下医疗查询，提取关键信息并生成相关的同义词和医学术语：
+        """查询扩展 - 规则化生成同义词与关键词（零延迟、零成本）"""
+        keywords = self._extract_keywords(query)
+        synonyms: List[str] = []
+        for term, alts in self._SYNONYM_MAP.items():
+            if term in query:
+                synonyms.extend(alts)
 
-查询：{query}
+        expanded_query = query
+        if synonyms:
+            # 同义词附加到原查询后，提升向量召回覆盖面
+            expanded_query = f"{query} {' '.join(synonyms)}"
 
-请以JSON格式返回：
-{{
-    "keywords": ["关键词1", "关键词2"],
-    "synonyms": ["同义词1", "同义词2"],
-    "medical_terms": ["医学术语1", "医学术语2"],
-    "expanded_query": "扩展后的查询"
-}}
-"""
-            
-            response = self.llm.generate(
-                prompt=prompt,
-                temperature=0.3,
-                max_tokens=500
-            )
-            
-            # 解析响应（简化处理，实际应该更robust）
-            expanded = {
-                "original_query": query,
-                "expanded_query": query,  # 默认使用原查询
-                "keywords": self._extract_keywords(query),
-                "synonyms": [],
-                "medical_terms": []
-            }
-            
-            # 尝试从响应中提取JSON（简化实现）
-            # 实际应该使用更robust的JSON解析
-            
-            return expanded
-            
-        except Exception as e:
-            app_logger.warning(f"查询扩展失败: {e}")
-            return {
-                "original_query": query,
-                "expanded_query": query,
-                "keywords": self._extract_keywords(query),
-                "synonyms": [],
-                "medical_terms": []
-            }
-    
+        return {
+            "original_query": query,
+            "expanded_query": expanded_query,
+            "keywords": keywords,
+            "synonyms": synonyms,
+            "medical_terms": [],
+        }
+
     def _extract_keywords(self, text: str) -> List[str]:
         """简单关键词提取"""
         # 移除标点
@@ -75,80 +55,58 @@ class SemanticRetriever:
         # 过滤短词
         keywords = [w for w in words if len(w) > 1]
         return keywords
-    
-    def rewrite_query(self, query: str, context: str = None) -> str:
-        """查询重写 - 将自然语言查询转换为更精确的检索查询"""
-        try:
-            context_part = f"\n上下文：{context}" if context else ""
-            prompt = f"""
-请将以下医疗查询重写为更适合检索的形式，保持核心医疗概念：
 
-查询：{query}{context_part}
-
-请直接返回重写后的查询，不要添加其他说明。
-"""
-            
-            rewritten = self.llm.generate(
-                prompt=prompt,
-                temperature=0.2,
-                max_tokens=200
-            )
-            
-            return rewritten.strip()
-            
-        except Exception as e:
-            app_logger.warning(f"查询重写失败: {e}")
-            return query
-    
     def semantic_search(self, query: str, documents: List[Dict[str, Any]], top_k: int = 5) -> List[Dict[str, Any]]:
-        """语义检索 - 基于语义相似度"""
+        """语义检索 - 基于语义相似度（文档向量一次批量编码，避免逐条请求embedding API）"""
         try:
+            if not documents:
+                return []
+
             # 扩展查询
             expanded = self.expand_query(query)
-            
-            # 使用扩展后的查询进行向量检索
             query_text = expanded.get("expanded_query", query)
-            query_vector = self.embedder.embed_query(query_text)
-            
-            # 计算与所有文档的相似度
-            doc_vectors = []
-            for doc in documents:
+
+            # 单次批量编码所有文档文本（旧实现逐文档调用embed_query，N次HTTP往返）
+            valid_indices: List[int] = []
+            doc_texts: List[str] = []
+            for i, doc in enumerate(documents):
                 doc_text = doc.get("text", "")
                 if doc_text:
-                    doc_vector = self.embedder.embed_query(doc_text)
-                    doc_vectors.append(doc_vector)
-                else:
-                    doc_vectors.append(None)
-            
+                    valid_indices.append(i)
+                    doc_texts.append(doc_text)
+
+            if not doc_texts:
+                return []
+
+            doc_vectors = self.embedder.embed(doc_texts)
+            query_vector = self.embedder.embed_query(query_text)
+
             # 计算余弦相似度
             results = []
-            for i, doc in enumerate(documents):
-                if doc_vectors[i] is None:
+            for idx, doc_vector in zip(valid_indices, doc_vectors):
+                if doc_vector is None:
                     continue
-                
-                # 计算余弦相似度
-                similarity = self._cosine_similarity(query_vector, doc_vectors[i])
-                
+                similarity = self._cosine_similarity(query_vector, doc_vector)
                 results.append({
-                    **doc,
+                    **documents[idx],
                     "score": similarity,
                     "retrieval_method": "semantic",
                     "expanded_query": query_text
                 })
-            
+
             # 按相似度排序
             results.sort(key=lambda x: x["score"], reverse=True)
-            
+
             # 返回top_k
             final_results = results[:top_k]
-            
+
             app_logger.info(f"语义检索完成，查询: {query}, 返回 {len(final_results)} 条结果")
             return final_results
-            
+
         except Exception as e:
             app_logger.error(f"语义检索失败: {e}")
             return []
-    
+
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """计算余弦相似度"""
         try:
@@ -164,8 +122,7 @@ class SemanticRetriever:
         except Exception as e:
             app_logger.warning(f"余弦相似度计算失败: {e}")
             return 0.0
-    
+
     def retrieve(self, query: str, documents: List[Dict[str, Any]], top_k: int = 5) -> List[Dict[str, Any]]:
         """检索接口 - 兼容其他检索器"""
         return self.semantic_search(query, documents, top_k)
-

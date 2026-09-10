@@ -221,11 +221,16 @@ class HybridSearch:
         scores = [r.get("score", 0) for r in results]
         max_score = max(scores) if scores else 1
         min_score = min(scores) if scores else 0
-        score_range = max_score - min_score if max_score != min_score else 1
-        
+        score_range = max_score - min_score
+
         for result in results:
             raw_score = result.get("score", 0)
-            normalized = (raw_score - min_score) / score_range
+            if score_range == 0:
+                # 所有分数相同（含单条结果）：均为最高分，归一化为1.0
+                # 旧实现 (raw-min)/1 = 0，导致唯一/并列最高结果反而垫底
+                normalized = 1.0
+            else:
+                normalized = (raw_score - min_score) / score_range
             result["normalized_score"] = round(normalized, 4)
             result["combined_score"] = round(normalized, 4)
         
