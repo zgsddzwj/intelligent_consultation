@@ -4,6 +4,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.agents.base import BaseAgent
 from app.agents.tools.rag_tool import RAGTool
+from app.dependencies import ServiceFactory
 from app.agents.tools.knowledge_graph_tool import KnowledgeGraphTool
 from app.knowledge.ml.entity_recognizer import MedicalEntityRecognizer
 from app.prompts import AgentPrompts
@@ -20,7 +21,7 @@ class HealthManagerAgent(BaseAgent):
         )
         
         # 添加工具
-        self.rag_tool = RAGTool()
+        self.rag_tool = ServiceFactory.get_rag_tool()
         self.kg_tool = KnowledgeGraphTool()
         
         self.add_tool(self.rag_tool)

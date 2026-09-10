@@ -3,6 +3,7 @@ from typing import Dict, Any, Optional
 import time
 from app.agents.base import BaseAgent
 from app.agents.tools.rag_tool import RAGTool
+from app.dependencies import ServiceFactory
 from app.prompts import AgentPrompts
 from app.utils.logger import app_logger
 
@@ -17,7 +18,7 @@ class CustomerServiceAgent(BaseAgent):
         )
         
         # 添加工具
-        self.rag_tool = RAGTool()
+        self.rag_tool = ServiceFactory.get_rag_tool()
         self.add_tool(self.rag_tool)
         
         # FAQ数据（作为快速缓存）

@@ -1,6 +1,7 @@
 """MCP工具定义"""
 from typing import Dict, Any, List
 from app.agents.tools.rag_tool import RAGTool
+from app.dependencies import ServiceFactory
 from app.agents.tools.knowledge_graph_tool import KnowledgeGraphTool
 from app.agents.tools.diagnosis_tool import DiagnosisTool
 from app.utils.logger import app_logger
@@ -10,7 +11,7 @@ class MCPTools:
     """MCP工具集"""
     
     def __init__(self):
-        self.rag_tool = RAGTool()
+        self.rag_tool = ServiceFactory.get_rag_tool()
         self.kg_tool = KnowledgeGraphTool()
         self.diagnosis_tool = DiagnosisTool()
     

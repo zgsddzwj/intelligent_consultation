@@ -4,6 +4,7 @@ import time
 import asyncio
 from app.agents.base import BaseAgent
 from app.agents.tools.rag_tool import RAGTool
+from app.dependencies import ServiceFactory
 from app.agents.tools.knowledge_graph_tool import KnowledgeGraphTool
 from app.agents.tools.diagnosis_tool import DiagnosisTool
 from app.knowledge.ml.entity_recognizer import MedicalEntityRecognizer
@@ -24,7 +25,7 @@ class DoctorAgent(BaseAgent):
         )
         
         # 添加工具
-        self.rag_tool = RAGTool()
+        self.rag_tool = ServiceFactory.get_rag_tool()
         self.kg_tool = KnowledgeGraphTool()
         self.diagnosis_tool = DiagnosisTool()
         

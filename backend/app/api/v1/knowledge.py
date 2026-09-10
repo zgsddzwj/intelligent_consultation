@@ -4,10 +4,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from app.dependencies import get_db, require_roles
-from app.knowledge.rag.hybrid_search import HybridSearch
-from app.knowledge.rag.document_processor import DocumentProcessor
-from app.knowledge.rag.embedder import Embedder
+from app.dependencies import get_db, require_roles, ServiceFactory
 from app.services.milvus_service import get_milvus_service
 from app.services.object_storage import object_storage_service
 from app.models.knowledge import KnowledgeDocument
@@ -22,10 +19,20 @@ from io import BytesIO
 require_kg_editor = require_roles("admin", "doctor")
 
 router = APIRouter()
-hybrid_search = HybridSearch()
-document_processor = DocumentProcessor()
-embedder = Embedder()
 settings = get_settings()
+
+
+def _get_hybrid_search():
+    """检索栈走ServiceFactory单例（旧实现模块导入期重建一套Embedder/检索器，内存翻倍）"""
+    return ServiceFactory.get_hybrid_search()
+
+
+def _get_document_processor():
+    return ServiceFactory.get_document_processor()
+
+
+def _get_embedder():
+    return ServiceFactory.get_embedder()
 
 
 class SearchRequest(BaseModel):
@@ -117,7 +124,7 @@ async def upload_document(
                 temp_file_path = temp_file.name
             
             # 处理文档
-            chunks = document_processor.process_document(temp_file_path, source=source)
+            chunks = _get_document_processor().process_document(temp_file_path, source=source)
             
         finally:
             # 清理临时文件
@@ -131,7 +138,7 @@ async def upload_document(
         
         # 4. 向量化并存储
         texts = [chunk["text"] for chunk in chunks]
-        vectors = embedder.embed(texts)
+        vectors = _get_embedder().embed(texts)
         
         # 5. 创建文档记录
         doc = KnowledgeDocument(
@@ -303,7 +310,7 @@ async def delete_document(
 async def search_knowledge(request: SearchRequest):
     """搜索知识库"""
     try:
-        results = hybrid_search.hybrid_search(request.query, top_k=request.top_k)
+        results = _get_hybrid_search().hybrid_search(request.query, top_k=request.top_k)
         
         return SearchResponse(
             query=request.query,

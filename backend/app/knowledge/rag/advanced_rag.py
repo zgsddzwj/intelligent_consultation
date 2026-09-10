@@ -4,6 +4,7 @@ from app.knowledge.rag.multi_retrieval import MultiRetrieval
 from app.knowledge.rag.reranker import Reranker
 from app.knowledge.rag.ml_reranker import MLReranker
 from app.knowledge.ml.intent_classifier import IntentClassifier
+from app.dependencies import ServiceFactory
 from app.knowledge.ml.relevance_scorer import RelevanceScorer
 from app.knowledge.ml.query_understanding import QueryUnderstanding
 from app.knowledge.ml.ranking_optimizer import RankingOptimizer
@@ -41,7 +42,9 @@ class AdvancedRAG:
         self.ml_reranker = MLReranker() if enable_ml_rerank else None
         
         # ML算法
-        self.intent_classifier = IntentClassifier() if enable_intent_classification else None
+        self.intent_classifier = (
+            ServiceFactory.get_intent_classifier() if enable_intent_classification else None
+        )
         self.relevance_scorer = RelevanceScorer() if enable_relevance_scoring else None
         self.query_understanding = QueryUnderstanding() if enable_query_understanding else None
         self.ranking_optimizer = RankingOptimizer() if enable_ranking_optimization else None

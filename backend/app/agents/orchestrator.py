@@ -17,6 +17,7 @@ from app.agents.operations_agent import OperationsAgent
 from app.utils.logger import app_logger
 from app.config import get_settings
 from app.knowledge.ml.intent_classifier import IntentClassifier
+from app.dependencies import ServiceFactory
 from app.services.langfuse_service import langfuse_service
 from app.infrastructure.monitoring import track_consultation
 
@@ -126,7 +127,7 @@ class AgentOrchestrator:
         self.intent_classifier = None
         if settings.ENABLE_INTENT_CLASSIFICATION:
             try:
-                self.intent_classifier = IntentClassifier(model_dir=settings.INTENT_MODEL_DIR)
+                self.intent_classifier = ServiceFactory.get_intent_classifier()
                 app_logger.info("意图分类器初始化成功（ML模型）")
             except Exception as e:
                 app_logger.warning(f"意图分类器初始化失败，将使用规则分类: {e}")

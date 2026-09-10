@@ -141,6 +141,39 @@ class ServiceFactory:
         return cls._instances["rag_tool"]
 
     @classmethod
+    def get_intent_classifier(cls):
+        """获取意图分类器（全局单例；warmup预热的实例由此存取，避免模型重复加载）"""
+        if "intent_classifier" not in cls._instances:
+            with cls._lock:
+                if "intent_classifier" not in cls._instances:
+                    from app.config import get_settings
+                    from app.knowledge.ml.intent_classifier import IntentClassifier
+                    cls._instances["intent_classifier"] = IntentClassifier(
+                        model_dir=get_settings().INTENT_MODEL_DIR
+                    )
+        return cls._instances["intent_classifier"]
+
+    @classmethod
+    def get_document_processor(cls):
+        """获取文档处理器单例"""
+        if "document_processor" not in cls._instances:
+            with cls._lock:
+                if "document_processor" not in cls._instances:
+                    from app.knowledge.rag.document_processor import DocumentProcessor
+                    cls._instances["document_processor"] = DocumentProcessor()
+        return cls._instances["document_processor"]
+
+    @classmethod
+    def get_embedder(cls):
+        """获取Embedder单例（嵌入模型/客户端只加载一次）"""
+        if "embedder" not in cls._instances:
+            with cls._lock:
+                if "embedder" not in cls._instances:
+                    from app.knowledge.rag.embedder import Embedder
+                    cls._instances["embedder"] = Embedder()
+        return cls._instances["embedder"]
+
+    @classmethod
     def reset(cls, service_name: str = None):
         """重置服务实例（用于测试或配置变更后）"""
         if service_name:

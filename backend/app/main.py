@@ -169,8 +169,9 @@ async def _warmup_services():
     if settings.ENABLE_INTENT_CLASSIFICATION:
         async def _warmup_intent():
             try:
-                from app.knowledge.ml.intent_classifier import IntentClassifier
-                classifier = IntentClassifier(model_dir=settings.INTENT_MODEL_DIR)
+                # 预热结果存入ServiceFactory单例，orchestrator/advanced_rag复用同一实例
+                from app.dependencies import ServiceFactory
+                ServiceFactory.get_intent_classifier()
                 app_logger.info("✓ 意图分类器预热完成")
             except Exception as e:
                 app_logger.warning(f"⚠ 意图分类器预热失败: {e}")
