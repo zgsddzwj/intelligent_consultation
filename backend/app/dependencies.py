@@ -4,7 +4,7 @@ from functools import lru_cache
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 import threading
-from app.database.session import SessionLocal, get_db_with_retry
+from app.database.session import SessionLocal
 from app.config import get_settings
 from app.infrastructure.repositories.user_repository import UserRepository
 from app.infrastructure.repositories.consultation_repository import ConsultationRepository
@@ -23,11 +23,6 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
-
-
-def get_db_robust() -> Generator[Session, None, None]:
-    """获取数据库会话（带重试版，高并发场景使用）"""
-    yield from get_db_with_retry()
 
 
 # ========== Repository依赖 ==========
@@ -57,7 +52,9 @@ class ServiceFactory:
     """
     
     _instances: dict = {}
-    _lock = threading.Lock()
+    # RLock（可重入）：get_rag_tool/get_orchestrator 持锁构建期间
+    # 会嵌套调用 get_intent_classifier 等工厂方法，普通Lock会自死锁
+    _lock = threading.RLock()
     
     @classmethod
     def get_llm_service(cls):

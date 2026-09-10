@@ -46,7 +46,7 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             extra={
                 "method": request.method,
                 "path": request.url.path,
-                "query_params": str(request.query_params),
+                "query_params": self._mask_query_params(request),
                 "client_ip": request_info.get("client_ip"),
                 "user_agent": request_info.get("user_agent"),
                 "content_length": request_info.get("content_length"),
@@ -178,12 +178,17 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 extra={"request_id": request_id, "path": request.url.path}
             )
     
+    def _mask_query_params(self, request: Request) -> str:
+        """脱敏后的query string（token/api_key/password等敏感值不落访问日志）"""
+        params = {k: v for k, v in request.query_params.items()}
+        return str(self._mask_sensitive_data(params))
+
     @staticmethod
     def _mask_sensitive_data(data: Dict[str, Any]) -> Dict[str, Any]:
         """脱敏敏感数据"""
         if not isinstance(data, dict):
             return data
-        
+
         masked = {}
         for key, value in data.items():
             key_lower = key.lower()
@@ -201,34 +206,5 @@ class LoggingMiddleware(BaseHTTPMiddleware):
                 ]
             else:
                 masked[key] = value
-        
+
         return masked
-
-
-class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
-    """
-    请求大小限制中间件
-    
-    防止过大请求体导致内存耗尽。
-    """
-    
-    MAX_BODY_SIZE = 10 * 1024 * 1024  # 10MB
-    
-    async def dispatch(self, request: Request, call_next):
-        content_length = request.headers.get("Content-Length")
-        
-        if content_length:
-            size = int(content_length)
-            if size > self.MAX_BODY_SIZE:
-                from fastapi.responses import JSONResponse
-                return JSONResponse(
-                    status_code=413,
-                    content={
-                        "error": {
-                            "code": "REQUEST_TOO_LARGE",
-                            "message": f"请求体过大: {size / (1024 * 1024):.1f}MB，最大允许: {self.MAX_BODY_SIZE / (1024 * 1024):.0f}MB"
-                        }
-                    }
-                )
-        
-        return await call_next(request)
