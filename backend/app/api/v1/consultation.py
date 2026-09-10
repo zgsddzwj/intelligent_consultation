@@ -1,5 +1,5 @@
 """咨询API - 增强版（统一响应格式、增强校验、分页支持、OpenAPI优化）"""
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, AsyncGenerator
@@ -8,7 +8,14 @@ import asyncio
 import queue
 import threading
 from sqlalchemy.orm import Session
-from app.dependencies import get_db, get_consultation_repository, get_orchestrator, ServiceFactory
+from app.dependencies import (
+    get_db,
+    get_consultation_repository,
+    get_orchestrator,
+    get_current_user,
+    get_optional_current_user,
+    ServiceFactory,
+)
 from app.infrastructure.repositories.consultation_repository import ConsultationRepository
 from app.agents.orchestrator import AgentOrchestrator
 from app.models.consultation import Consultation, ConsultationStatus, AgentType
@@ -86,6 +93,13 @@ class PaginatedResponse(BaseModel):
 
 # ========== 辅助函数 ==========
 
+def _resolve_owner_id(current_user: Optional[dict], request_user_id: Optional[int]) -> Optional[int]:
+    """解析咨询记录归属用户：认证身份优先（防止伪造他人 user_id），无认证时降级到请求参数"""
+    if current_user and current_user.get("user_id") is not None:
+        return current_user["user_id"]
+    return request_user_id
+
+
 def _create_consultation_record(db: Session, user_id: Optional[int]) -> Consultation:
     """创建新的咨询记录"""
     consultation = Consultation(
@@ -153,10 +167,12 @@ async def chat(
     request: ChatRequest,
     db: Session = Depends(get_db),
     orchestrator: AgentOrchestrator = Depends(get_orchestrator),
+    current_user: Optional[dict] = Depends(get_optional_current_user),
 ):
     """发送咨询消息 - 增强版（含完整错误处理和数据库持久化）"""
     consultation_id = 0
     start_time = asyncio.get_event_loop().time()
+    owner_user_id = _resolve_owner_id(current_user, request.user_id)
 
     try:
         # 1. 验证输入
@@ -176,18 +192,21 @@ async def chat(
                 risk_level="high"
             )
 
-        # 4. 创建或获取咨询记录
+        # 4. 创建或获取咨询记录（归属校验：无法认证归属的历史记录视同不存在，防止跨用户续聊）
         consultation = None
         try:
             if request.consultation_id:
-                consultation = db.query(Consultation).filter(
+                resume_query = db.query(Consultation).filter(
                     Consultation.id == request.consultation_id
-                ).first()
+                )
+                if owner_user_id is not None:
+                    resume_query = resume_query.filter(Consultation.user_id == owner_user_id)
+                consultation = resume_query.first()
                 if consultation:
                     consultation_id = consultation.id
 
             if not consultation:
-                consultation = _create_consultation_record(db, request.user_id)
+                consultation = _create_consultation_record(db, owner_user_id)
                 consultation_id = consultation.id
         except Exception as db_error:
             app_logger.warning(f"数据库操作失败，继续处理咨询: {db_error}")
@@ -277,9 +296,11 @@ async def chat(
 async def chat_stream(
     request: ChatRequest,
     db: Session = Depends(get_db),
+    current_user: Optional[dict] = Depends(get_optional_current_user),
 ):
     """流式咨询接口（SSE）- 带 thinking 过程，不经过 orchestrator 避免重复 LLM 调用"""
     consultation_id = 0
+    owner_user_id = _resolve_owner_id(current_user, request.user_id)
 
     # 验证输入
     is_valid, error_msg = validate_consultation_input({"message": request.message})
@@ -301,17 +322,20 @@ async def chat_stream(
         nonlocal consultation_id
 
         try:
-            # 创建或获取咨询记录
+            # 创建或获取咨询记录（归属校验同 /chat）
             consultation = None
             try:
                 if request.consultation_id:
-                    consultation = db.query(Consultation).filter(
+                    resume_query = db.query(Consultation).filter(
                         Consultation.id == request.consultation_id
-                    ).first()
+                    )
+                    if owner_user_id is not None:
+                        resume_query = resume_query.filter(Consultation.user_id == owner_user_id)
+                    consultation = resume_query.first()
                     if consultation:
                         consultation_id = consultation.id
-                else:
-                    consultation = _create_consultation_record(db, request.user_id)
+                if not consultation:
+                    consultation = _create_consultation_record(db, owner_user_id)
                     consultation_id = consultation.id
             except Exception as db_error:
                 app_logger.warning(f"数据库操作失败: {db_error}")
@@ -393,7 +417,7 @@ async def chat_stream(
                         for chunk in llm_service.stream_generate(
                             prompt=prompt,
                             system_prompt=system_prompt,
-                            user_id=str(request.user_id) if request.user_id else None,
+                            user_id=str(owner_user_id) if owner_user_id else None,
                             session_id=str(consultation_id) if consultation_id else None
                         ):
                             chunk_queue.put(chunk)
@@ -501,21 +525,28 @@ async def submit_feedback(request: FeedbackRequest, db: Session = Depends(get_db
         )
 
 
-@router.get("/history", response_model=PaginatedResponse, summary="获取咨询历史", description="分页获取用户咨询历史记录")
+@router.get("/history", response_model=PaginatedResponse, summary="获取咨询历史", description="分页获取当前用户的咨询历史记录")
 async def get_consultation_history(
-    user_id: Optional[int] = Query(None, ge=1, description="用户ID"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
+    user_id: Optional[int] = Query(None, ge=1, description="目标用户ID（仅管理员可指定）"),
+    current_user: dict = Depends(get_current_user),
     consultation_repo: ConsultationRepository = Depends(get_consultation_repository)
 ):
-    """获取咨询历史 - 增强版（支持分页）"""
+    """获取咨询历史 - 数据按认证身份隔离，仅管理员可查询指定用户或全量"""
     try:
-        if user_id:
-            consultations = consultation_repo.get_by_user_id(user_id, limit=page_size, skip=(page - 1) * page_size)
-            total = consultation_repo.count_by_user_id(user_id)
-        else:
+        is_admin = current_user.get("role") == "admin"
+        if user_id and user_id != current_user["user_id"] and not is_admin:
+            raise HTTPException(status_code=403, detail="仅管理员可查询其他用户的咨询历史")
+
+        if is_admin and user_id is None:
+            # 管理员不指定用户时可见全量
             consultations = consultation_repo.get_all(limit=page_size, skip=(page - 1) * page_size, order_by="-created_at")
             total = consultation_repo.count_all()
+        else:
+            target_user_id = user_id or current_user["user_id"]
+            consultations = consultation_repo.get_by_user_id(target_user_id, limit=page_size, skip=(page - 1) * page_size)
+            total = consultation_repo.count_by_user_id(target_user_id)
 
         items = [
             ConsultationHistoryResponse(
@@ -548,14 +579,25 @@ async def get_consultation_history(
         )
 
 
-@router.get("/{consultation_id}", response_model=ConsultationHistoryResponse, summary="获取咨询详情", description="获取单条咨询记录的详细信息")
+@router.get("/{consultation_id}", response_model=ConsultationHistoryResponse, summary="获取咨询详情", description="获取单条咨询记录的详细信息（仅本人或管理员）")
 async def get_consultation(
     consultation_id: int,
+    current_user: dict = Depends(get_current_user),
     consultation_repo: ConsultationRepository = Depends(get_consultation_repository)
 ):
-    """获取咨询详情"""
+    """获取咨询详情（越权访问返回404，防记录枚举）"""
     try:
         consultation = consultation_repo.get_by_id_or_raise(consultation_id)
+
+        is_owner = consultation.user_id == current_user["user_id"]
+        if not is_owner and current_user.get("role") != "admin":
+            app_logger.warning(
+                f"越权访问咨询记录被拒绝: user_id={current_user['user_id']} 尝试访问 consultation_id={consultation_id}"
+            )
+            raise NotFoundException(
+                f"咨询记录 {consultation_id} 不存在",
+                error_code=ErrorCode.DATA_NOT_FOUND
+            )
 
         return ConsultationHistoryResponse(
             id=consultation.id,

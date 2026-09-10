@@ -1,7 +1,7 @@
 """依赖注入 - 增强版（异步支持、连接池管理、服务工厂模式）"""
 from typing import Generator, Optional, Callable
 from functools import lru_cache
-from fastapi import Depends, Request
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 import threading
 from app.database.session import SessionLocal, get_db_with_retry
@@ -162,7 +162,6 @@ def get_current_user(request: Request) -> dict:
     Raises:
         HTTPException: 401 未认证
     """
-    from fastapi import HTTPException
     from app.utils.security import decode_access_token
 
     user_id = getattr(request.state, "user_id", None)
@@ -191,7 +190,6 @@ def get_current_user(request: Request) -> dict:
 
 def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
     """要求管理员角色（用于 /admin 等敏感端点）"""
-    from fastapi import HTTPException
     from app.utils.logger import app_logger
 
     if current_user.get("role") != "admin":
@@ -200,6 +198,30 @@ def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
         )
         raise HTTPException(status_code=403, detail="需要管理员权限")
     return current_user
+
+
+def get_optional_current_user(request: Request) -> Optional[dict]:
+    """获取当前用户（可选版本）：无有效认证时返回 None 而非 401
+
+    用于咨询对话等允许匿名（仅限开发环境）的端点，配合归属校验使用。
+    """
+    try:
+        return get_current_user(request)
+    except HTTPException:
+        return None
+
+
+def require_roles(*roles: str):
+    """要求当前用户属于指定角色之一（用于知识库维护等敏感写操作）"""
+    def dependency(current_user: dict = Depends(get_current_user)) -> dict:
+        if current_user.get("role") not in roles:
+            from app.utils.logger import app_logger
+            app_logger.warning(
+                f"角色权限不足被拒绝: user_id={current_user['user_id']}, role={current_user.get('role')}, required={roles}"
+            )
+            raise HTTPException(status_code=403, detail=f"需要以下角色之一: {', '.join(roles)}")
+        return current_user
+    return dependency
 
 
 def get_current_user_id(request: Request) -> Optional[int]:

@@ -4,7 +4,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from app.dependencies import get_db
+from app.dependencies import get_db, require_roles
 from app.knowledge.rag.hybrid_search import HybridSearch
 from app.knowledge.rag.document_processor import DocumentProcessor
 from app.knowledge.rag.embedder import Embedder
@@ -17,6 +17,9 @@ import os
 import tempfile
 from pathlib import Path
 from io import BytesIO
+
+# 知识库写入/删除/图谱变更仅限管理员与医生角色（防止匿名篡改医疗知识库）
+require_kg_editor = require_roles("admin", "doctor")
 
 router = APIRouter()
 hybrid_search = HybridSearch()
@@ -78,7 +81,8 @@ class KGRelationshipCreateRequest(BaseModel):
 async def upload_document(
     file: UploadFile = File(...),
     source: str = "unknown",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_kg_editor),
 ):
     """上传文档（存储到对象存储）"""
     try:
@@ -243,7 +247,8 @@ async def download_document(
 async def delete_document(
     document_id: int,
     delete_vectors: bool = True,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(require_kg_editor),
 ):
     """删除文档"""
     try:
@@ -533,7 +538,10 @@ async def get_departments():
 # ==================== 知识图谱实时更新 API ====================
 
 @router.post("/graph/entities")
-async def add_kg_entity(request: KGEntityCreateRequest):
+async def add_kg_entity(
+    request: KGEntityCreateRequest,
+    current_user: dict = Depends(require_kg_editor),
+):
     """添加或更新知识图谱实体（MERGE 语义，幂等）
     
     支持的实体类型：Disease, Symptom, Drug, Examination, Department
@@ -551,7 +559,10 @@ async def add_kg_entity(request: KGEntityCreateRequest):
 
 
 @router.delete("/graph/entities")
-async def delete_kg_entity(request: KGEntityDeleteRequest):
+async def delete_kg_entity(
+    request: KGEntityDeleteRequest,
+    current_user: dict = Depends(require_kg_editor),
+):
     """删除知识图谱实体及其所有关联关系"""
     from app.services.kg_update_service import get_kg_update_service
     try:
@@ -566,7 +577,10 @@ async def delete_kg_entity(request: KGEntityDeleteRequest):
 
 
 @router.post("/graph/relationships")
-async def add_kg_relationship(request: KGRelationshipCreateRequest):
+async def add_kg_relationship(
+    request: KGRelationshipCreateRequest,
+    current_user: dict = Depends(require_kg_editor),
+):
     """添加知识图谱关系（MERGE 语义，幂等）
     
     支持的关系类型：HAS_SYMPTOM, TREATED_BY, REQUIRES_EXAM, BELONGS_TO, INTERACTS_WITH, CONTRAINDICATED_FOR
@@ -589,7 +603,11 @@ async def add_kg_relationship(request: KGRelationshipCreateRequest):
 
 
 @router.post("/graph/update-from-text")
-async def update_kg_from_text(text: str, source: str = "manual"):
+async def update_kg_from_text(
+    text: str,
+    source: str = "manual",
+    current_user: dict = Depends(require_kg_editor),
+):
     """从文本中抽取医疗实体并增量更新知识图谱
     
     适用于用户提交一段医疗文本，系统自动识别实体并更新知识图谱。
