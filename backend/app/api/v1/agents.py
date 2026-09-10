@@ -1,5 +1,6 @@
 """Agent管理API - 增强版（统一响应格式、标准化错误处理、健康检查聚合）"""
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 from app.agents.doctor_agent import DoctorAgent
@@ -184,18 +185,20 @@ async def get_agent_stats(agent_id: str):
 async def check_agent_health(agent_id: str):
     """执行Agent健康检查"""
     agent = _get_agent_or_raise(agent_id)
-    
+
     health = agent.health_check()
-    status = health.get("status", "unknown")
-    
-    http_status = status.HTTP_200_OK
-    if status == "unhealthy":
+    health_status = health.get("status", "unknown")
+
+    if health_status == "unhealthy":
         http_status = status.HTTP_503_SERVICE_UNAVAILABLE
-    elif status == "degraded":
+    else:
         http_status = status.HTTP_200_OK
-    
-    return {
-        "success": status != "unhealthy",
-        "data": health,
-        "message": f"Agent '{agent_id}' 健康状态: {status}"
-    }
+
+    return JSONResponse(
+        status_code=http_status,
+        content={
+            "success": health_status != "unhealthy",
+            "data": health,
+            "message": f"Agent '{agent_id}' 健康状态: {health_status}",
+        },
+    )

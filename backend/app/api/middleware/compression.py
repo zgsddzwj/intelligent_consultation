@@ -46,8 +46,8 @@ class CompressionMiddleware(BaseHTTPMiddleware):
         if content_encoding:
             return response
         
-        # 如果客户端支持gzip且响应体足够大，进行压缩
-        if supports_gzip and hasattr(response, "body"):
+        # 客户端是否支持 gzip 已在入口判断；此处仅压缩有响应体的普通响应
+        if hasattr(response, "body"):
             try:
                 body = response.body
                 if body and len(body) > self.MIN_SIZE:
