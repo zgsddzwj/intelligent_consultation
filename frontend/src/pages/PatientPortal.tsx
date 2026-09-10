@@ -14,7 +14,7 @@ import { ChatMessage, TypingIndicator, WelcomeScreen } from '../components/chat'
 import VoiceInput from '../components/voice/VoiceInput'
 import { consultationApi } from '../services/consultation'
 import { useConsultationStore } from '../stores/consultation'
-import { post, ApiError } from '../services/api'
+import { post, ApiError, createCancellableRequest } from '../services/api'
 import { getAuthUser } from '../services/auth'
 import type { ChatRequest } from '../types/chat'
 
@@ -45,6 +45,15 @@ export default function PatientPortal() {
   const thinkingStepsRef = useRef<Array<{ content: string; ts: number }>>([])  // 累加 thinking 步骤
   const [isStreaming, setIsStreaming] = useState(false)
   const [hasFirstToken, setHasFirstToken] = useState(false)
+  const streamCancelRef = useRef<(() => void) | null>(null)
+
+  // 组件卸载时中断进行中的流式请求，防止残留回调污染新会话
+  useEffect(() => {
+    return () => {
+      streamCancelRef.current?.()
+      streamCancelRef.current = null
+    }
+  }, [])
   const [input, setInput] = useState('')
   const [isComposing, setIsComposing] = useState(false) // 中文输入法组合状态
 
@@ -76,7 +85,13 @@ export default function PatientPortal() {
     // 添加一个占位的 assistant 消息
     addMessage({ role: 'assistant', content: '', isStreaming: true, isThinking: true })
 
-    await consultationApi.chatStream(buildChatRequest(msg), {
+    const cancellable = createCancellableRequest()
+    streamCancelRef.current = cancellable.cancel
+
+    try {
+      await consultationApi.chatStream(
+        buildChatRequest(msg),
+        {
       onStart: (cid) => {
         if (cid) setConsultationId(cid)
       },
@@ -109,15 +124,20 @@ export default function PatientPortal() {
         contentRef.current = ''
         thinkingStepsRef.current = []
       },
-      onError: (error) => {
-        message.error('发送失败: ' + error)
-        updateLastMessage({ content: '抱歉，处理您的咨询时遇到问题，请重试。', isStreaming: false, isThinking: false })
-        setIsStreaming(false)
-        setHasFirstToken(false)
-        contentRef.current = ''
-        thinkingStepsRef.current = []
-      },
-    })
+        onError: (error) => {
+          message.error('发送失败: ' + error)
+          updateLastMessage({ content: '抱歉，处理您的咨询时遇到问题，请重试。', isStreaming: false, isThinking: false })
+          setIsStreaming(false)
+          setHasFirstToken(false)
+          contentRef.current = ''
+          thinkingStepsRef.current = []
+        },
+        },
+        { signal: cancellable.signal }
+      )
+    } finally {
+      streamCancelRef.current = null
+    }
   }, [consultationId, addMessage, updateLastMessage, setConsultationId])
 
   const handleSend = useCallback(() => {
@@ -229,6 +249,13 @@ export default function PatientPortal() {
                 type="text"
                 icon={<DeleteOutlined />}
                 onClick={() => {
+                  // 中断进行中的流式请求并复位状态，避免残留回调污染清空后的会话
+                  streamCancelRef.current?.()
+                  streamCancelRef.current = null
+                  setIsStreaming(false)
+                  setHasFirstToken(false)
+                  contentRef.current = ''
+                  thinkingStepsRef.current = []
                   clearMessages()
                   message.success('对话已清空')
                 }}
