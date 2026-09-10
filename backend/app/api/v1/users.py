@@ -74,11 +74,10 @@ def _clear_login_failures(username: str) -> None:
 
 
 class UserCreate(BaseModel):
-    """创建用户请求"""
+    """创建用户请求（角色固定为患者，角色变更仅允许管理员端点操作）"""
     username: str
     email: str
     password: str
-    role: Optional[str] = "patient"
 
 
 class UserLogin(BaseModel):
@@ -123,9 +122,9 @@ async def register_user(
     if existing_email:
         raise ValidationException("邮箱已存在", error_code=ErrorCode.VALIDATION_ERROR)
     
-    # 创建用户
+    # 创建用户（公开注册一律为患者角色，防止自选 admin 提权）
     hashed_password = get_password_hash(user.password)
-    role = UserRole(user.role) if user.role in [r.value for r in UserRole] else UserRole.PATIENT
+    role = UserRole.PATIENT
     
     new_user = user_repo.create(
         username=user.username,

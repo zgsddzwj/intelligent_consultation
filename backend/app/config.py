@@ -1,4 +1,5 @@
 """应用配置管理"""
+import warnings
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import model_validator
 from typing import List, Optional
@@ -218,7 +219,6 @@ class Settings(BaseSettings):
                 )
             else:
                 import secrets
-                import warnings
                 object.__setattr__(self, 'SECRET_KEY', secrets.token_urlsafe(32))
                 warnings.warn(
                     "SECRET_KEY 未配置，已自动生成临时密钥。"
@@ -228,7 +228,6 @@ class Settings(BaseSettings):
 
         # 生产环境强制关闭 DEBUG
         if self.ENVIRONMENT == "production" and self.DEBUG:
-            import warnings
             object.__setattr__(self, 'DEBUG', False)
             warnings.warn(
                 "生产环境不应开启 DEBUG 模式，已自动关闭",
@@ -238,6 +237,14 @@ class Settings(BaseSettings):
         # 生产环境强制开启 RATE_LIMIT_FAIL_CLOSED
         if self.ENVIRONMENT == "production" and not self.RATE_LIMIT_FAIL_CLOSED:
             object.__setattr__(self, 'RATE_LIMIT_FAIL_CLOSED', True)
+
+        # 生产环境强制开启认证中间件（防止整站 API 匿名可访问）
+        if self.ENVIRONMENT == "production" and not self.ENABLE_AUTH_MIDDLEWARE:
+            object.__setattr__(self, 'ENABLE_AUTH_MIDDLEWARE', True)
+            warnings.warn(
+                "生产环境已强制开启认证中间件（ENABLE_AUTH_MIDDLEWARE=True）",
+                RuntimeWarning
+            )
 
         return self
 
