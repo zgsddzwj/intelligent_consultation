@@ -6,6 +6,10 @@ from app.utils.security import get_password_hash
 
 @pytest.fixture
 def registered_user(db_session):
+    # 函数级fixture复用同一测试库，先清理同名用户防止UNIQUE冲突
+    db_session.query(User).filter(User.username.in_(["testauth", "newuser"])).delete(synchronize_session=False)
+    db_session.commit()
+
     user = User(
         username="testauth",
         email="testauth@example.com",

@@ -160,7 +160,11 @@ def setup_logger():
                 "traceback": record["exception"].traceback
             }
 
-        return json.dumps(log_data, ensure_ascii=False) + "\n"
+        # loguru会把format函数返回值再当format模板执行format_map，
+        # JSON花括号被误解析为占位符（每条日志刷KeyError traceback）；
+        # 官方做法：序列化结果存入extra，模板仅引用该字段
+        record["extra"]["serialized"] = json.dumps(log_data, ensure_ascii=False)
+        return "{extra[serialized]}" + "\n"
 
     # 控制台输出
     if settings.ENVIRONMENT == "development":

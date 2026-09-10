@@ -20,9 +20,11 @@ def test_root_endpoint(client: TestClient):
     response = client.get("/")
     assert response.status_code == 200
     data = response.json()
-    assert "name" in data
-    assert "version" in data
-    assert "status" in data
+    # 统一响应包装：业务数据在 data 字段下
+    body = data.get("data", data)
+    assert "name" in body
+    assert "version" in body
+    assert "status" in body
 
 
 @pytest.mark.integration

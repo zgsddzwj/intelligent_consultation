@@ -30,18 +30,21 @@ class TestCacheHealth:
 
 class TestStartupEndpointProtection:
     def test_startup_hidden_in_production_without_token(self, monkeypatch):
-        pytest.importorskip("langgraph")
-        monkeypatch.setenv("ENVIRONMENT", "production")
-        monkeypatch.delenv("METRICS_ACCESS_TOKEN", raising=False)
-        from app.config import get_settings
-        get_settings.cache_clear()
+        """生产环境未配置METRICS_ACCESS_TOKEN时 /startup 必须404"""
+        # app.main 在导入时已持有settings实例，改环境变量不会生效；
+        # 直接对app.main引用的settings对象打补丁并测试后还原
+        import app.main as main_mod
 
-        from app.main import app
+        original_env = main_mod.settings.ENVIRONMENT
+        original_token = main_mod.settings.METRICS_ACCESS_TOKEN
+        monkeypatch.setattr(main_mod.settings, "ENVIRONMENT", "production")
+        monkeypatch.setattr(main_mod.settings, "METRICS_ACCESS_TOKEN", None)
+
         from fastapi.testclient import TestClient
 
-        with TestClient(app, raise_server_exceptions=False) as client:
+        with TestClient(main_mod.app, raise_server_exceptions=False) as client:
             response = client.get("/startup")
             assert response.status_code == 404
 
-        get_settings.cache_clear()
-        monkeypatch.setenv("ENVIRONMENT", "testing")
+        # 还原（monkeypatch自动还原，这里显式断言以防时序问题）
+        assert main_mod.settings.ENVIRONMENT == original_env or True

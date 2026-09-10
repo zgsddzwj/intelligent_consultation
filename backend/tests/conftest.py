@@ -3,7 +3,9 @@ import os
 
 # 必须在导入 app 模块之前设置，确保 Settings 与数据库引擎使用测试配置
 os.environ.setdefault("ENVIRONMENT", "testing")
-os.environ.setdefault("DATABASE_URL", "sqlite:///./test.db")
+# 每个pytest-xdist worker独立数据库文件，避免并行写同一文件导致flaky
+_worker = os.environ.get("PYTEST_XDIST_WORKER", "master")
+os.environ.setdefault("DATABASE_URL", f"sqlite:///./test_{_worker}.db")
 os.environ.setdefault("SECRET_KEY", "test-secret-key-for-testing")
 os.environ.setdefault("SILICONFLOW_API_KEY", "test-key")
 os.environ.setdefault("STARTUP_FAIL_FAST", "false")
@@ -31,39 +33,31 @@ TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_eng
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_env():
-    """设置测试环境"""
-    try:
-        from app.database.base import Base
-        Base.metadata.create_all(bind=test_engine)
-        yield
-        Base.metadata.drop_all(bind=test_engine)
-    except Exception as e:
-        pytest.skip(f"无法设置测试环境: {e}")
+    """设置测试环境（失败直接暴露错误，禁止skip掩盖导入/建表问题）"""
+    from app.database.base import Base
+    # 先清理上次异常退出残留的库（否则UNIQUE约束冲突），再建表
+    Base.metadata.drop_all(bind=test_engine)
+    Base.metadata.create_all(bind=test_engine)
+    yield
+    Base.metadata.drop_all(bind=test_engine)
 
 
 @pytest.fixture(scope="function")
 def db_session():
     """创建测试数据库会话"""
+    db = TestSessionLocal()
     try:
-        from app.database.base import Base
-        db = TestSessionLocal()
-        try:
-            yield db
-        finally:
-            db.close()
-    except Exception as e:
-        pytest.skip(f"无法创建数据库会话: {e}")
+        yield db
+    finally:
+        db.close()
 
 
 @pytest.fixture(scope="function")
 def client():
     """创建测试客户端"""
-    try:
-        from app.main import app
-        with TestClient(app, raise_server_exceptions=False) as test_client:
-            yield test_client
-    except Exception as e:
-        pytest.skip(f"无法创建测试客户端: {e}")
+    from app.main import app
+    with TestClient(app, raise_server_exceptions=False) as test_client:
+        yield test_client
 
 
 @pytest.fixture
@@ -125,7 +119,9 @@ def mock_redis(monkeypatch):
 
     mock = MockRedis()
     monkeypatch.setattr("app.services.redis_service.redis_service", mock)
-    monkeypatch.setattr("app.infrastructure.cache.redis_service", mock)
+    # cache.py 通过 _get_redis() 延迟导入，需同时补丁该入口
+    import app.infrastructure.cache as cache_mod
+    monkeypatch.setattr(cache_mod, "_get_redis", lambda: mock)
     return mock
 
 

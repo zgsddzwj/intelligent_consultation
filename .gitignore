@@ -106,3 +106,7 @@ data/external/
 # 截屏文件（避免提交本地截图）
 截屏*.png
 截图*.png
+
+# 测试数据库文件
+test_*.db
+*.db-journal
