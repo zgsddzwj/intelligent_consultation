@@ -29,6 +29,7 @@ COPY --from=builder /build/dist /usr/share/nginx/html
 
 # 自定义nginx配置
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY nginx-security-headers.conf /etc/nginx/conf.d/nginx-security-headers.conf
 
 # 暴露端口
 EXPOSE 80
