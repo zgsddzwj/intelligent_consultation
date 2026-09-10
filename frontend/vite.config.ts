@@ -34,17 +34,24 @@ export default defineConfig(({ mode }) => ({
       output: {
         // 手动分块策略：将大型第三方库拆分为独立 chunk
         manualChunks(id) {
-          // React 生态核心库
-          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router-dom')) {
+          // 注意：匹配顺序敏感——react-force-graph/react-markdown 等
+          // 包名含"react"子串，必须先于 React 生态判断，否则被误吸入 react-core
+          // 图谱可视化（含整个d3家族，体积大）
+          if (id.includes('node_modules/react-force-graph') || id.includes('node_modules/force-graph') || id.includes('node_modules/d3-')) {
+            return 'graph-viz'
+          }
+          // React 生态核心库（精确匹配包目录，避免子串误匹配）
+          if (
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/react-router') ||
+            id.includes('node_modules/scheduler/')
+          ) {
             return 'react-core'
           }
           // Ant Design 组件库体积较大，单独拆分
-          if (id.includes('node_modules/antd') || id.includes('node_modules/@ant-design')) {
+          if (id.includes('node_modules/antd') || id.includes('node_modules/@ant-design') || id.includes('node_modules/rc-')) {
             return 'antd'
-          }
-          // 数据可视化相关
-          if (id.includes('node_modules/react-force-graph')) {
-            return 'graph-viz'
           }
           // 其他 node_modules 按通用 vendor 打包
           if (id.includes('node_modules')) {
@@ -73,9 +80,8 @@ export default defineConfig(({ mode }) => ({
     minify: 'terser',
     terserOptions: {
       compress: {
-        drop_console: true,      // 移除所有 console
+        drop_console: true,      // 移除所有 console（含 pure_funcs 覆盖的子集，二者取其一即可）
         drop_debugger: true,     // 移除 debugger
-        pure_funcs: ['console.log', 'console.info'], // 移除指定函数调用
       },
       format: {
         comments: false,         // 移除注释
