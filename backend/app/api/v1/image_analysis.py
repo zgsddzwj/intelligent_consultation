@@ -8,14 +8,36 @@ from app.config import get_settings
 from app.infrastructure.retry import retry
 from app.common.exceptions import LLMServiceException, ErrorCode
 from app.prompts import ImagePrompts, KnowledgePrompts
+import asyncio
 import base64
 import json
 import re
+import threading
 import time
 
 settings = get_settings()
 
 router = APIRouter()
+
+# 视觉模型客户端单例（避免每次请求重建HTTP连接池）
+_vision_client = None
+_vision_client_lock = threading.Lock()
+
+
+def _get_vision_client():
+    """获取硅基流动视觉模型客户端（线程安全懒加载单例）"""
+    global _vision_client
+    if _vision_client is None:
+        with _vision_client_lock:
+            if _vision_client is None:
+                from openai import OpenAI
+                _vision_client = OpenAI(
+                    api_key=settings.SILICONFLOW_API_KEY,
+                    base_url=settings.SILICONFLOW_BASE_URL,
+                    timeout=30,
+                    max_retries=2,
+                )
+    return _vision_client
 
 
 # ==================== 请求/响应模型 ====================
@@ -152,16 +174,9 @@ def _parse_diagnosis_json(raw_text: str) -> Dict[str, Any]:
 def _call_vision_model(image_base64: str, prompt: str) -> str:
     """
     调用硅基流动多模态视觉模型进行图片分析（带重试机制）
-    使用 OpenAI 兼容 API 格式
+    使用 OpenAI 兼容 API 格式。同步阻塞函数，调用方必须通过 asyncio.to_thread 执行。
     """
-    from openai import OpenAI
-
-    client = OpenAI(
-        api_key=settings.SILICONFLOW_API_KEY,
-        base_url=settings.SILICONFLOW_BASE_URL,
-        timeout=30,
-        max_retries=2,
-    )
+    client = _get_vision_client()
 
     messages = [
         {
@@ -250,16 +265,17 @@ async def analyze_medical_image(
 
         image_base64 = base64.b64encode(image_content).decode('utf-8')
 
-        # 使用硅基流动视觉模型进行图片分析
-        analysis_text = _call_vision_model(image_base64, prompt)
+        # 使用硅基流动视觉模型进行图片分析（同步调用放入线程池，避免阻塞事件循环）
+        analysis_text = await asyncio.to_thread(_call_vision_model, image_base64, prompt)
 
-        # 使用LLM进一步提取结构化医疗术语
+        # 使用LLM进一步提取结构化医疗术语（同步调用放入线程池）
         extraction_prompt = KnowledgePrompts.format_image_terms_classify_prompt(analysis_text)
 
         from app.services.llm_service import llm_service
-        extraction_result = llm_service.generate(
+        extraction_result = await asyncio.to_thread(
+            llm_service.generate,
             prompt=extraction_prompt,
-            temperature=0.1
+            temperature=0.1,
         )
 
         medical_terms = _parse_medical_terms_json(extraction_result)
@@ -285,6 +301,62 @@ async def analyze_medical_image(
         raise HTTPException(status_code=500, detail="图片分析服务暂时不可用，请稍后重试")
 
 
+def _query_kg_for_terms(terms: List[Dict[str, str]]) -> List[Dict[str, Any]]:
+    """按术语列表查询知识图谱（同步阻塞函数，调用方须通过 asyncio.to_thread 执行）"""
+    from app.knowledge.graph.neo4j_client import get_neo4j_client
+    from app.knowledge.graph.queries import CypherQueries
+
+    queries = CypherQueries()
+    graph_results = []
+    query_errors = 0
+    neo4j = get_neo4j_client()
+
+    for term_info in terms:
+        term = term_info.get("term", "").strip()
+        term_type = term_info.get("type", "")
+
+        if not term:
+            continue
+
+        try:
+            if term_type == "疾病":
+                cypher_query = queries.find_disease_by_name(term)
+                graph_data = neo4j.execute_query(cypher_query, {"name": term})
+            elif term_type == "药物":
+                cypher_query = "MATCH (d:Drug {name: $name}) RETURN d LIMIT 5"
+                graph_data = neo4j.execute_query(cypher_query, {"name": term})
+            elif term_type == "症状":
+                cypher_query = "MATCH (s:Symptom {name: $name}) RETURN s LIMIT 5"
+                graph_data = neo4j.execute_query(cypher_query, {"name": term})
+            elif term_type == "检查":
+                cypher_query = "MATCH (e:Examination {name: $name}) RETURN e LIMIT 5"
+                graph_data = neo4j.execute_query(cypher_query, {"name": term})
+            else:
+                cypher_query = """
+                MATCH (n) WHERE n.name CONTAINS $name
+                RETURN n, labels(n) as nodeType
+                LIMIT 5
+                """
+                graph_data = neo4j.execute_query(cypher_query, {"name": term})
+
+            if graph_data:
+                graph_results.append({
+                    "term": term,
+                    "type": term_type,
+                    "graph_data": graph_data
+                })
+
+        except Exception as e:
+            query_errors += 1
+            app_logger.warning(f"知识图谱查询失败（术语: {term}, 类型: {term_type}）: {e}")
+            continue
+
+    if query_errors > 0:
+        app_logger.info(f"知识图谱查询完成: {len(graph_results)} 成功, {query_errors} 失败")
+
+    return graph_results
+
+
 @router.post("/extract-terms")
 async def extract_medical_terms_from_image(
     file: UploadFile = File(...)
@@ -305,57 +377,9 @@ async def extract_medical_terms_from_image(
                 "message": "未检测到可查询的医疗术语"
             }
 
-        from app.knowledge.graph.neo4j_client import get_neo4j_client
-        from app.knowledge.graph.queries import CypherQueries
-
-        queries = CypherQueries()
-        graph_results = []
-        query_errors = 0
-
-        for term_info in analysis_result.medical_terms:
-            term = term_info.get("term", "").strip()
-            term_type = term_info.get("type", "")
-
-            if not term:
-                continue
-
-            try:
-                neo4j = get_neo4j_client()
-
-                if term_type == "疾病":
-                    cypher_query = queries.find_disease_by_name(term)
-                    graph_data = neo4j.execute_query(cypher_query, {"name": term})
-                elif term_type == "药物":
-                    cypher_query = "MATCH (d:Drug {name: $name}) RETURN d LIMIT 5"
-                    graph_data = neo4j.execute_query(cypher_query, {"name": term})
-                elif term_type == "症状":
-                    cypher_query = "MATCH (s:Symptom {name: $name}) RETURN s LIMIT 5"
-                    graph_data = neo4j.execute_query(cypher_query, {"name": term})
-                elif term_type == "检查":
-                    cypher_query = "MATCH (e:Examination {name: $name}) RETURN e LIMIT 5"
-                    graph_data = neo4j.execute_query(cypher_query, {"name": term})
-                else:
-                    cypher_query = """
-                    MATCH (n) WHERE n.name CONTAINS $name
-                    RETURN n, labels(n) as nodeType
-                    LIMIT 5
-                    """
-                    graph_data = neo4j.execute_query(cypher_query, {"name": term})
-
-                if graph_data:
-                    graph_results.append({
-                        "term": term,
-                        "type": term_type,
-                        "graph_data": graph_data
-                    })
-
-            except Exception as e:
-                query_errors += 1
-                app_logger.warning(f"知识图谱查询失败（术语: {term}, 类型: {term_type}）: {e}")
-                continue
-
-        if query_errors > 0:
-            app_logger.info(f"知识图谱查询完成: {len(graph_results)} 成功, {query_errors} 失败")
+        graph_results = await asyncio.to_thread(
+            _query_kg_for_terms, analysis_result.medical_terms
+        )
 
         return {
             "analysis": {
@@ -372,6 +396,44 @@ async def extract_medical_terms_from_image(
     except Exception as e:
         app_logger.error(f"提取医疗术语失败: {e}")
         raise HTTPException(status_code=500, detail="提取医疗术语失败，请稍后重试")
+
+
+def _query_kg_for_findings(image_type: str, findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """按诊断发现查询知识图谱关联（同步阻塞函数，调用方须通过 asyncio.to_thread 执行）"""
+    from app.knowledge.graph.neo4j_client import get_neo4j_client
+
+    neo4j = get_neo4j_client()
+    kg_refs = []
+    for finding in findings:
+        item_name = finding.get("item", "")
+        if not item_name:
+            continue
+
+        # 根据图片类型选择查询策略
+        if image_type == "lab_report":
+            kg_query = """
+            MATCH (n) WHERE n.name CONTAINS $name
+            RETURN n.name as name, labels(n) as type LIMIT 3
+            """
+        else:
+            kg_query = """
+            MATCH (d:Disease)-[:HAS_SYMPTOM|TREATED_BY|REQUIRES_EXAM]->(r)
+            WHERE d.name CONTAINS $name OR r.name CONTAINS $name
+            RETURN d.name as disease, type(r) as rel_type, r.name as related
+            LIMIT 5
+            """
+
+        try:
+            results = neo4j.execute_query(kg_query, {"name": item_name})
+            if results:
+                kg_refs.append({
+                    "finding": item_name,
+                    "kg_data": results[:5]
+                })
+        except Exception as e:
+            app_logger.debug(f"KG关联查询失败: {item_name} - {e}")
+
+    return kg_refs
 
 
 @router.post("/diagnose", response_model=MultimodalDiagnosisResponse)
@@ -410,8 +472,8 @@ async def diagnose_from_image(
         # 构建多模态诊断 Prompt
         diagnosis_prompt = ImagePrompts.format_diagnosis_report_prompt(patient_context)
 
-        # 调用硅基流动视觉模型进行诊断
-        raw_result = _call_vision_model(image_base64, diagnosis_prompt)
+        # 调用硅基流动视觉模型进行诊断（同步调用放入线程池）
+        raw_result = await asyncio.to_thread(_call_vision_model, image_base64, diagnosis_prompt)
         parsed = _parse_diagnosis_json(raw_result)
 
         # 构建响应
@@ -425,41 +487,11 @@ async def diagnose_from_image(
             kg_references=[],
         )
 
-        # 知识图谱关联查询
+        # 知识图谱关联查询（同步调用放入线程池）
         try:
-            from app.knowledge.graph.neo4j_client import get_neo4j_client
-            neo4j = get_neo4j_client()
-
-            kg_refs = []
-            for finding in response.findings:
-                item_name = finding.get("item", "")
-                if not item_name:
-                    continue
-
-                # 根据图片类型选择查询策略
-                if response.image_type == "lab_report":
-                    kg_query = """
-                    MATCH (n) WHERE n.name CONTAINS $name
-                    RETURN n.name as name, labels(n) as type LIMIT 3
-                    """
-                else:
-                    kg_query = """
-                    MATCH (d:Disease)-[:HAS_SYMPTOM|TREATED_BY|REQUIRES_EXAM]->(r)
-                    WHERE d.name CONTAINS $name OR r.name CONTAINS $name
-                    RETURN d.name as disease, type(r) as rel_type, r.name as related
-                    LIMIT 5
-                    """
-
-                try:
-                    results = neo4j.execute_query(kg_query, {"name": item_name})
-                    if results:
-                        kg_refs.append({
-                            "finding": item_name,
-                            "kg_data": results[:5]
-                        })
-                except Exception as e:
-                    app_logger.debug(f"KG关联查询失败: {item_name} - {e}")
-
+            kg_refs = await asyncio.to_thread(
+                _query_kg_for_findings, response.image_type, response.findings
+            )
             response.kg_references = kg_refs
         except Exception as kg_err:
             app_logger.warning(f"诊断知识图谱关联查询失败（不影响诊断结果）: {kg_err}")
