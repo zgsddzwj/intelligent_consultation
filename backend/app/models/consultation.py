@@ -1,5 +1,6 @@
 """咨询记录模型"""
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON, Enum
+from sqlalchemy.ext.mutable import MutableList, MutableDict
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
@@ -30,8 +31,10 @@ class Consultation(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     agent_type = Column(Enum(AgentType), nullable=False)
     status = Column(Enum(ConsultationStatus), default=ConsultationStatus.PENDING, nullable=False)
-    messages = Column(JSON, default=list)  # 存储对话消息
-    meta_data = Column("metadata", JSON, default=dict)  # 存储额外信息（如风险等级、来源等）
+    # MutableList/MutableDict 跟踪原地变更：普通JSON列对 messages.append 的原地修改
+    # 因新旧值相等不会被写入 UPDATE，导致对话历史静默丢失
+    messages = Column(MutableList.as_mutable(JSON), default=list)  # 存储对话消息
+    meta_data = Column(MutableDict.as_mutable(JSON), default=dict)  # 存储额外信息（如风险等级、来源等）
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     

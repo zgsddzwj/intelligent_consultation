@@ -147,8 +147,8 @@ def _update_consultation_messages(
     sources: List[SourceItem],
     risk_level: Optional[str] = None
 ) -> None:
-    """更新咨询记录的消息列表"""
-    messages = consultation.messages or []
+    """更新咨询记录的消息列表（整体重新赋值，确保SQLAlchemy检测到变更）"""
+    messages = list(consultation.messages or [])
     messages.append({"role": "user", "content": user_message})
     messages.append({
         "role": "assistant",
