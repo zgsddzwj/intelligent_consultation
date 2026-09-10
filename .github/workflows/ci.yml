@@ -332,6 +332,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Compute short SHA
+        id: imgsha
+        run: echo "short=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - name: Extract metadata (backend)
         id: meta-backend
         uses: docker/metadata-action@v5
@@ -378,7 +382,7 @@ jobs:
       - name: Run Trivy vulnerability scanner (backend)
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.ref_name }}-${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:${{ github.ref_name }}-${{ steps.imgsha.outputs.short }}
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
           exit-code: '1'
@@ -387,7 +391,7 @@ jobs:
       - name: Run Trivy vulnerability scanner (frontend)
         uses: aquasecurity/trivy-action@0.28.0
         with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.ref_name }}-${{ github.sha }}
+          image-ref: ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE }}:${{ github.ref_name }}-${{ steps.imgsha.outputs.short }}
           format: 'sarif'
           output: 'trivy-frontend-results.sarif'
           exit-code: '1'

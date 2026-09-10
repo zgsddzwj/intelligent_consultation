@@ -73,8 +73,7 @@ spec:
             configMapKeyRef:
               name: medical-config
               key: TRUSTED_HOSTS
-        - name: DATABASE_URL
-          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB)"
+        # 注意：K8s env 只解析先定义变量的 $(VAR) 引用，必须先声明 POSTGRES_* 再组装 DATABASE_URL
         - name: POSTGRES_USER
           valueFrom:
             secretKeyRef:
@@ -90,6 +89,8 @@ spec:
             secretKeyRef:
               name: medical-secrets
               key: POSTGRES_DB
+        - name: DATABASE_URL
+          value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@postgres-service:5432/$(POSTGRES_DB)"
         - name: REDIS_URL
           value: "redis://redis-service:6379/0"
         - name: NEO4J_URI

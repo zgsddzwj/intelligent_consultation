@@ -35,6 +35,11 @@ spec:
                   values:
                   - frontend
               topologyKey: kubernetes.io/hostname
+      volumes:
+      - name: nginx-cache
+        emptyDir: {}
+      - name: nginx-run
+        emptyDir: {}
       containers:
       - name: frontend
         image: ghcr.io/zgsddzwj/intelligent_consultation/frontend:latest
@@ -42,6 +47,12 @@ spec:
         ports:
         - containerPort: 80
           name: http
+        # readOnlyRootFilesystem 下 nginx 需要的可写目录（pid/临时文件/缓存）
+        volumeMounts:
+        - name: nginx-cache
+          mountPath: /var/cache/nginx
+        - name: nginx-run
+          mountPath: /var/run
         resources:
           requests:
             memory: "128Mi"

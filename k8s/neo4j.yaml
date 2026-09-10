@@ -24,13 +24,14 @@ spec:
         - containerPort: 7687
           name: bolt
         env:
-        - name: NEO4J_AUTH
-          value: "neo4j/$(NEO4J_PASSWORD)"
+        # 注意：$(VAR) 引用只解析先定义的变量，NEO4J_PASSWORD 必须在 NEO4J_AUTH 之前
         - name: NEO4J_PASSWORD
           valueFrom:
             secretKeyRef:
               name: medical-secrets
               key: NEO4J_PASSWORD
+        - name: NEO4J_AUTH
+          value: "neo4j/$(NEO4J_PASSWORD)"
         - name: NEO4J_PLUGINS
           value: '["apoc"]'
         resources:
