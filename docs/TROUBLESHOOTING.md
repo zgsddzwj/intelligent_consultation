@@ -96,7 +96,7 @@ class ServiceFactory:
 | # | 瓶颈 | 耗时 | 原因 |
 |---|------|------|------|
 | 1 | **KG 重复查询** | ~15-18s | `doctor_agent` 并行调了 `execute_kg()` 和 `execute_rag()`，而 RAG 内部 `MultiRetrieval` 又调了一次 KG |
-| 2 | **LLM-based NER** | ~5-8s/次 | `MedicalEntityRecognizer.extract_entities()` 每次调 DeepSeek 做实体识别，被调 2 次 |
+| 2 | **LLM-based NER** | ~5-8s/次 | `MedicalEntityRecognizer.extract_entities()` 每次调 LLM 做实体识别，被调 2 次 |
 | 3 | **N+1 Neo4j 查询** | ~3-5s | `extract_with_kg_validation()` 对每个实体做单独验证查询；`retrieve_by_entity()` 对每个疾病做 4 次查询 |
 | 4 | **串行多路检索** | ~6s | `MultiRetrieval` 串行执行向量/BM25/KG 检索，不可用服务各阻塞 3s |
 | 5 | **Neo4j 重试退避** | ~3s | 连接失败后重试 3 次，每次 sleep 0.5s+ |

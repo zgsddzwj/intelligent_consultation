@@ -121,7 +121,7 @@ intent = classifier.classify("我头痛该吃什么药？")
 结合多种检索算法的优势，提高召回率。
 
 - **BM25检索器** (`bm25_retriever.py`): 基于关键词匹配，使用 `rank-bm25` 和 `jieba` 分词。对精确匹配效果好。
-- **语义检索器** (`semantic_retriever.py`): 基于向量相似度，利用 Qwen 进行查询扩展和重写，解决语义匹配问题。
+- **语义检索器** (`semantic_retriever.py`): 基于向量相似度，使用规则化同义词扩展（零LLM开销）与批量文档编码，解决语义匹配问题。
 - **知识图谱检索器** (`kg_retriever.py`): 从 Neo4j 检索实体及其关系，提供结构化知识补充。
 - **融合算法** (`multi_retrieval.py`): 使用 RRF (Reciprocal Rank Fusion) 算法融合各路结果。
   - 权重配置：向量(0.4) + BM25(0.3) + 语义(0.2) + 图谱(0.1)
@@ -133,7 +133,7 @@ intent = classifier.classify("我头痛该吃什么药？")
 - **PDF处理** (`document_processor.py`, `pdfplumber`): 提取文本布局。
 - **多模态解析** (`image_processor.py`):
   - 使用 **PaddleOCR** 识别图片文字。
-  - 使用 **Qwen-VL** 理解图片内容并生成描述。
+  - 使用 **硅基流动视觉模型** (Qwen2.5-VL) 理解图片内容并生成描述。
   - 图片和文本关联存储，支持跨模态检索。
 
 ### 3. 专业重排序 (Reranking)

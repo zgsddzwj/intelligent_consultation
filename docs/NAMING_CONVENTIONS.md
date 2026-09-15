@@ -128,7 +128,7 @@ backend/app/
 │   │
 │   ├── external/                 # 外部服务
 │   │   ├── llm/
-│   │   │   └── qwen_client.py
+│   │   │   └── llm_service.py
 │   │   ├── vector_db/
 │   │   │   └── milvus_client.py
 │   │   ├── graph_db/

@@ -31,7 +31,7 @@
 - ✅ 图片上传功能
 
 ### 5. 图片分析
-- ✅ Qwen-VL图片识别
+- ✅ 多模态图片识别（硅基流动视觉模型）
 - ✅ 医疗术语提取
 - ✅ 知识图谱关联
 
@@ -150,7 +150,7 @@ uv run python scripts/maintenance/test_system.py
 - **Neo4j未连接**：知识图谱功能不可用，但其他功能正常
 
 ### 必需配置
-- ✅ Qwen API密钥（已配置）
+- ✅ 硅基流动 API密钥（已配置）
 - ⚠️ 数据库服务（PostgreSQL、Redis、Neo4j、Milvus）
 
 ### 可选配置

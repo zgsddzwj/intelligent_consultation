@@ -45,7 +45,7 @@ graph TB
     end
     
     subgraph ExternalServices["外部服务"]
-        QwenAPI[Qwen API<br/>LLM服务]
+        LLMProvider[硅基流动<br/>LLM服务]
         PaddleOCR[PaddleOCR<br/>OCR服务]
     end
     
@@ -64,7 +64,7 @@ graph TB
     Repository --> Milvus
     Repository --> ObjectStorage
     Service --> External
-    External --> QwenAPI
+    External --> LLMProvider
     External --> PaddleOCR
     Agent --> Tool
     Knowledge --> Tool
@@ -187,7 +187,7 @@ graph TB
   - 外部API调用
   - 第三方服务集成
 - **服务**:
-  - `LLMService`: Qwen API集成
+  - `LLMService`: 硅基流动 (SiliconFlow) API集成，兼容OpenAI格式
   - `MilvusService`: Milvus向量数据库
   - `RedisService`: Redis缓存
   - `ObjectStorageService`: 对象存储服务 (MinIO/S3/OSS)
@@ -435,7 +435,7 @@ graph TB
     end
     
     subgraph External["外部服务"]
-        Qwen[Qwen API]
+        SF[硅基流动 SiliconFlow]
     end
     
     Browser --> Nginx
@@ -447,7 +447,7 @@ graph TB
     Backend --> Neo4j
     Backend --> Milvus
     Backend --> MinIO
-    Backend --> Qwen
+    Backend --> SF
     Frontend --> Backend
 ```
 

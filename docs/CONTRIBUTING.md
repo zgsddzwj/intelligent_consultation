@@ -156,7 +156,7 @@ backend/app/
 ├── agents/          # 多 Agent 系统（LangGraph 编排）
 ├── api/v1/          # API 路由层
 ├── common/          # 公共模块（异常、安全、追踪）
-├── database/        # 数据库层（PostgreSQL + 读写分离）
+├── database/        # 数据库层（PostgreSQL 连接池/慢查询监控）
 ├── infrastructure/  # 基础设施（缓存、监控、限流、仓储）
 ├── knowledge/       # 知识层（RAG + 知识图谱 + ML）
 ├── models/          # 数据模型（SQLAlchemy）
