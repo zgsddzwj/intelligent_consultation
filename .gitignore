@@ -41,7 +41,8 @@ ENV/
 # Logs
 *.log
 logs/
-backend/logs/*.zip  # 压缩的日志文件
+# 压缩的日志文件（注意：gitignore不支持行内注释，注释必须独立成行）
+backend/logs/*.zip
 
 # Database
 *.db
