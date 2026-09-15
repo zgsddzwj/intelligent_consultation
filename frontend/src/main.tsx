@@ -39,19 +39,11 @@ const queryClient = new QueryClient({
   },
 })
 
-// 主题切换支持
-const getThemeAlgorithm = () => {
-  const savedTheme = localStorage.getItem('theme')
-  if (savedTheme === 'dark') return theme.darkAlgorithm
-  if (savedTheme === 'light') return theme.defaultAlgorithm
-  return window.matchMedia('(prefers-color-scheme: dark)').matches
-    ? theme.darkAlgorithm
-    : theme.defaultAlgorithm
-}
-
 // Ant Design 全局主题配置 v3.0
+// 说明：设计系统（CSS变量）当前仅有浅色主题，且无主题切换入口；
+// 移除一次性系统偏好探测——避免系统暗色时 antd 组件与浅色页面混搭不一致
 const themeConfig = {
-  algorithm: getThemeAlgorithm(),
+  algorithm: theme.defaultAlgorithm,
 
   token: {
     // ===== 主色调 =====

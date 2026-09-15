@@ -100,7 +100,6 @@ export default defineConfig(({ mode }) => ({
       '@services': '/src/services',
       '@stores': '/src/stores',
       '@types': '/src/types',
-      '@utils': '/src/utils',
     },
   },
   // 优化依赖预构建，加快冷启动
