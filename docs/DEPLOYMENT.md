@@ -188,10 +188,13 @@ kubectl logs -f deployment/backend -n medical-platform
 
 | 变量名 | 说明 | 默认值 |
 |--------|------|--------|
-| `SECRET_KEY` | JWT签名密钥 | 自动生成 |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | Token过期时间(分钟) | `1440` (24h) |
+| `SECRET_KEY` | JWT签名密钥 | 生产环境必填（未配置拒绝启动）；开发自动生成临时密钥 |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | 访问令牌有效期(分钟) | `30` |
+| `REFRESH_TOKEN_EXPIRE_DAYS` | 刷新令牌有效期(天) | `7` |
+| `ENABLE_AUTH_MIDDLEWARE` | 认证中间件 | 生产环境强制开启 |
+| `METRICS_ACCESS_TOKEN` | /metrics 访问令牌 | 生产环境必填（未配置时 /metrics 返回404） |
 
-完整配置请参考 `backend/app/config.py`。
+完整配置请参考 `backend/app/config.py` 与 `backend/.env.example`（两者已对齐）。
 
 ---
 
@@ -210,7 +213,7 @@ uv run python scripts/ml/train_ml_models.py
 ```
 
 初始化内容：
-- ✅ PostgreSQL表结构 (Alembic migrations)
+- ✅ PostgreSQL表结构 (SQLAlchemy create_all 自动建表)
 - ✅ Neo4j知识图谱（科室/疾病/症状/药物/检查）
 - ✅ Milvus集合和索引
 - ✅ RAG文档导入
@@ -221,8 +224,11 @@ uv run python scripts/ml/train_ml_models.py
 ## 健康检查
 
 ```bash
-# 后端健康检查
+# 后端健康检查（深度检查，探测数据库/Redis等依赖）
 curl http://localhost:8000/health
+
+# 存活检查（轻量，容器HEALTHCHECK/K8s liveness使用）
+curl http://localhost:8000/live
 
 # 前端可访问性
 curl http://localhost:3000 -I

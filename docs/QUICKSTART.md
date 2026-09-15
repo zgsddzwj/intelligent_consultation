@@ -60,7 +60,7 @@ docker-compose up -d postgres redis neo4j milvus etcd minio
 
 # 终端2: 启动后端
 cd backend
-uv sync
+uv sync --extra dev
 uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # 终端3: 启动前端
@@ -215,7 +215,7 @@ curl http://localhost:8000/health
 ### ML模型训练失败
 ```bash
 # 确保scikit-learn已安装（已包含在项目依赖中）
-uv sync
+uv sync --extra dev
 
 # 查看详细错误日志
 uv run python scripts/ml/train_ml_models.py --verbose
