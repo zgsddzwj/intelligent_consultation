@@ -3,7 +3,7 @@
 > **Intelligent Medical Consultation Platform** — An AI-powered healthcare assistant built with multi-agent orchestration, advanced RAG, and a knowledge graph.
 
 <p align="center">
-  <strong>以AI医生Agent为核心的新一代智能医疗咨询系统 · v3.1.0</strong><br>
+  <strong>以AI医生Agent为核心的新一代智能医疗咨询系统 · v3.3.0</strong><br>
   多Agent协同 · 高级RAG检索 · Neo4j知识图谱 · ML模型训练 · 全链路可观测性
 </p>
 
@@ -33,7 +33,7 @@
 
 > 上图为平台首页（患者门户），展示 AI 智能问诊界面，支持：
 > - **流式对话** — 实时打字效果，逐字输出 AI 回复
-> - **DeepSeek 风格思考面板** — 可折叠的思考过程展示，支持多步骤累加
+> - **思考过程面板** — 可折叠的思考步骤展示，支持多步骤累加
 > - **Markdown 渲染** — 加粗、列表、表格、代码块等格式化输出
 > - **快捷问题入口** — 一键发起常见健康咨询
 > - **信息来源追溯** — 展示 RAG 检索引用的知识来源
@@ -69,7 +69,7 @@
 | 🤖 **生产级多Agent架构** | 基于 LangGraph 编排的 4 个专业 Agent（医生/健康管家/客服/运营），含意图分类、风险评估、状态缓存、工作流可视化 — 不是简单的单轮 chatbot |
 | 🔍 **企业级RAG流水线** | 混合检索（BM25 + 向量 + 语义 + 知识图谱）→ BGE-Reranker 重排序 → ML 二次排序，完整的结构化文档解析与语义缓存 |
 | 📊 **医疗知识图谱** | Neo4j 构建的专业医疗图谱，支持实体识别、关系推理、Cypher 查询缓存，前端力导向图可视化 |
-| ⚡ **极致性能工程** | 多级缓存（L1 LRU + L2 Redis）、LLM 连接池 + 批量推理、数据库读写分离、布隆过滤器防穿透 |
+| ⚡ **极致性能工程** | 多级缓存（L1 LRU + L2 Redis）、LLM 连接池 + 批量推理、检索栈全局单例、事件循环零阻塞设计 |
 | 👁️ **全链路可观测性** | Prometheus 指标 + 告警状态机（normal→pending→firing）+ Profiler（p50/p95/p99）+ Langfuse LLM 追踪 |
 | 🔐 **安全合规设计** | JWT + RBAC、防重放攻击、审计日志脱敏、Fernet 数据加密、Prompt 安全审查（幻觉检测/有害内容过滤） |
 | 🏗️ **云原生就绪** | Docker Compose 一键启动、完整 K8s 配置、GHCR 镜像自动构建、Trivy 漏洞扫描、K8s probes（health/ready/live） |
@@ -144,8 +144,8 @@ graph TB
 | **🧠 ML模型训练** | 生产级 ML 流水线：SVM 意图分类、相关性评分、排序优化、集成学习重排，GridSearchCV 调优 |
 | **👁️ 全链路监控** | Prometheus 指标 + 告警规则引擎 + 性能剖析器(p50/p95/p99) + Langfuse LLM 追踪 |
 | **💅 现代化前端** | React 18 + TypeScript + Vite，代码分割懒加载、Zustand 状态分层、暗色模式、响应式设计 |
-| **🔐 企业级安全** | JWT 认证、RBAC 权限、防重放攻击、审计日志、数据加密、请求签名验证 |
-| **⚡ 极致性能** | 多级缓存(L1 LRU + L2 Redis)、连接池、批量推理、读写分离、动态连接池调整 |
+| **🔐 企业级安全** | JWT 认证（生产强制开启）、RBAC 权限、资源归属校验、防重放攻击、审计日志脱敏、数据加密 |
+| **⚡ 极致性能** | 多级缓存(L1 LRU + L2 Redis)、连接池、批量推理、慢查询自动检测 |
 
 ---
 
@@ -157,7 +157,7 @@ graph TB
 | 类别 | 技术 |
 |------|------|
 | **核心框架** | Python 3.11+, FastAPI, Uvicorn |
-| **AI/LLM** | LangChain, LangGraph, Qwen (DashScope), DeepSeek |
+| **AI/LLM** | LangChain, LangGraph, 硅基流动 SiliconFlow (Chat/Embedding/Vision 统一接入) |
 | **RAG & 搜索** | Milvus (向量库), BM25, FlagEmbedding (Reranker), Jieba 分词 |
 | **知识图谱** | Neo4j (含 APOC 插件) |
 | **数据存储** | PostgreSQL 15 (业务), Redis 7 (缓存), MinIO (对象存储) |
@@ -281,7 +281,7 @@ intelligent_consultation/
 │   │   ├── api/v1/                   # API 路由 (咨询/Agent/知识/用户/图片)
 │   │   │   └── middleware/           #   中间件 (认证/限流/响应包装/校验)
 │   │   ├── common/                   # 公共模块 (异常/加密/追踪/RBAC)
-│   │   ├── database/                 # 数据库 (PostgreSQL + 读写分离)
+│   │   ├── database/                 # 数据库 (PostgreSQL 连接池/慢查询监控)
 │   │   ├── infrastructure/           # 基础设施 (缓存/监控/限流/重试/仓储)
 │   │   ├── knowledge/                # 知识层
 │   │   │   ├── rag/                  #   高级 RAG 系统 (混合检索/重排序)
@@ -289,8 +289,7 @@ intelligent_consultation/
 │   │   │   └── ml/                   #   ML 模型 (意图分类/排序/相关性)
 │   │   ├── models/                   # SQLAlchemy 数据模型
 │   │   ├── services/                 # 业务服务层
-│   │   │   ├── llm_service.py        #   LLM 服务 (连接池/降级/批量推理)
-│   │   │   └── prompt_templates/     #   Prompt 模板管理
+│   │   │   └── llm_service.py        #   LLM 服务 (连接池/降级/批量推理/语义缓存)
 │   │   ├── utils/                    # 工具类 (安全/验证/日志)
 │   │   └── main.py                   # 应用入口 (优雅启动/K8s probes)
 │   ├── scripts/                      # 管理脚本（按用途分类）
@@ -424,6 +423,7 @@ git push origin feat/your-feature
 - [x] 知识图谱实时更新机制（事件驱动 + CRUD API + 审计日志）
 - [x] 多模态诊断能力增强（图像分类 + 结构化报告 + KG 关联）
 - [x] Kubernetes 资源配置完善（NetworkPolicy + ServiceMonitor + HPA/PDB + ResourceQuota + PriorityClass）
+- [x] 生产就绪加固：认证强制开启、越权访问修复、事件循环去阻塞、测试套件全绿
 
 ### 📋 规划中
 - [ ] 移动端 App (React Native / Flutter)
