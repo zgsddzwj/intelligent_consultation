@@ -5,6 +5,7 @@ import time
 import threading
 import hashlib
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, TypedDict, Annotated, Optional, List
 from functools import lru_cache
 from langgraph.graph import StateGraph, END
@@ -22,6 +23,9 @@ from app.services.langfuse_service import langfuse_service
 from app.infrastructure.monitoring import track_consultation
 
 settings = get_settings()
+
+# 运营日志记录线程池（复用线程，避免每请求创建/销毁Thread的开销）
+_ops_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ops-logger")
 
 
 class AgentState(TypedDict):
@@ -504,7 +508,7 @@ class AgentOrchestrator:
                 except Exception as ops_err:
                     app_logger.debug(f"运营记录处理失败: {ops_err}")
 
-            threading.Thread(target=_log_operations, daemon=True).start()
+            _ops_executor.submit(_log_operations)
         except Exception as e:
             app_logger.warning(f"运营记录失败: {e}")
 
