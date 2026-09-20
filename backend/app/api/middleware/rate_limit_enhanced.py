@@ -69,8 +69,8 @@ class RateLimitEnhancedMiddleware(BaseHTTPMiddleware):
 
     def _check_rate_limit(self, key: str, max_requests: int, window: int) -> Tuple[bool, Dict]:
         """检查是否超过限流阈值（滑动窗口）"""
+        now = time.time()
         try:
-            now = time.time()
             window_start = now - window
 
             # 使用Redis有序集合实现滑动窗口
