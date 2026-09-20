@@ -2,6 +2,7 @@
 from typing import Generic, TypeVar, Type, Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import exists as sa_exists
 from app.database.base import Base
 from app.common.exceptions import DatabaseException, NotFoundException, ErrorCode
 from app.utils.logger import app_logger
@@ -129,9 +130,11 @@ class BaseRepository(Generic[ModelType]):
             raise DatabaseException(f"统计失败: {str(e)}", error_code=ErrorCode.DATABASE_ERROR)
     
     def exists(self, id: Any) -> bool:
-        """检查记录是否存在"""
+        """检查记录是否存在（使用SELECT EXISTS，避免加载整行到内存）"""
         try:
-            return self.db.query(self.model).filter(self.model.id == id).first() is not None
+            return self.db.query(
+                sa_exists().where(self.model.id == id)
+            ).scalar()
         except SQLAlchemyError as e:
             app_logger.error(f"检查失败: {e}")
             raise DatabaseException(f"检查失败: {str(e)}", error_code=ErrorCode.DATABASE_ERROR)
