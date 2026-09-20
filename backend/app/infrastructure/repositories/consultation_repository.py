@@ -38,9 +38,12 @@ class ConsultationRepository(BaseRepository[Consultation]):
             filters["status"] = status
         return self.count(filters)
 
-    def count_all(self) -> int:
-        """统计所有咨询记录数"""
-        return self.count()
+    def count_all(self, status: Optional[ConsultationStatus] = None) -> int:
+        """统计所有咨询记录数（可选按状态过滤）"""
+        filters = {}
+        if status:
+            filters["status"] = status
+        return self.count(filters)
 
     def get_by_agent_type(
         self,
