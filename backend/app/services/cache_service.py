@@ -117,7 +117,8 @@ class MultiLayerCacheService:
         # 缓存键的前缀配置
         self.prefix = "mlc:"
         
-        # 统计数据
+        # 统计数据（线程安全）
+        self._stats_lock = threading.Lock()
         self.stats = {
             "l1_hits": 0,
             "l1_misses": 0,
@@ -136,32 +137,37 @@ class MultiLayerCacheService:
         返回 None 表示缓存未命中。
         如果需要缓存 None 值，请使用 get_or 方法。
         """
-        self.stats["total_requests"] += 1
+        with self._stats_lock:
+            self.stats["total_requests"] += 1
         full_key = self._make_key(namespace, key)
         
         # L1查询
         if self.enable_l1:
             value = self.l1_cache.get(full_key)
             if value is not _MISS:
-                self.stats["l1_hits"] += 1
+                with self._stats_lock:
+                    self.stats["l1_hits"] += 1
                 app_logger.debug(f"✓ L1缓存命中: {full_key}")
                 return value
             else:
-                self.stats["l1_misses"] += 1
+                with self._stats_lock:
+                    self.stats["l1_misses"] += 1
         
         # L2查询
         if self.enable_l2:
             try:
                 value = redis_service.get_json(full_key)
                 if value is not None:
-                    self.stats["l2_hits"] += 1
+                    with self._stats_lock:
+                        self.stats["l2_hits"] += 1
                     # 回源到L1
                     if self.enable_l1:
                         self.l1_cache.set(full_key, value, ttl=300)
                     app_logger.debug(f"✓ L2缓存命中: {full_key}")
                     return value
                 else:
-                    self.stats["l2_misses"] += 1
+                    with self._stats_lock:
+                        self.stats["l2_misses"] += 1
             except Exception as e:
                 app_logger.warning(f"L2缓存查询失败: {e}")
         
@@ -235,28 +241,31 @@ class MultiLayerCacheService:
     
     def get_stats(self) -> Dict[str, Any]:
         """获取缓存统计信息"""
+        with self._stats_lock:
+            stats = self.stats.copy()
+        
         l1_hit_rate = 0
         l2_hit_rate = 0
         
-        total_l1 = self.stats["l1_hits"] + self.stats["l1_misses"]
+        total_l1 = stats["l1_hits"] + stats["l1_misses"]
         if total_l1 > 0:
-            l1_hit_rate = (self.stats["l1_hits"] / total_l1) * 100
+            l1_hit_rate = (stats["l1_hits"] / total_l1) * 100
         
-        total_l2 = self.stats["l2_hits"] + self.stats["l2_misses"]
+        total_l2 = stats["l2_hits"] + stats["l2_misses"]
         if total_l2 > 0:
-            l2_hit_rate = (self.stats["l2_hits"] / total_l2) * 100
+            l2_hit_rate = (stats["l2_hits"] / total_l2) * 100
         
         return {
-            "total_requests": self.stats["total_requests"],
+            "total_requests": stats["total_requests"],
             "l1": {
-                "hits": self.stats["l1_hits"],
-                "misses": self.stats["l1_misses"],
+                "hits": stats["l1_hits"],
+                "misses": stats["l1_misses"],
                 "hit_rate": f"{l1_hit_rate:.2f}%",
                 "stats": self.l1_cache.get_stats() if self.l1_cache else {}
             },
             "l2": {
-                "hits": self.stats["l2_hits"],
-                "misses": self.stats["l2_misses"],
+                "hits": stats["l2_hits"],
+                "misses": stats["l2_misses"],
                 "hit_rate": f"{l2_hit_rate:.2f}%"
             }
         }
