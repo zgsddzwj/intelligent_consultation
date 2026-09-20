@@ -5,6 +5,7 @@
 import sys
 import json
 import time
+import asyncio
 import functools
 import contextvars
 import uuid
@@ -117,9 +118,6 @@ def log_execution_time(threshold_ms: float = 100.0):
             return PerformanceLogger(threshold_ms).async_wrapper(func)
         return PerformanceLogger(threshold_ms)(func)
     return decorator
-
-
-import asyncio
 
 
 def setup_logger():
