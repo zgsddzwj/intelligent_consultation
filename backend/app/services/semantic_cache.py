@@ -276,21 +276,21 @@ class SemanticCache:
     def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
         """计算余弦相似度"""
         try:
-            v1 = np.array(vec1).flatten()
-            v2 = np.array(vec2).flatten()
+            v1 = np.array(vec1, dtype=np.float32).flatten()
+            v2 = np.array(vec2, dtype=np.float32).flatten()
             
             # 维度不一致时返回0
             if v1.shape != v2.shape:
                 return 0.0
             
+            # 使用np.dot和np.linalg.norm的向量化计算
             dot_product = np.dot(v1, v2)
-            norm1 = np.linalg.norm(v1)
-            norm2 = np.linalg.norm(v2)
+            norms = np.linalg.norm(v1) * np.linalg.norm(v2)
             
-            if norm1 == 0 or norm2 == 0:
+            if norms == 0:
                 return 0.0
             
-            return float(dot_product / (norm1 * norm2))
+            return float(dot_product / norms)
         except Exception as e:
             app_logger.warning(f"计算余弦相似度失败: {e}")
             return 0.0
