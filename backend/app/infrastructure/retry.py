@@ -1,5 +1,6 @@
 """重试机制和断路器 - 增强版（线程安全断路器、半开状态探测、状态监控）"""
 import time
+import random
 import asyncio
 import threading
 from functools import wraps
@@ -241,7 +242,6 @@ def retry(
                         # 添加随机抖动（±25%）
                         actual_delay = current_delay
                         if jitter:
-                            import random
                             jitter_range = current_delay * 0.25
                             actual_delay = current_delay + random.uniform(-jitter_range, jitter_range)
                         
@@ -271,7 +271,6 @@ def retry(
                     if attempt < max_attempts:
                         actual_delay = current_delay
                         if jitter:
-                            import random
                             jitter_range = current_delay * 0.25
                             actual_delay = current_delay + random.uniform(-jitter_range, jitter_range)
                         
