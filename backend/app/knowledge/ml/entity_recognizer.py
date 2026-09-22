@@ -1,5 +1,6 @@
 """医疗实体识别器 - 使用LLM进行NER"""
 from typing import List, Dict, Any, Optional
+from collections import OrderedDict
 from app.utils.logger import app_logger
 from app.prompts import KnowledgePrompts
 import json
@@ -17,8 +18,11 @@ class MedicalEntityRecognizer:
         "departments": "科室"
     }
     
+    # LRU缓存最大条目数，防止长期运行内存无限增长
+    _CACHE_MAX_SIZE = 500
+
     def __init__(self):
-        self.cache = {}  # 简单的缓存机制
+        self.cache: OrderedDict = OrderedDict()  # LRU缓存（最多保留_CACHE_MAX_SIZE条）
 
     def _get_llm(self):
         """延迟导入 llm_service，避免循环导入"""
@@ -36,8 +40,9 @@ class MedicalEntityRecognizer:
         Returns:
             实体字典，包含diseases, symptoms, drugs, examinations, departments
         """
-        # 检查缓存
+        # 检查缓存（命中时移到末尾标记为最近使用）
         if use_cache and query in self.cache:
+            self.cache.move_to_end(query)
             return self.cache[query]
         
         entities = {
@@ -61,9 +66,12 @@ class MedicalEntityRecognizer:
             # 解析LLM返回的JSON
             entities = self._parse_llm_response(response, query)
             
-            # 缓存结果
+            # 缓存结果（LRU淘汰）
             if use_cache:
                 self.cache[query] = entities
+                self.cache.move_to_end(query)
+                if len(self.cache) > self._CACHE_MAX_SIZE:
+                    self.cache.popitem(last=False)  # 淘汰最久未使用的条目
             
             app_logger.debug(f"实体识别完成: {query} -> {entities}")
             return entities
