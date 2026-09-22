@@ -71,86 +71,24 @@ class MultimodalDiagnosisResponse(BaseModel):
 
 # ==================== 工具函数 ====================
 
-def _parse_medical_terms_json(extraction_result: str) -> List[Dict[str, str]]:
+def _extract_json_from_text(text: str) -> Optional[dict]:
     """
-    从LLM提取结果中解析医疗术语JSON（多策略 fallback）
-    """
-    if not extraction_result:
-        return []
+    从LLM返回的文本中提取JSON对象（多策略 fallback）
 
-    text = extraction_result.strip()
+    策略顺序：直接解析 → Markdown代码块 → 正则最外层JSON
+    """
+    if not text:
+        return None
+
+    text = text.strip()
 
     # 策略1: 直接解析JSON
-    try:
-        data = json.loads(text)
-        if isinstance(data, dict) and "terms" in data:
-            terms = data["terms"]
-            if isinstance(terms, list):
-                return [t for t in terms if isinstance(t, dict) and "term" in t]
-    except (json.JSONDecodeError, TypeError):
-        pass
-
-    # 策略2: 从Markdown代码块中提取JSON
-    code_block_patterns = [
-        r'```json\s*(.*?)\s*```',
-        r'```\s*(.*?)\s*```',
-    ]
-    for pattern in code_block_patterns:
-        match = re.search(pattern, text, re.DOTALL)
-        if match:
-            try:
-                data = json.loads(match.group(1).strip())
-                if isinstance(data, dict) and "terms" in data:
-                    terms = data["terms"]
-                    if isinstance(terms, list):
-                        return [t for t in terms if isinstance(t, dict) and "term" in t]
-            except (json.JSONDecodeError, TypeError):
-                continue
-
-    # 策略3: 正则提取最外层JSON对象
-    json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
-    json_matches = re.findall(json_pattern, text)
-    for match_str in reversed(json_matches):
-        try:
-            data = json.loads(match_str)
-            if isinstance(data, dict) and "terms" in data:
-                terms = data["terms"]
-                if isinstance(terms, list):
-                    return [t for t in terms if isinstance(t, dict) and "term" in t]
-        except (json.JSONDecodeError, TypeError):
-            continue
-
-    # 策略4: 逐条匹配 term 模式
-    term_pattern = r'\{\s*"term"\s*:\s*"[^"]+"\s*,\s*"type"\s*:\s*"[^"]+"\s*\}'
-    term_matches = re.findall(term_pattern, text)
-    if term_matches:
-        parsed_terms = []
-        for tm in term_matches:
-            try:
-                parsed_terms.append(json.loads(tm))
-            except json.JSONDecodeError:
-                continue
-        if parsed_terms:
-            return parsed_terms
-
-    app_logger.warning(f"无法从提取结果中解析医疗术语JSON，原文长度: {len(text)}")
-    return []
-
-
-def _parse_diagnosis_json(raw_text: str) -> Dict[str, Any]:
-    """解析多模态诊断 LLM 返回的结构化 JSON"""
-    if not raw_text:
-        return {}
-
-    text = raw_text.strip()
-
-    # 尝试直接解析
     try:
         return json.loads(text)
     except (json.JSONDecodeError, TypeError):
         pass
 
-    # 尝试从代码块提取
+    # 策略2: 从Markdown代码块中提取JSON
     for pattern in [r'```json\s*(.*?)\s*```', r'```\s*(.*?)\s*```']:
         match = re.search(pattern, text, re.DOTALL)
         if match:
@@ -159,7 +97,7 @@ def _parse_diagnosis_json(raw_text: str) -> Dict[str, Any]:
             except (json.JSONDecodeError, TypeError):
                 continue
 
-    # 尝试提取最外层 JSON
+    # 策略3: 正则提取最外层JSON对象
     json_pattern = r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
     for match_str in reversed(re.findall(json_pattern, text)):
         try:
@@ -167,7 +105,41 @@ def _parse_diagnosis_json(raw_text: str) -> Dict[str, Any]:
         except (json.JSONDecodeError, TypeError):
             continue
 
-    return {}
+    return None
+
+
+def _parse_medical_terms_json(extraction_result: str) -> List[Dict[str, str]]:
+    """
+    从LLM提取结果中解析医疗术语JSON（多策略 fallback）
+    """
+    data = _extract_json_from_text(extraction_result)
+    if isinstance(data, dict) and "terms" in data:
+        terms = data["terms"]
+        if isinstance(terms, list):
+            return [t for t in terms if isinstance(t, dict) and "term" in t]
+
+    # 策略4: 逐条匹配 term 模式
+    if extraction_result:
+        term_pattern = r'\{\s*"term"\s*:\s*"[^"]+"\s*,\s*"type"\s*:\s*"[^"]+"\s*\}'
+        term_matches = re.findall(term_pattern, extraction_result)
+        if term_matches:
+            parsed_terms = []
+            for tm in term_matches:
+                try:
+                    parsed_terms.append(json.loads(tm))
+                except json.JSONDecodeError:
+                    continue
+            if parsed_terms:
+                return parsed_terms
+
+    app_logger.warning(f"无法从提取结果中解析医疗术语JSON，原文长度: {len(extraction_result or '')}")
+    return []
+
+
+def _parse_diagnosis_json(raw_text: str) -> Dict[str, Any]:
+    """解析多模态诊断 LLM 返回的结构化 JSON"""
+    data = _extract_json_from_text(raw_text)
+    return data if isinstance(data, dict) else {}
 
 
 @retry(max_attempts=2, delay=1.0, backoff=2.0, exceptions=(Exception,))
