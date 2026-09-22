@@ -256,9 +256,6 @@ def require_roles(*roles: str):
 
 def get_current_user_id(request: Request) -> Optional[int]:
     """从请求中获取当前用户ID（JWT 优先，开发环境可降级）"""
-    from app.config import get_settings
-    settings = get_settings()
-
     # 认证中间件注入的 JWT 用户信息
     jwt_user_id = getattr(request.state, "user_id", None)
     if jwt_user_id is not None:
