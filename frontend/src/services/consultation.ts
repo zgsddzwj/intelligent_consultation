@@ -149,7 +149,9 @@ export const consultationApi = {
         }
       }
 
-      while (true) {
+      // reading 标志控制循环退出；done/error 事件通过 return 直接结束整个函数
+      let reading = true
+      while (reading) {
         const result = await readWithTimeout()
         if (result === null) {
           controller.abort()
@@ -157,7 +159,10 @@ export const consultationApi = {
           return
         }
         const { done, value } = result
-        if (done) break
+        if (done) {
+          reading = false
+          continue
+        }
 
         buffer += decoder.decode(value, { stream: true })
 

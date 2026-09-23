@@ -54,7 +54,7 @@ function extractSourcesAndClean(content: string): {
   const { cleaned: s1, sources: inlineSources } = matchInlineSources(content)
 
   // 清理移除来源后可能残留的多余空格
-  let cleaned = s1.replace(/[ \t]+\n/g, '\n').replace(/  +/g, ' ')
+  const cleaned = s1.replace(/[ \t]+\n/g, '\n').replace(/  +/g, ' ')
 
   // 提取免责声明
   const { cleaned: finalBody, disclaimer } = matchDisclaimer(cleaned)

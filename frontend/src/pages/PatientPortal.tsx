@@ -67,14 +67,14 @@ export default function PatientPortal() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isStreaming, hasFirstToken])
 
-  const buildChatRequest = (msg: string): ChatRequest => {
+  const buildChatRequest = useCallback((msg: string): ChatRequest => {
     const authUser = getAuthUser()
     return {
       message: msg,
       consultation_id: consultationId || undefined,
       user_id: authUser?.id,
     }
-  }
+  }, [consultationId])
 
   const handleStreamChat = useCallback(async (msg: string) => {
     setIsStreaming(true)
@@ -138,7 +138,7 @@ export default function PatientPortal() {
     } finally {
       streamCancelRef.current = null
     }
-  }, [consultationId, addMessage, updateLastMessage, setConsultationId])
+  }, [addMessage, updateLastMessage, setConsultationId, buildChatRequest])
 
   const handleSend = useCallback(() => {
     if (!input.trim() || isStreaming || isComposing) return

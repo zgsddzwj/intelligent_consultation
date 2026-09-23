@@ -107,10 +107,11 @@ export default function VoicePlayer({ text }: VoicePlayerProps) {
 
   // 组件卸载时停止播放，避免音频继续播放
   useEffect(() => {
+    const audio = audioRef.current
     return () => {
-      if (audioRef.current) {
-        audioRef.current.pause()
-        audioRef.current.src = ''
+      if (audio) {
+        audio.pause()
+        audio.src = ''
       }
     }
   }, [])

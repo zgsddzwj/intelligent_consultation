@@ -72,7 +72,6 @@ export default function VoiceInput({
       finalTextRef.current = finalTranscript
       onTranscriptRef.current(finalTranscript)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finalTranscript])
 
   // 识别停止后，如果有文本则自动发送
