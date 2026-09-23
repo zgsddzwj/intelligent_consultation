@@ -193,20 +193,23 @@ async def chat(
             )
 
         # 4. 创建或获取咨询记录（归属校验：无法认证归属的历史记录视同不存在，防止跨用户续聊）
+        # 同步DB操作移入线程池，避免阻塞事件循环
         consultation = None
         try:
-            if request.consultation_id:
-                resume_query = db.query(Consultation).filter(
-                    Consultation.id == request.consultation_id
-                )
-                if owner_user_id is not None:
-                    resume_query = resume_query.filter(Consultation.user_id == owner_user_id)
-                consultation = resume_query.first()
-                if consultation:
-                    consultation_id = consultation.id
+            def _load_or_create_consultation():
+                if request.consultation_id:
+                    resume_query = db.query(Consultation).filter(
+                        Consultation.id == request.consultation_id
+                    )
+                    if owner_user_id is not None:
+                        resume_query = resume_query.filter(Consultation.user_id == owner_user_id)
+                    existing = resume_query.first()
+                    if existing:
+                        return existing
+                return _create_consultation_record(db, owner_user_id)
 
-            if not consultation:
-                consultation = _create_consultation_record(db, owner_user_id)
+            consultation = await asyncio.to_thread(_load_or_create_consultation)
+            if consultation:
                 consultation_id = consultation.id
         except Exception as db_error:
             app_logger.warning(f"数据库操作失败，继续处理咨询: {db_error}")
@@ -249,16 +252,19 @@ async def chat(
         else:
             source_items = []
 
-        # 9. 更新咨询记录
+        # 9. 更新咨询记录（同步DB写入移入线程池，同一事务在同一线程内完成）
         if consultation:
             try:
-                _update_consultation_messages(
-                    consultation, request.message,
-                    result.get("answer", ""),
-                    source_items,
-                    result.get("risk_level")
-                )
-                db.commit()
+                def _persist_consultation():
+                    _update_consultation_messages(
+                        consultation, request.message,
+                        result.get("answer", ""),
+                        source_items,
+                        result.get("risk_level")
+                    )
+                    db.commit()
+
+                await asyncio.to_thread(_persist_consultation)
             except Exception as db_error:
                 app_logger.warning(f"更新咨询记录失败: {db_error}")
 
@@ -322,20 +328,23 @@ async def chat_stream(
         nonlocal consultation_id
 
         try:
-            # 创建或获取咨询记录（归属校验同 /chat）
+            # 创建或获取咨询记录（归属校验同 /chat，同步DB操作移入线程池）
             consultation = None
             try:
-                if request.consultation_id:
-                    resume_query = db.query(Consultation).filter(
-                        Consultation.id == request.consultation_id
-                    )
-                    if owner_user_id is not None:
-                        resume_query = resume_query.filter(Consultation.user_id == owner_user_id)
-                    consultation = resume_query.first()
-                    if consultation:
-                        consultation_id = consultation.id
-                if not consultation:
-                    consultation = _create_consultation_record(db, owner_user_id)
+                def _load_or_create_consultation():
+                    if request.consultation_id:
+                        resume_query = db.query(Consultation).filter(
+                            Consultation.id == request.consultation_id
+                        )
+                        if owner_user_id is not None:
+                            resume_query = resume_query.filter(Consultation.user_id == owner_user_id)
+                        existing = resume_query.first()
+                        if existing:
+                            return existing
+                    return _create_consultation_record(db, owner_user_id)
+
+                consultation = await asyncio.to_thread(_load_or_create_consultation)
+                if consultation:
                     consultation_id = consultation.id
             except Exception as db_error:
                 app_logger.warning(f"数据库操作失败: {db_error}")
@@ -459,13 +468,16 @@ async def chat_stream(
             full_answer += disclaimer
             yield f"data: {json.dumps({'content': disclaimer, 'type': 'message'})}\n\n"
 
-            # 更新咨询记录
+            # 更新咨询记录（同步DB写入移入线程池，同一事务在同一线程内完成）
             if consultation:
                 try:
-                    _update_consultation_messages(
-                        consultation, request.message, full_answer, source_items
-                    )
-                    db.commit()
+                    def _persist_consultation():
+                        _update_consultation_messages(
+                            consultation, request.message, full_answer, source_items
+                        )
+                        db.commit()
+
+                    await asyncio.to_thread(_persist_consultation)
                 except Exception as db_error:
                     app_logger.warning(f"更新咨询记录失败: {db_error}")
 
