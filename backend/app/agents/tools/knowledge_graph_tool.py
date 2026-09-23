@@ -28,6 +28,8 @@ class KnowledgeGraphTool:
                 return self.get_disease_info(kwargs.get("disease_name"))
             elif operation == "get_drug_info":
                 return self.get_drug_info(kwargs.get("drug_name"))
+            elif operation == "get_drugs_info":
+                return self.get_drugs_info(kwargs.get("drug_names", []))
             elif operation == "get_drug_interactions":
                 return self.get_drug_interactions(kwargs.get("drug_name"))
             elif operation == "find_diseases_by_symptoms":
@@ -97,6 +99,36 @@ class KnowledgeGraphTool:
             "found": True
         }
     
+    def get_drugs_info(self, drug_names: List[str]) -> Dict[str, Any]:
+        """批量获取多个药物的信息（单条Cypher，消除逐药物N+1往返）"""
+        names = [n for n in (drug_names or []) if n]
+        if not names:
+            return {"drugs": [], "found": False}
+
+        result = self.client.execute_query(
+            self.queries.find_drugs_info_batch(names),
+            {"names": names}
+        )
+
+        drugs = []
+        for row in result or []:
+            drug = row.get("drug")
+            # OPTIONAL MATCH 未命中时 collect 会产生全 null 的占位项，过滤掉以对齐单个查询的行为
+            contraindications = [c for c in row.get("contraindications") or [] if c.get("disease")]
+            interactions = [i for i in row.get("interactions") or [] if i.get("interacting_drug")]
+            item = {
+                "name": row.get("query_name"),
+                "found": drug is not None,
+            }
+            if drug is not None:
+                item.update({
+                    "drug": dict(drug),
+                    "contraindications": contraindications,
+                    "interactions": interactions,
+                })
+            drugs.append(item)
+        return {"drugs": drugs, "found": any(d["found"] for d in drugs)}
+
     def get_drug_interactions(self, drug_name: str) -> Dict[str, Any]:
         """获取药物相互作用"""
         result = self.client.execute_query(

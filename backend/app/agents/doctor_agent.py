@@ -242,23 +242,25 @@ class DoctorAgent(BaseAgent):
         
         if drug_names:
             kg_context = "知识图谱药物信息:\n"
-            for drug_name in drug_names:
-                try:
-                    drug_info = self.kg_tool.execute("get_drug_info", drug_name=drug_name)
-                    tools_used.append("knowledge_graph_query")
-                    
+            try:
+                # 批量查询（单条Cypher），消除逐药物N+1往返
+                batch_info = self.kg_tool.execute("get_drugs_info", drug_names=drug_names)
+                tools_used.append("knowledge_graph_query")
+
+                for drug_info in batch_info.get("drugs", []):
+                    drug_name = drug_info.get("name") or ""
                     if drug_info.get("found"):
                         found_drugs.append(drug_name)
                         drug = drug_info.get("drug", {})
                         kg_context += f"- 药物: {drug.get('name', drug_name)}\n"
-                        
+
                         if drug_info.get("contraindications"):
                             kg_context += "  禁忌症: " + ", ".join([c.get('disease', '') for c in drug_info["contraindications"]]) + "\n"
-                            
+
                         if drug_info.get("interactions"):
                             kg_context += "  相互作用: " + ", ".join([i.get('interacting_drug', '') for i in drug_info["interactions"]]) + "\n"
-                except Exception as e:
-                    app_logger.warning(f"查询药物 {drug_name} 失败: {e}")
+            except Exception as e:
+                app_logger.warning(f"批量查询药物信息失败: {e}")
         
         # 3. RAG检索用药指南
         try:

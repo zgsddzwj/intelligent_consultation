@@ -61,6 +61,21 @@ class CypherQueries:
         MATCH (dr:Drug {name: $drug_name})-[:CONTRAINDICATED_FOR]->(d:Disease)
         RETURN d.name as disease, d.icd10 as icd10
         """
+
+    @staticmethod
+    def find_drugs_info_batch(drug_names: List[str]) -> str:
+        """批量获取多个药物的基本信息、禁忌与相互作用（单条Cypher消除N+1往返）"""
+        return """
+        UNWIND $names AS name
+        OPTIONAL MATCH (d:Drug {name: name})
+        OPTIONAL MATCH (d)-[:CONTRAINDICATED_FOR]->(cd:Disease)
+        OPTIONAL MATCH (d)-[r:INTERACTS_WITH]-(i:Drug)
+        WITH name, d,
+             collect(DISTINCT {disease: cd.name, icd10: cd.icd10}) AS contraindications,
+             collect(DISTINCT {interacting_drug: i.name, type: r.interaction_type,
+                               severity: r.severity, description: r.description}) AS interactions
+        RETURN name AS query_name, d AS drug, contraindications, interactions
+        """
     
     @staticmethod
     def find_symptoms_by_department(dept_name: str) -> str:
