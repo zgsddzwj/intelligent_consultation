@@ -47,6 +47,7 @@
 - [快速开始指南 (QUICKSTART.md)](QUICKSTART.md) - 快速启动和配置
 - [完整设置指南 (COMPLETE_SETUP.md)](COMPLETE_SETUP.md) - 环境搭建与初始化
 - [部署文档 (DEPLOYMENT.md)](DEPLOYMENT.md) - Docker/K8s 部署说明
+- [生产上线检查清单 (PRODUCTION_CHECKLIST.md)](PRODUCTION_CHECKLIST.md) - 上线前逐项核对与验证基线
 - [Kubernetes 部署](../k8s/README.md) - K8s 详细配置
 
 ## 📏 开发规范
