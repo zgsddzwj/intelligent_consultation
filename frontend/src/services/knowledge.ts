@@ -82,7 +82,7 @@ export const knowledgeApi = {
    * @returns 图谱数据（节点+边）
    */
   getGraphVisualization: (params: GraphVisualizationRequest) =>
-    post<GraphData>('/knowledge/graph/visualization', params),
+    post<GraphData & { neo4j_available?: boolean }>('/knowledge/graph/visualization', params),
 
   /**
    * 获取科室列表

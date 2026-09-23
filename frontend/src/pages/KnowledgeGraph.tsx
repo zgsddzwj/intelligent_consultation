@@ -29,9 +29,11 @@ import {
   ApiOutlined,
 } from '@ant-design/icons'
 import ForceGraph2D from 'react-force-graph-2d'
+import type { ForceGraphMethods } from 'react-force-graph-2d'
 import { useQuery } from '@tanstack/react-query'
+import { ApiError } from '../services/api'
 import { knowledgeApi } from '../services/knowledge'
-import type { GraphData, GraphNode } from '../services/knowledge'
+import type { GraphData, GraphLink, GraphNode } from '../services/knowledge'
 
 const { Option } = Select
 const { Text } = Typography
@@ -92,7 +94,7 @@ export default function KnowledgeGraph() {
   const [loading, setLoading] = useState(false)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [neo4jAvailable, setNeo4jAvailable] = useState(true)
-  const fgRef = useRef<any>(undefined)
+  const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined)
 
   // 获取科室列表
   const { data: departmentsData } = useQuery({
@@ -110,9 +112,9 @@ export default function KnowledgeGraph() {
         depth: 2,
       })
       setGraphData({ nodes: response.nodes || [], links: response.links || [] })
-      setNeo4jAvailable((response as any).neo4j_available !== false)
-    } catch (error: any) {
-      message.error('加载知识图谱失败: ' + (error.message || '未知错误'))
+      setNeo4jAvailable(response.neo4j_available !== false)
+    } catch (error) {
+      message.error('加载知识图谱失败: ' + (error instanceof ApiError ? error.message : '未知错误'))
       setNeo4jAvailable(false)
     } finally {
       setLoading(false)
@@ -183,7 +185,7 @@ export default function KnowledgeGraph() {
               showSearch
               optionFilterProp="children"
             >
-              {departmentsData?.departments?.map((dept: any) => (
+              {departmentsData?.departments?.map((dept) => (
                 <Option key={dept.name} value={dept.name}>
                   <Space>
                     <ApartmentOutlined style={{ color: '#7c3aed' }} />
@@ -316,21 +318,21 @@ export default function KnowledgeGraph() {
 
           {/* 力导向图 */}
           {!loading && graphData.nodes.length > 0 && (
-            <ForceGraph2D
+            <ForceGraph2D<GraphNode, GraphLink>
               ref={fgRef}
               graphData={graphData}
-              nodeLabel={(node: any) => `${node.label}`}
-              nodeColor={(node: any) => getNodeColor(node)}
-              linkLabel={(link: any) => link.label || ''}
-              nodeVal={(node: any) => Math.sqrt(node.properties?.length || 1) * 10 + 5}
+              nodeLabel={(node) => `${node.label}`}
+              nodeColor={(node) => getNodeColor(node)}
+              linkLabel={(link) => link.label || ''}
+              nodeVal={(node) => Math.sqrt(node.properties?.length || 1) * 10 + 5}
               nodeRelSize={6}
               linkDirectionalArrowLength={6}
               linkDirectionalArrowRelPos={1}
               linkCurvature={0.25}
               linkWidth={1.5}
               linkColor={() => 'rgba(100, 116, 139, 0.2)'}
-              onNodeClick={(node: any) => handleNodeClick(node)}
-              onNodeHover={(node: any) => {
+              onNodeClick={(node) => handleNodeClick(node)}
+              onNodeHover={(node) => {
                 document.body.style.cursor = node ? 'pointer' : 'default'
               }}
               cooldownTicks={100}
