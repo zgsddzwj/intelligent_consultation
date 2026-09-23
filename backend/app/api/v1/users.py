@@ -1,4 +1,5 @@
 """用户管理API"""
+import asyncio
 import time
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -123,7 +124,8 @@ async def register_user(
         raise ValidationException("邮箱已存在", error_code=ErrorCode.VALIDATION_ERROR)
     
     # 创建用户（公开注册一律为患者角色，防止自选 admin 提权）
-    hashed_password = get_password_hash(user.password)
+    # bcrypt 为纯 CPU 密集操作，移入线程池避免阻塞事件循环
+    hashed_password = await asyncio.to_thread(get_password_hash, user.password)
     role = UserRole.PATIENT
     
     new_user = user_repo.create(
@@ -151,9 +153,9 @@ async def login_user(
     # 1. 检查账号是否被锁定
     _check_login_lockout(credentials.username)
 
-    # 2. 验证用户
+    # 2. 验证用户（密码校验为 CPU 密集操作，移入线程池避免阻塞事件循环）
     user = user_repo.get_by_username(credentials.username)
-    if not user or not verify_password(credentials.password, user.hashed_password):
+    if not user or not await asyncio.to_thread(verify_password, credentials.password, user.hashed_password):
         # 记录失败
         _record_login_failure(credentials.username)
         raise UnauthorizedException("用户名或密码错误")
