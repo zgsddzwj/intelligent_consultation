@@ -97,18 +97,25 @@ class ServiceFactory:
         return cls._instances["cache"]
     
     @classmethod
+    def _get_or_create(cls, key: str, factory):
+        """线程安全的懒加载单例获取（双检锁），重型服务统一走此方法"""
+        if key not in cls._instances:
+            with cls._lock:
+                if key not in cls._instances:
+                    cls._instances[key] = factory()
+        return cls._instances[key]
+
+    @classmethod
     def get_orchestrator(cls):
         """获取Agent编排器（线程安全单例）"""
-        # 双重检查锁定，避免并发请求重复创建
-        if "orchestrator" not in cls._instances:
-            with cls._lock:
-                if "orchestrator" not in cls._instances:
-                    from app.agents.orchestrator import AgentOrchestrator
-                    app_logger.info("正在创建 AgentOrchestrator 实例...")
-                    cls._instances["orchestrator"] = AgentOrchestrator()
-                    app_logger.info("AgentOrchestrator 实例创建完成")
-        return cls._instances["orchestrator"]
-    
+        def _create():
+            from app.agents.orchestrator import AgentOrchestrator
+            app_logger.info("正在创建 AgentOrchestrator 实例...")
+            instance = AgentOrchestrator()
+            app_logger.info("AgentOrchestrator 实例创建完成")
+            return instance
+        return cls._get_or_create("orchestrator", _create)
+
     @classmethod
     def get_context_manager(cls):
         """获取上下文管理器"""
@@ -116,59 +123,53 @@ class ServiceFactory:
             from app.services.context_manager import context_manager
             cls._instances["context"] = context_manager
         return cls._instances["context"]
-    
+
     @classmethod
     def get_hybrid_search(cls):
-        """获取混合检索器"""
-        if "hybrid_search" not in cls._instances:
+        """获取混合检索器（构建含多个检索器与重排器，线程安全单例）"""
+        def _create():
             from app.knowledge.rag.hybrid_search import HybridSearch
-            cls._instances["hybrid_search"] = HybridSearch()
-        return cls._instances["hybrid_search"]
-    
+            app_logger.info("正在创建 HybridSearch 实例...")
+            instance = HybridSearch()
+            app_logger.info("HybridSearch 实例创建完成")
+            return instance
+        return cls._get_or_create("hybrid_search", _create)
+
     @classmethod
     def get_rag_tool(cls):
         """获取RAG检索工具（线程安全单例，避免每请求重建整个检索栈）"""
-        if "rag_tool" not in cls._instances:
-            with cls._lock:
-                if "rag_tool" not in cls._instances:
-                    from app.agents.tools.rag_tool import RAGTool
-                    app_logger.info("正在创建 RAGTool 实例...")
-                    cls._instances["rag_tool"] = RAGTool()
-                    app_logger.info("RAGTool 实例创建完成")
-        return cls._instances["rag_tool"]
+        def _create():
+            from app.agents.tools.rag_tool import RAGTool
+            app_logger.info("正在创建 RAGTool 实例...")
+            instance = RAGTool()
+            app_logger.info("RAGTool 实例创建完成")
+            return instance
+        return cls._get_or_create("rag_tool", _create)
 
     @classmethod
     def get_intent_classifier(cls):
         """获取意图分类器（全局单例；warmup预热的实例由此存取，避免模型重复加载）"""
-        if "intent_classifier" not in cls._instances:
-            with cls._lock:
-                if "intent_classifier" not in cls._instances:
-                    from app.config import get_settings
-                    from app.knowledge.ml.intent_classifier import IntentClassifier
-                    cls._instances["intent_classifier"] = IntentClassifier(
-                        model_dir=get_settings().INTENT_MODEL_DIR
-                    )
-        return cls._instances["intent_classifier"]
+        def _create():
+            from app.config import get_settings
+            from app.knowledge.ml.intent_classifier import IntentClassifier
+            return IntentClassifier(model_dir=get_settings().INTENT_MODEL_DIR)
+        return cls._get_or_create("intent_classifier", _create)
 
     @classmethod
     def get_document_processor(cls):
         """获取文档处理器单例"""
-        if "document_processor" not in cls._instances:
-            with cls._lock:
-                if "document_processor" not in cls._instances:
-                    from app.knowledge.rag.document_processor import DocumentProcessor
-                    cls._instances["document_processor"] = DocumentProcessor()
-        return cls._instances["document_processor"]
+        def _create():
+            from app.knowledge.rag.document_processor import DocumentProcessor
+            return DocumentProcessor()
+        return cls._get_or_create("document_processor", _create)
 
     @classmethod
     def get_embedder(cls):
         """获取Embedder单例（嵌入模型/客户端只加载一次）"""
-        if "embedder" not in cls._instances:
-            with cls._lock:
-                if "embedder" not in cls._instances:
-                    from app.knowledge.rag.embedder import Embedder
-                    cls._instances["embedder"] = Embedder()
-        return cls._instances["embedder"]
+        def _create():
+            from app.knowledge.rag.embedder import Embedder
+            return Embedder()
+        return cls._get_or_create("embedder", _create)
 
     @classmethod
     def reset(cls, service_name: str = None):
