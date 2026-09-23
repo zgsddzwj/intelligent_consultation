@@ -15,7 +15,9 @@ import {
 
 const { Title, Text, Paragraph } = Typography
 
-// 模拟数据
+// ===== 演示数据（Mock）=====
+// 注意：以下数据均为前端硬编码的演示数据，非真实业务数据。
+// 接入真实数据时请替换为对应的后端接口调用。
 const mockStats = {
   totalPatients: 1284,
   todayConsultations: 56,
@@ -87,6 +89,7 @@ export default function DoctorDashboard() {
           <div className="subtitle">专业医疗诊断与管理系统</div>
         </div>
         <Space>
+          <Tag color="orange">演示数据</Tag>
           <Badge dot status="processing" />
           <Text type="secondary" style={{ fontSize: '13px' }}>在线工作中</Text>
         </Space>

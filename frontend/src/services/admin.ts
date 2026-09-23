@@ -56,13 +56,13 @@ export const adminApi = {
     get<UserListResponse>('/admin/users', { params }),
 
   updateUser: (userId: number, data: { role?: string; is_active?: boolean; full_name?: string }) =>
-    put(`/admin/users/${userId}`, data),
+    put<unknown>(`/admin/users/${userId}`, data),
 
   deleteUser: (userId: number) =>
-    del(`/admin/users/${userId}`),
+    del<unknown>(`/admin/users/${userId}`),
 
   batchActionUsers: (userIds: number[], action: 'activate' | 'deactivate' | 'delete') =>
-    post('/admin/users/batch', { user_ids: userIds, action }),
+    post<unknown>('/admin/users/batch', { user_ids: userIds, action }),
 
   // ===== 数据管理 =====
   getDataStats: () =>
@@ -78,5 +78,5 @@ export const adminApi = {
 
   // ===== 导出报告 =====
   exportReport: (data: ExportRequest) =>
-    post('/admin/export', data, { responseType: 'blob' }),
+    post<Blob>('/admin/export', data, { responseType: 'blob' }),
 }

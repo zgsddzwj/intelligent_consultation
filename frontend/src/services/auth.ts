@@ -26,7 +26,7 @@ const TOKEN_EXPIRY_THRESHOLD = 5 * 60
 export const authApi = {
   login: (data: LoginRequest) => post<LoginResponse>('/users/login', data),
 
-  register: (data: RegisterRequest) => post('/users/register', data),
+  register: (data: RegisterRequest) => post<unknown>('/users/register', data),
 }
 
 export function saveAuthToken(token: string, user?: { id: number; username: string; role: string }) {

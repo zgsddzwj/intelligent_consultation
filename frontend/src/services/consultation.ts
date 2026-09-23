@@ -234,11 +234,11 @@ export const consultationApi = {
    * 结束当前会话
    */
   endSession: (consultationId: number) =>
-    post(`/consultation/${consultationId}/end`),
+    post<unknown>(`/consultation/${consultationId}/end`),
 
   /**
    * 提交用户反馈
    */
   submitFeedback: (data: FeedbackRequest) =>
-    post('/consultation/feedback', data),
+    post<unknown>('/consultation/feedback', data),
 }

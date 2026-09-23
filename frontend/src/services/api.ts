@@ -166,7 +166,7 @@ apiClient.interceptors.response.use(
       const duration = Date.now() - new Date(startTime).getTime()
       if (duration > 1000) {
         console.warn(
-          `[API] 慢请求警告: ${(response.config as any).method?.toUpperCase()} ${(response.config as any).url} 耗时 ${duration}ms`
+          `[API] 慢请求警告: ${response.config.method?.toUpperCase()} ${response.config.url} 耗时 ${duration}ms`
         )
       }
     }
@@ -281,23 +281,23 @@ function shouldRetry(error: AxiosError, config: InternalAxiosRequestConfig): boo
 // 说明：响应拦截器已统一解包 ApiResponse 并直接返回 data 字段，
 // 此处通过 as 断言对齐类型（运行时行为一致）
 
-export function get<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+export function get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
   return apiClient.get(url, config) as Promise<T>
 }
 
-export function post<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+export function post<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
   return apiClient.post(url, data, config) as Promise<T>
 }
 
-export function put<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+export function put<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
   return apiClient.put(url, data, config) as Promise<T>
 }
 
-export function del<T = any>(url: string, config?: AxiosRequestConfig): Promise<T> {
+export function del<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
   return apiClient.delete(url, config) as Promise<T>
 }
 
-export function patch<T = any>(url: string, data?: any, config?: AxiosRequestConfig): Promise<T> {
+export function patch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
   return apiClient.patch(url, data, config) as Promise<T>
 }
 

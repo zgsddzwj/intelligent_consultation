@@ -106,7 +106,7 @@ export const knowledgeApi = {
    * @returns 完整实体信息及关联关系
    */
   getEntityDetail: (entityId: string) =>
-    get(`/knowledge/entity/${entityId}`),
+    get<unknown>(`/knowledge/entity/${entityId}`),
 
   /**
    * 获取实体关联路径
@@ -120,7 +120,7 @@ export const knowledgeApi = {
     targetId: string,
     maxDepth = 3
   ) =>
-    post('/knowledge/path', {
+    post<unknown>('/knowledge/path', {
       source_id: sourceId,
       target_id: targetId,
       max_depth: maxDepth,
