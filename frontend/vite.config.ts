@@ -40,6 +40,19 @@ export default defineConfig(({ mode }) => ({
           if (id.includes('node_modules/react-force-graph') || id.includes('node_modules/force-graph') || id.includes('node_modules/d3-')) {
             return 'graph-viz'
           }
+          // Markdown渲染链（unified/remark/micromark全家桶，稳定依赖独立分包）
+          if (
+            id.includes('node_modules/react-markdown') ||
+            id.includes('node_modules/remark') ||
+            id.includes('node_modules/micromark') ||
+            id.includes('node_modules/mdast') ||
+            id.includes('node_modules/hast') ||
+            id.includes('node_modules/unified') ||
+            id.includes('node_modules/unist') ||
+            id.includes('node_modules/vfile')
+          ) {
+            return 'markdown'
+          }
           // React 生态核心库（精确匹配包目录，避免子串误匹配）
           if (
             id.includes('node_modules/react/') ||
