@@ -185,7 +185,9 @@ def drop_index(index_name: str) -> bool:
 
 if __name__ == "__main__":
     # 直接运行时执行索引创建
-    print("开始创建数据库索引...")
+    app_logger.info("开始创建数据库索引...")
     result = create_indexes()
-    print(f"\n完成！成功: {result['success_count']}, 失败: {result['failed_count']}")
+    app_logger.info(
+        f"索引创建完成！成功: {result['success_count']}, 失败: {result['failed_count']}"
+    )
 
