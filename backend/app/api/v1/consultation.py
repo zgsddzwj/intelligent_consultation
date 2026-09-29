@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any, AsyncGenerator
 import json
 import asyncio
+import queue
 import threading
 from sqlalchemy.orm import Session
 from app.dependencies import (
