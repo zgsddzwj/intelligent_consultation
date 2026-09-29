@@ -1,8 +1,7 @@
 """用户管理API"""
 import asyncio
-import time
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, Field
 from typing import Optional
 from sqlalchemy.orm import Session
 from app.dependencies import get_db, get_user_repository
@@ -31,33 +30,34 @@ def _get_login_lockout_key(username: str) -> str:
     return f"login_lockout:{username}"
 
 
-def _check_login_lockout(username: str) -> None:
+async def _check_login_lockout(username: str) -> None:
     """检查账号是否已被锁定，锁定时抛出异常"""
     if not redis_service.enabled:
         return  # Redis 不可用时降级跳过
 
-    lockout = redis_service.get(_get_login_lockout_key(username))
+    lockout = await asyncio.to_thread(redis_service.get, _get_login_lockout_key(username))
     if lockout:
-        remaining = redis_service.ttl(_get_login_lockout_key(username))
+        remaining = await asyncio.to_thread(redis_service.ttl, _get_login_lockout_key(username))
         raise UnauthorizedException(
             f"账号已被暂时锁定，请在 {remaining} 秒后重试"
         )
 
 
-def _record_login_failure(username: str) -> None:
+async def _record_login_failure(username: str) -> None:
     """记录登录失败，达阈值时锁定账号"""
     if not redis_service.enabled:
         return
 
     key = _get_login_attempt_key(username)
-    attempts = redis_service.incr(key)
+    attempts = await asyncio.to_thread(redis_service.incr, key)
     if attempts == 1:
         # 第一次失败时设置窗口过期时间
-        redis_service.expire(key, LOGIN_ATTEMPT_WINDOW)
+        await asyncio.to_thread(redis_service.expire, key, LOGIN_ATTEMPT_WINDOW)
 
     if attempts and attempts >= MAX_LOGIN_ATTEMPTS:
         # 达到上限 → 锁定账号
-        redis_service.set(
+        await asyncio.to_thread(
+            redis_service.set,
             _get_login_lockout_key(username),
             "1",
             ttl=LOGIN_LOCKOUT_SECONDS
@@ -65,20 +65,27 @@ def _record_login_failure(username: str) -> None:
         app_logger.warning(f"账号 {username} 因连续登录失败被锁定 {LOGIN_LOCKOUT_SECONDS}s")
 
 
-def _clear_login_failures(username: str) -> None:
+async def _clear_login_failures(username: str) -> None:
     """登录成功后清除失败记录"""
     if not redis_service.enabled:
         return
 
-    redis_service.delete(_get_login_attempt_key(username))
-    redis_service.delete(_get_login_lockout_key(username))
+    await asyncio.to_thread(redis_service.delete, _get_login_attempt_key(username))
+    await asyncio.to_thread(redis_service.delete, _get_login_lockout_key(username))
 
 
 class UserCreate(BaseModel):
-    """创建用户请求（角色固定为患者，角色变更仅允许管理员端点操作）"""
-    username: str
-    email: str
-    password: str
+    """创建用户请求（角色固定为患者，角色变更仅允许管理员端点操作）
+
+    校验规则与前端注册表单保持一致（用户名≥3位、密码≥6位、邮箱格式）。
+    """
+    username: str = Field(min_length=3, max_length=50)
+    email: str = Field(
+        min_length=5,
+        max_length=254,
+        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$",
+    )
+    password: str = Field(min_length=6, max_length=128)
 
 
 class UserLogin(BaseModel):
@@ -151,20 +158,20 @@ async def login_user(
 ):
     """用户登录，返回 JWT 访问令牌（含登录失败次数限制）"""
     # 1. 检查账号是否被锁定
-    _check_login_lockout(credentials.username)
+    await _check_login_lockout(credentials.username)
 
     # 2. 验证用户（密码校验为 CPU 密集操作，移入线程池避免阻塞事件循环）
     user = user_repo.get_by_username(credentials.username)
     if not user or not await asyncio.to_thread(verify_password, credentials.password, user.hashed_password):
         # 记录失败
-        _record_login_failure(credentials.username)
+        await _record_login_failure(credentials.username)
         raise UnauthorizedException("用户名或密码错误")
 
     if str(user.is_active) not in ("1", "true", "True"):
         raise UnauthorizedException("用户已被禁用")
 
     # 3. 登录成功 → 清除失败记录
-    _clear_login_failures(credentials.username)
+    await _clear_login_failures(credentials.username)
 
     access_token = create_access_token({
         "sub": str(user.id),
