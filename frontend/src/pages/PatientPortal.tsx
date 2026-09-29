@@ -248,6 +248,7 @@ export default function PatientPortal() {
               <Button
                 type="text"
                 icon={<DeleteOutlined />}
+                aria-label="清空对话"
                 onClick={() => {
                   // 中断进行中的流式请求并复位状态，避免残留回调污染清空后的会话
                   streamCancelRef.current?.()
@@ -403,6 +404,7 @@ export default function PatientPortal() {
                   type="primary"
                   shape="circle"
                   size="large"
+                  aria-label="发送消息"
                   icon={isStreaming ? <LoadingOutlined /> : <SendOutlined />}
                   onClick={handleSend}
                   loading={isStreaming}

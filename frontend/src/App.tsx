@@ -406,6 +406,7 @@ function AppLayout() {
         <Button
           type="text"
           icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          aria-label={collapsed ? '展开侧边栏' : '收起侧边栏'}
           onClick={() => setCollapsed(!collapsed)}
           style={{
             position: 'fixed',

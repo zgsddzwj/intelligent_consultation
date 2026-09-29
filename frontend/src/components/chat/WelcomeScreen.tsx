@@ -85,7 +85,8 @@ export default function WelcomeScreen({ quickSuggestions, onQuickSuggestion }: W
           </Text>
           <Flex wrap gap="small" justify="center" style={{ width: '100%' }}>
             {quickSuggestions.map((item, idx) => (
-              <div
+              <button
+                type="button"
                 key={idx}
                 onClick={() => onQuickSuggestion(item.text)}
                 style={{
@@ -97,6 +98,7 @@ export default function WelcomeScreen({ quickSuggestions, onQuickSuggestion }: W
                   transition: 'all 0.25s ease',
                   textAlign: 'center',
                   minWidth: '110px',
+                  font: 'inherit',
                 }}
                 onMouseEnter={(e) => {
                   e.currentTarget.style.borderColor = `${item.color}40`
@@ -111,7 +113,7 @@ export default function WelcomeScreen({ quickSuggestions, onQuickSuggestion }: W
               >
                 <div style={{ fontSize: '20px', marginBottom: '4px', color: item.color }}>{item.icon}</div>
                 <Text style={{ fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }}>{item.text}</Text>
-              </div>
+              </button>
             ))}
           </Flex>
         </div>

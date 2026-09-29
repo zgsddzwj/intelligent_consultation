@@ -162,6 +162,7 @@ export default function VoiceInput({
         <Button
           type="text"
           icon={isListening ? <LoadingOutlined /> : <AudioOutlined />}
+          aria-label="语音输入"
           onClick={handleClick}
           disabled={disabled || !isSupported}
           style={buttonStyle}
