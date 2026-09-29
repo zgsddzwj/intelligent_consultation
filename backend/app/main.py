@@ -1,12 +1,12 @@
 """FastAPI应用入口 - 极致优化版（优雅启动、依赖预热、配置校验、健康检查聚合）
-版本: 3.1.0
-更新日期: 2025-01
+
+版本以 app.config.settings.APP_VERSION 为唯一来源，此处不再单独维护。
 """
 import asyncio
 import hmac
 import time
 from contextlib import asynccontextmanager
-from typing import Dict, Any, List
+from typing import Dict, Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware

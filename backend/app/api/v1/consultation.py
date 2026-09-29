@@ -268,7 +268,7 @@ async def chat(
             except Exception as db_error:
                 app_logger.warning(f"更新咨询记录失败: {db_error}")
 
-        execution_time = asyncio.get_event_loop().time() - start_time
+        execution_time = asyncio.get_running_loop().time() - start_time
 
         return ChatResponse(
             answer=result.get("answer", "抱歉，处理您的咨询时遇到问题，请稍后重试。"),

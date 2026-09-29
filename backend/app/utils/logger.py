@@ -9,7 +9,7 @@ import asyncio
 import functools
 import contextvars
 import uuid
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Callable
 from loguru import logger
 from pathlib import Path
 from app.config import get_settings

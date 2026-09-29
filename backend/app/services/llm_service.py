@@ -439,9 +439,7 @@ class LLMService:
 
         async def _generate_single(item: Dict) -> str:
             async with semaphore:
-                loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(
-                    None,
+                return await asyncio.to_thread(
                     self.generate,
                     item["prompt"],
                     item.get("system_prompt"),
