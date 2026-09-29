@@ -11,6 +11,7 @@ import {
   ExperimentOutlined,
 } from '@ant-design/icons'
 import { authApi, saveAuthToken } from '../services/auth'
+import { ApiError } from '../services/api'
 
 const { Title, Text } = Typography
 
@@ -39,8 +40,9 @@ export default function Login() {
       })
       message.success('登录成功')
       navigate(from, { replace: true })
-    } catch (err: any) {
-      message.error(err.message || '登录失败，请检查用户名和密码')
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : '登录失败，请检查用户名和密码'
+      message.error(msg)
     } finally {
       setLoading(false)
     }
@@ -61,8 +63,9 @@ export default function Login() {
       })
       message.success('注册成功，请登录')
       setActiveTab('login')
-    } catch (err: any) {
-      message.error(err.message || '注册失败')
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : '注册失败'
+      message.error(msg)
     } finally {
       setLoading(false)
     }

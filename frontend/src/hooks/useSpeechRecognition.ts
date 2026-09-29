@@ -61,7 +61,7 @@ export function useSpeechRecognition(lang: string = 'zh-CN'): UseSpeechRecogniti
     recognition.interimResults = true
     recognition.maxAlternatives = 1
 
-    recognition.onresult = (event: any) => {
+    recognition.onresult = (event: SpeechRecognitionEvent) => {
       let interim = ''
       let final = ''
 
@@ -80,7 +80,7 @@ export function useSpeechRecognition(lang: string = 'zh-CN'): UseSpeechRecogniti
       setInterimTranscript(interim)
     }
 
-    recognition.onerror = (event: any) => {
+    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
       let msg = '语音识别失败'
       switch (event.error) {
         case 'no-speech':

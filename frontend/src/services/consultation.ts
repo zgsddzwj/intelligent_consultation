@@ -1,4 +1,5 @@
 import { post, get } from './api'
+import { clearAuthToken } from './auth'
 import type {
   ChatRequest,
   SourceRef,
@@ -113,8 +114,7 @@ export const consultationApi = {
       if (!response.ok) {
         // 401：令牌失效，清理本地状态并广播登出（与 axios 拦截器行为一致）
         if (response.status === 401) {
-          localStorage.removeItem('auth_token')
-          localStorage.removeItem('auth_user')
+          clearAuthToken()
           window.dispatchEvent(new CustomEvent('auth:logout', { detail: { reason: 'token_expired' } }))
           callbacks.onError?.('登录已过期，请重新登录')
           return
