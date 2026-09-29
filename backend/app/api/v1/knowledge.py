@@ -11,6 +11,7 @@ from app.models.knowledge import KnowledgeDocument
 from app.config import get_settings
 from app.utils.logger import app_logger
 import os
+import asyncio
 import tempfile
 from pathlib import Path
 from io import BytesIO
@@ -105,7 +106,8 @@ async def upload_document(
         
         # 2. 上传到对象存储
         content_type = file.content_type or "application/octet-stream"
-        upload_result = object_storage_service.upload_document(
+        upload_result = await asyncio.to_thread(
+            object_storage_service.upload_document,
             file_data=file_content,
             filename=file.filename,
             content_type=content_type
@@ -136,9 +138,10 @@ async def upload_document(
             object_storage_service.delete_document(object_key)
             raise HTTPException(status_code=400, detail="文档处理失败，无法提取内容")
         
-        # 4. 向量化并存储
+        # 4. 向量化并存储（嵌入计算密集，移入线程池）
         texts = [chunk["text"] for chunk in chunks]
-        vectors = _get_embedder().embed(texts)
+        embedder = _get_embedder()
+        vectors = await asyncio.to_thread(embedder.embed, texts)
         
         # 5. 创建文档记录
         doc = KnowledgeDocument(
@@ -163,7 +166,8 @@ async def upload_document(
         metadatas = [chunk["metadata"] for chunk in chunks]
         
         milvus = get_milvus_service()
-        vector_ids = milvus.insert(
+        vector_ids = await asyncio.to_thread(
+            milvus.insert,
             vectors=vectors,
             texts=texts,
             document_ids=document_ids,
@@ -310,7 +314,11 @@ async def delete_document(
 async def search_knowledge(request: SearchRequest):
     """搜索知识库"""
     try:
-        results = _get_hybrid_search().hybrid_search(request.query, top_k=request.top_k)
+        # 混合检索（BM25 + 向量）为CPU/IO密集操作，移入线程池避免阻塞事件循环
+        searcher = _get_hybrid_search()
+        results = await asyncio.to_thread(
+            searcher.hybrid_search, request.query, top_k=request.top_k
+        )
         
         return SearchResponse(
             query=request.query,
