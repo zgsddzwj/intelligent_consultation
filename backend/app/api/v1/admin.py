@@ -29,6 +29,12 @@ settings = get_settings()
 # 应用启动时间
 _STARTUP_TIME = time.time()
 
+# 单次批量操作允许的最大用户数（防止超大请求拖垮事务）
+MAX_BATCH_USER_IDS = 200
+
+# 导出报告单表最大导出行数（避免全表加载导致内存溢出/超时）
+MAX_EXPORT_ROWS = 10000
+
 
 # ========== 请求/响应模型 ==========
 
@@ -49,7 +55,12 @@ class UserUpdateRequest(BaseModel):
 
 class UserBatchActionRequest(BaseModel):
     """用户批量操作请求"""
-    user_ids: List[int] = Field(..., description="用户ID列表")
+    user_ids: List[int] = Field(
+        ...,
+        min_length=1,
+        max_length=MAX_BATCH_USER_IDS,
+        description=f"用户ID列表（单次最多 {MAX_BATCH_USER_IDS} 个）",
+    )
     action: str = Field(..., description="操作: activate/deactivate/delete")
 
 
@@ -188,11 +199,11 @@ async def batch_action_users(
     db: Session = Depends(get_db),
 ):
     """批量启用/禁用/删除用户"""
+    # 一次性查出目标用户，避免逐个 id 查询造成 N+1
+    users = db.query(User).filter(User.id.in_(request.user_ids)).all()
+
     affected = 0
-    for uid in request.user_ids:
-        user = db.query(User).filter(User.id == uid).first()
-        if not user:
-            continue
+    for user in users:
         if request.action == "activate":
             user.is_active = "1"
             affected += 1
@@ -384,12 +395,22 @@ async def export_report(
     db: Session = Depends(get_db),
 ):
     """导出系统报告（支持 JSON / CSV 格式）"""
+    # 单表最多导出 MAX_EXPORT_ROWS 行，超出部分截断并告警（避免全表加载导致内存溢出/超时）
+    def _limited_rows(query, section: str):
+        rows = query.limit(MAX_EXPORT_ROWS + 1).all()
+        if len(rows) > MAX_EXPORT_ROWS:
+            app_logger.warning(
+                f"导出报告 {section} 数据超过上限 {MAX_EXPORT_ROWS} 行，已截断"
+            )
+            return rows[:MAX_EXPORT_ROWS]
+        return rows
+
     report_data: dict = {}
     report_data["exported_at"] = datetime.now().isoformat()
     report_data["version"] = settings.APP_VERSION
 
     if "users" in request.sections:
-        users = db.query(User).order_by(User.created_at.desc()).all()
+        users = _limited_rows(db.query(User).order_by(User.created_at.desc()), "users")
         report_data["users"] = [
             {
                 "id": u.id,
@@ -416,7 +437,10 @@ async def export_report(
         ]
 
     if "knowledge" in request.sections:
-        docs = db.query(KnowledgeDocument).order_by(KnowledgeDocument.created_at.desc()).all()
+        docs = _limited_rows(
+            db.query(KnowledgeDocument).order_by(KnowledgeDocument.created_at.desc()),
+            "knowledge_documents",
+        )
         report_data["knowledge_documents"] = [
             {
                 "id": d.id,
