@@ -320,6 +320,40 @@ class MilvusService:
             app_logger.error(f"✗ 批量向量搜索失败: {e}")
             return [[] for _ in query_vectors]
     
+    def fetch_all_documents(self, max_docs: int = 20000) -> Tuple[List[str], List[Dict]]:
+        """分批拉取向量库全量文本（供BM25索引构建），上限max_docs防内存失控"""
+        if not self._ensure_connection():
+            return [], []
+
+        texts: List[str] = []
+        metas: List[Dict] = []
+        try:
+            iterator = self._collection.query_iterator(
+                batch_size=1000,
+                output_fields=["text", "document_id", "source"],
+            )
+            try:
+                while len(texts) < max_docs:
+                    batch = iterator.next()
+                    if not batch:
+                        break
+                    for row in batch:
+                        text = row.get("text", "")
+                        if text:
+                            texts.append(text)
+                            metas.append({
+                                "document_id": row.get("document_id"),
+                                "source": row.get("source", "unknown"),
+                            })
+            finally:
+                iterator.close()
+
+            app_logger.info(f"已拉取向量库文本 {len(texts)} 条（上限{max_docs}）")
+            return texts, metas
+        except Exception as e:
+            app_logger.error(f"拉取向量库文本失败: {e}")
+            return texts, metas
+
     def delete_by_document_id(self, document_id: int) -> bool:
         """删除特定文档的所有向量"""
         if not self._ensure_connection():
