@@ -11,7 +11,7 @@
 """
 from abc import ABC, abstractmethod
 from typing import Dict, List, Any, Optional, Callable
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+import threading
 import time
 import functools
 from app.services.llm_service import llm_service
@@ -23,6 +23,48 @@ from app.utils.logger import app_logger
 DEFAULT_AGENT_TIMEOUT = 30.0  # Agent整体执行超时
 DEFAULT_TOOL_TIMEOUT = 10.0   # 单个工具调用超时
 DEFAULT_TOOL_RETRIES = 2      # 工具调用重试次数
+
+# 工具并发上限（防止挂死的工具线程无限堆积耗尽资源）
+_TOOL_CONCURRENCY_LIMIT = 8
+_TOOL_SEMAPHORE = threading.BoundedSemaphore(_TOOL_CONCURRENCY_LIMIT)
+
+
+def _run_with_timeout(func: Callable, timeout_seconds: float, *args, **kwargs) -> Any:
+    """在独立daemon线程中执行同步函数并施加超时
+
+    超时行为：
+    - 调用方在 timeout 后立即收到 TimeoutError（join超时返回，不等待挂死线程）
+    - 旧实现用 ThreadPoolExecutor 的 with 语境，future.result 超时后
+      __exit__ 的 shutdown(wait=True) 仍会等挂死线程跑完，超时形同虚设
+    - 工作线程为 daemon，不会阻塞进程退出；并发由信号量全局限流
+    """
+    acquired = _TOOL_SEMAPHORE.acquire(timeout=timeout_seconds)
+    if not acquired:
+        raise TimeoutError(
+            f"工具并发已达上限({_TOOL_CONCURRENCY_LIMIT})，等待额度超时({timeout_seconds}s)"
+        )
+
+    result: Dict[str, Any] = {}
+
+    def _target():
+        try:
+            result["value"] = func(*args, **kwargs)
+        except BaseException as e:  # noqa: BLE001 - 必须穿透到调用方
+            result["error"] = e
+        finally:
+            _TOOL_SEMAPHORE.release()
+
+    worker = threading.Thread(target=_target, daemon=True, name="agent-tool-exec")
+    worker.start()
+    worker.join(timeout_seconds)
+
+    if worker.is_alive():
+        # 线程继续在后台运行（无法强杀），但调用方立即返回
+        raise TimeoutError(f"执行超时，已超过 {timeout_seconds}秒限制")
+
+    if "error" in result:
+        raise result["error"]
+    return result.get("value")
 
 
 def with_timeout(timeout_seconds: float):
@@ -37,18 +79,13 @@ def with_timeout(timeout_seconds: float):
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            # 使用线程池执行带超时的调用
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(func, *args, **kwargs)
-                try:
-                    return future.result(timeout=timeout_seconds)
-                except FutureTimeoutError:
-                    app_logger.error(
-                        f"Agent执行超时: {func.__name__} 超过 {timeout_seconds}秒"
-                    )
-                    raise TimeoutError(
-                        f"Agent执行超时，已超过 {timeout_seconds}秒限制"
-                    )
+            try:
+                return _run_with_timeout(func, timeout_seconds, *args, **kwargs)
+            except TimeoutError:
+                app_logger.error(
+                    f"Agent执行超时: {func.__name__} 超过 {timeout_seconds}秒"
+                )
+                raise
         return wrapper
     return decorator
 
@@ -225,10 +262,8 @@ class BaseAgent(ABC):
         # 带重试的执行
         for attempt in range(max_retries + 1):
             try:
-                # 使用线程池实现超时控制
-                with ThreadPoolExecutor(max_workers=1) as executor:
-                    future = executor.submit(tool.execute, **kwargs)
-                    result = future.result(timeout=timeout)
+                # 共享并发额度 + daemon线程超时控制（超时立即返回，不再等挂死线程）
+                result = _run_with_timeout(tool.execute, timeout, **kwargs)
                 
                 # 更新工具使用统计
                 tool_key = f"{self.name}.{tool_name}"
