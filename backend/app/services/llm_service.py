@@ -323,7 +323,12 @@ class LLMService:
         start_time = time.time()
         first_token_time = None
 
-        cache_key = f"{system_prompt or ''}:{prompt}" if system_prompt else prompt
+        # 缓存键必须包含模型与生成参数：相同提问在不同temperature/max_tokens下
+        # 期望不同输出，旧实现只按提问文本命中会返回错误参数下的旧答案
+        cache_key = (
+            f"{self.model}:{temperature}:{max_tokens}:{prompt_version}:"
+            f"{system_prompt or ''}:{prompt}"
+        )
         cached_result = _get_semantic_cache().get(cache_key)
         if cached_result:
             app_logger.info(f"语义缓存命中，相似度: {cached_result.get('similarity', 0):.3f}")
