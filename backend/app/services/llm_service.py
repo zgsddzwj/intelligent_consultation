@@ -26,7 +26,7 @@ def _get_semantic_cache():
 
 llm_circuit_breaker = get_circuit_breaker("llm_service", failure_threshold=5, recovery_timeout=60)
 
-DEFAULT_REQUEST_TIMEOUT = 60
+DEFAULT_REQUEST_TIMEOUT = 30  # 单次请求超时；重试预算=外层retry(2)×client重试(1)×30s
 STREAM_CHUNK_TIMEOUT = 30
 
 
@@ -157,7 +157,7 @@ class LLMConnectionPool:
                 api_key=settings.SILICONFLOW_API_KEY,
                 base_url=settings.SILICONFLOW_BASE_URL,
                 timeout=DEFAULT_REQUEST_TIMEOUT,
-                max_retries=2,
+                max_retries=1,  # 外层@retry已承担重试，client级只做1次瞬时重试
             )
         return None
 
@@ -186,6 +186,7 @@ class LLMService:
         self.fallback_provider = settings.FALLBACK_LLM_PROVIDER.lower() if settings.FALLBACK_LLM_PROVIDER else None
         self.prompt_version = settings.PROMPT_VERSION
         self.connection_pool = LLMConnectionPool()
+        self._primary_cooldown_until = 0.0  # 主Provider熔断窗口截止时间
 
         self._init_provider(self.primary_provider)
         if self.fallback_provider:
@@ -205,16 +206,28 @@ class LLMService:
                 error_code=ErrorCode.LLM_SERVICE_ERROR
             )
 
-    def _switch_provider(self):
-        """智能降级切换Provider"""
-        if not self.fallback_provider:
-            return False
+    # 主Provider熔断窗口：连续失败后一段时间内直接走降级，避免乒乓回故障节点
+    _PROVIDER_COOLDOWN_SECONDS = 60.0
 
-        app_logger.warning(f"LLM Provider降级: {self.primary_provider} -> {self.fallback_provider}")
-        self.primary_provider, self.fallback_provider = self.fallback_provider, self.primary_provider
-        self._init_provider(self.primary_provider)
+    def _mark_primary_failure(self):
+        self._primary_cooldown_until = time.time() + self._PROVIDER_COOLDOWN_SECONDS
         llm_metrics.record_provider_switch()
-        return True
+
+    def _active_provider(self) -> str:
+        """当前应使用的Provider：主Provider处于熔断窗口时使用降级Provider"""
+        if (
+            self.fallback_provider
+            and time.time() < self._primary_cooldown_until
+        ):
+            return self.fallback_provider
+        return self.primary_provider
+
+    def _call_provider_on(self, provider: str, messages: List[Dict],
+                          temperature: float, max_tokens: int, **kwargs) -> str:
+        """在指定Provider上执行调用（不修改共享实例状态，消除并发竞态）"""
+        if provider == "siliconflow":
+            return self._call_siliconflow_api(messages, temperature, max_tokens, **kwargs)
+        raise Exception(f"不支持的Provider: {provider}")
 
     def _parse_siliconflow_response(self, response, method_name: str = "unknown") -> str:
         """解析硅基流动（OpenAI兼容）响应"""
@@ -239,27 +252,19 @@ class LLMService:
         return self._parse_siliconflow_response(response, "generate")
 
     def _call_provider(self, messages: List[Dict], temperature: float = 0.7,
-                       max_tokens: int = 2000, **kwargs) -> str:
-        if self.primary_provider == "siliconflow":
-            return self._call_siliconflow_api(messages, temperature, max_tokens, **kwargs)
-        else:
-            raise Exception(f"不支持的Provider: {self.primary_provider}")
-
-    def _call_with_fallback(self, messages: List[Dict], temperature: float = 0.7,
-                            max_tokens: int = 2000, **kwargs) -> Tuple[str, str]:
-        """调用LLM，失败时自动降级"""
+                       max_tokens: int = 2000, **kwargs) -> Tuple[str, str]:
+        """熔断感知的Provider调用：失败时本次调用降级，并为主Provider开启熔断窗口"""
+        provider = self._active_provider()
         try:
-            result = self._call_provider(messages, temperature, max_tokens, **kwargs)
-            return result, self.primary_provider
+            return self._call_provider_on(provider, messages, temperature, max_tokens, **kwargs), provider
         except Exception as e:
-            app_logger.warning(f"主Provider {self.primary_provider} 调用失败: {e}")
-            if self._switch_provider():
-                try:
-                    result = self._call_provider(messages, temperature, max_tokens, **kwargs)
-                    return result, self.primary_provider
-                except Exception as e2:
-                    app_logger.error(f"降级Provider {self.primary_provider} 也失败: {e2}")
-                    raise
+            if provider == self.primary_provider and self.fallback_provider:
+                app_logger.warning(f"主Provider {provider} 调用失败，本次降级: {e}")
+                self._mark_primary_failure()
+                result = self._call_provider_on(
+                    self.fallback_provider, messages, temperature, max_tokens, **kwargs
+                )
+                return result, self.fallback_provider
             raise
 
     def _estimate_cost(self, input_tokens: int, output_tokens: int) -> float:
@@ -343,7 +348,7 @@ class LLMService:
             return cached_result["response"]
 
         try:
-            result, used_provider = self._call_with_fallback(
+            result, used_provider = self._call_provider(
                 self._build_messages(system_prompt, prompt),
                 temperature, max_tokens, **kwargs
             )
@@ -564,7 +569,7 @@ class LLMService:
         start_time = time.time()
 
         try:
-            result, used_provider = self._call_with_fallback(messages, temperature, max_tokens, **kwargs)
+            result, used_provider = self._call_provider(messages, temperature, max_tokens, **kwargs)
 
             if result:
                 if langfuse_service.enabled:
