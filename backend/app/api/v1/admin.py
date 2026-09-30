@@ -222,29 +222,42 @@ async def batch_action_users(
 
 @router.get("/data/stats", response_model=DataStatsResponse, summary="数据统计")
 async def get_data_stats(db: Session = Depends(get_db)):
-    """获取各数据表的统计信息"""
-    # 用户统计
-    total_users = db.query(User).count()
-    active_users = db.query(User).filter(User.is_active == "1").count()
-    doctor_count = db.query(User).filter(User.role == UserRole.DOCTOR).count()
-    admin_count = db.query(User).filter(User.role == UserRole.ADMIN).count()
+    """获取各数据表的统计信息（聚合查询：旧实现逐角色/逐状态/逐Agent发N次COUNT）"""
+    # 用户统计：单条GROUP BY
+    user_rows = db.query(
+        User.is_active,
+        User.role,
+        func.count(User.id),
+    ).group_by(User.is_active, User.role).all()
+    total_users = sum(c for _, _, c in user_rows)
+    active_users = sum(c for active, _, c in user_rows if str(active) == "1")
+    doctor_count = sum(c for _, role, c in user_rows if role == UserRole.DOCTOR)
+    admin_count = sum(c for _, role, c in user_rows if role == UserRole.ADMIN)
 
-    # 咨询统计
-    total_consultations = db.query(Consultation).count()
-    completed_consultations = db.query(Consultation).filter(
-        Consultation.status == ConsultationStatus.COMPLETED
-    ).count()
+    # 咨询统计：单条GROUP BY同时得到总量/完成量/按Agent分布
+    consultation_rows = db.query(
+        Consultation.status,
+        Consultation.agent_type,
+        func.count(Consultation.id),
+    ).group_by(Consultation.status, Consultation.agent_type).all()
+    total_consultations = sum(c for _, _, c in consultation_rows)
+    completed_consultations = sum(
+        c for status, _, c in consultation_rows if status == ConsultationStatus.COMPLETED
+    )
+    agent_stats = {agent_type.value: 0 for agent_type in AgentType}
+    for _, agent_type, c in consultation_rows:
+        if agent_type is not None:
+            agent_stats[agent_type.value] += c
 
-    # 按Agent类型统计
-    agent_stats = {}
-    for agent_type in AgentType:
-        count = db.query(Consultation).filter(Consultation.agent_type == agent_type).count()
-        agent_stats[agent_type.value] = count
-
-    # 知识文档统计
-    total_docs = db.query(KnowledgeDocument).count()
-    indexed_docs = db.query(KnowledgeDocument).filter(KnowledgeDocument.is_indexed == "1").count()
-    total_file_size = db.query(func.sum(KnowledgeDocument.file_size)).scalar() or 0
+    # 知识文档统计：单条GROUP BY
+    doc_rows = db.query(
+        KnowledgeDocument.is_indexed,
+        func.count(KnowledgeDocument.id),
+        func.sum(KnowledgeDocument.file_size),
+    ).group_by(KnowledgeDocument.is_indexed).all()
+    total_docs = sum(c for _, c, _ in doc_rows)
+    indexed_docs = sum(c for idx, c, _ in doc_rows if str(idx) == "1")
+    total_file_size = sum(sz or 0 for _, _, sz in doc_rows)
 
     # 数据库大小（PostgreSQL）
     db_size = 0
