@@ -417,6 +417,9 @@ async def chat_stream(
             first_token_sent = False
 
             # 流式生成（stream_generate 是同步 generator，用线程消费）
+            # cancel_event：生成器被关闭（客户端断开/超时终止）时通知生产线程尽快退出，
+            # 不再继续消费完整LLM输出白烧token（旧实现断开后线程照常跑完全程）
+            cancel_event = threading.Event()
             try:
                 chunk_queue: queue.Queue = queue.Queue()
                 _sentinel = object()
@@ -429,6 +432,9 @@ async def chat_stream(
                             user_id=str(owner_user_id) if owner_user_id else None,
                             session_id=str(consultation_id) if consultation_id else None
                         ):
+                            if cancel_event.is_set():
+                                app_logger.info("流式生成已被取消，停止消费LLM输出")
+                                break
                             chunk_queue.put(chunk)
                     except Exception as e:
                         app_logger.error(f"流式生成线程异常: {e}")
@@ -462,6 +468,9 @@ async def chat_stream(
             except asyncio.TimeoutError:
                 app_logger.warning("流式生成超时")
                 yield f"data: {json.dumps({'type': 'error', 'error': '生成超时，请稍后重试'})}\n\n"
+
+            finally:
+                cancel_event.set()
 
             # 添加免责声明
             disclaimer = f"\n\n{DISCLAIMER}"
