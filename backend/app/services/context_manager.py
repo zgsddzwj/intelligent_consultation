@@ -654,7 +654,8 @@ class ContextManagerV2:
         """清空指定会话的状态和缓存"""
         self._conversation_states.pop(session_id, None)
         self._state_last_access.pop(session_id, None)
-        self._summary_cache.clear()
+        # 摘要缓存按内容寻址（messages+intent生成键），并非会话私有：
+        # 旧实现clear()会连带清掉所有会话的摘要缓存；内存由LRU上限约束，无需手动清
         app_logger.info(f"会话 {session_id} 的上下文状态已清空")
     
     def get_session_stats(self, session_id: str) -> Dict[str, Any]:

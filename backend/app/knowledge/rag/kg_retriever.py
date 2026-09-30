@@ -21,6 +21,8 @@ class KnowledgeGraphRetriever:
     
     # 查询结果缓存
     _result_cache: Dict[str, Any] = {}
+    # 缓存上限：过期条目只读不删会无限堆积（进程生命周期内只增不减）
+    _RESULT_CACHE_MAX_SIZE = 1000
     _cache_ttl = 300  # 5分钟
 
     def __init__(self):
@@ -262,8 +264,21 @@ class KnowledgeGraphRetriever:
             # 6. 返回top_k
             final_results = scored_results[:top_k]
             
-            # 写入缓存
-            self._result_cache[cache_key] = {"data": final_results, "ts": _time.time()}
+            # 写入缓存（先清理过期条目；仍超限时按时间淘汰最旧的一半）
+            now = _time.time()
+            if len(self._result_cache) >= self._RESULT_CACHE_MAX_SIZE:
+                expired = [k for k, v in self._result_cache.items()
+                           if now - v["ts"] > self._cache_ttl]
+                for k in expired:
+                    self._result_cache.pop(k, None)
+                if len(self._result_cache) >= self._RESULT_CACHE_MAX_SIZE:
+                    oldest = sorted(
+                        self._result_cache,
+                        key=lambda k: self._result_cache[k]["ts"]
+                    )[:len(self._result_cache) // 2]
+                    for k in oldest:
+                        self._result_cache.pop(k, None)
+            self._result_cache[cache_key] = {"data": final_results, "ts": now}
             
             app_logger.info(f"知识图谱检索完成，查询: {query}, "
                           f"返回 {len(final_results)} 条结果（共检索 {len(all_results)} 条）")
