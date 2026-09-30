@@ -461,12 +461,20 @@ class LocalStorage(ObjectStorageBase):
         super().__init__("local")
         self.base_path = Path(base_path)
         self.base_path.mkdir(parents=True, exist_ok=True)
-    
+
+    def _resolve_key(self, object_key: str) -> Path:
+        """解析object_key并校验仍位于base_path之下（防../路径穿越读写删任意文件）"""
+        file_path = (self.base_path / object_key).resolve()
+        base_resolved = self.base_path.resolve()
+        if not str(file_path).startswith(str(base_resolved) + os.sep):
+            raise ValueError(f"非法的文件路径: {object_key}")
+        return file_path
+
     def upload_file(self, file_data: bytes, object_key: str,
                    content_type: Optional[str] = None) -> str:
         """上传文件到本地"""
         try:
-            file_path = self.base_path / object_key
+            file_path = self._resolve_key(object_key)
             file_path.parent.mkdir(parents=True, exist_ok=True)
             
             with open(file_path, "wb") as f:
@@ -481,7 +489,7 @@ class LocalStorage(ObjectStorageBase):
     def download_file(self, object_key: str) -> bytes:
         """从本地下载文件"""
         try:
-            file_path = self.base_path / object_key
+            file_path = self._resolve_key(object_key)
             with open(file_path, "rb") as f:
                 return f.read()
         except Exception as e:
@@ -491,7 +499,7 @@ class LocalStorage(ObjectStorageBase):
     def delete_file(self, object_key: str) -> bool:
         """从本地删除文件"""
         try:
-            file_path = self.base_path / object_key
+            file_path = self._resolve_key(object_key)
             if file_path.exists():
                 file_path.unlink()
                 app_logger.info(f"文件删除成功（本地）: {object_key}")
@@ -503,7 +511,7 @@ class LocalStorage(ObjectStorageBase):
     
     def file_exists(self, object_key: str) -> bool:
         """检查文件是否存在"""
-        file_path = self.base_path / object_key
+        file_path = self._resolve_key(object_key)
         return file_path.exists()
     
     def get_presigned_url(self, object_key: str, expires: int = 3600) -> str:
