@@ -1,4 +1,6 @@
 """增强版限流中间件 - 支持多维度限流和自适应调整"""
+import asyncio
+import ipaddress
 import time
 from typing import Dict, Optional, Tuple
 from fastapi import Request
@@ -9,6 +11,15 @@ from app.utils.logger import app_logger
 from app.config import get_settings
 
 settings = get_settings()
+
+
+def _is_internal_peer(host: str) -> bool:
+    """判断直连方是否为内网/回环地址（即部署方自己的反向代理）"""
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return addr.is_private or addr.is_loopback
 
 
 class RateLimitEnhancedMiddleware(BaseHTTPMiddleware):
@@ -58,12 +69,14 @@ class RateLimitEnhancedMiddleware(BaseHTTPMiddleware):
         if user_id:
             return f"ratelimit:user:{user_id}"
 
-        # 回退到IP地址
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            ip = forwarded.split(",")[0].strip()
-        else:
-            ip = request.client.host if request.client else "unknown"
+        # 回退到IP地址：X-Forwarded-For 首段可被客户端注入伪造用于绕过限流。
+        # 仅当直连方是内网地址（本方反向代理，nginx 以 $remote_addr 覆写
+        # X-Real-IP、不可注入）时才信任 X-Real-IP；直连流量一律取真实对端地址
+        ip = request.client.host if request.client else "unknown"
+        if _is_internal_peer(ip):
+            real_ip = request.headers.get("X-Real-IP", "").strip()[:45]
+            if real_ip:
+                ip = real_ip
 
         return f"ratelimit:ip:{ip}"
 
@@ -130,8 +143,10 @@ class RateLimitEnhancedMiddleware(BaseHTTPMiddleware):
         max_requests, window = self._get_limit_config(request.url.path)
         client_key = self._get_client_key(request)
 
-        # 检查限流
-        allowed, limit_info = self._check_rate_limit(client_key, max_requests, window)
+        # 检查限流（Redis pipeline 为同步IO，移入线程池避免阻塞事件循环）
+        allowed, limit_info = await asyncio.to_thread(
+            self._check_rate_limit, client_key, max_requests, window
+        )
 
         if not allowed:
             app_logger.warning(
