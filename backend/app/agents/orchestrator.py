@@ -5,7 +5,6 @@ import time
 import threading
 import hashlib
 import json
-from concurrent.futures import ThreadPoolExecutor
 from typing import Dict, Any, TypedDict, Annotated, Optional, List
 from functools import lru_cache
 from langgraph.graph import StateGraph, END
@@ -23,9 +22,6 @@ from app.services.langfuse_service import langfuse_service
 from app.infrastructure.monitoring import track_consultation
 
 settings = get_settings()
-
-# 运营日志记录线程池（复用线程，避免每请求创建/销毁Thread的开销）
-_ops_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ops-logger")
 
 
 class AgentState(TypedDict):
@@ -493,24 +489,17 @@ class AgentOrchestrator:
             "timestamp": time.time(),
         }
 
-        try:
-            def _log_operations():
-                try:
-                    self.operations_agent.process({
-                        "type": "analysis",
-                        "data": {
-                            "agent_type": state.get("agent_type"),
-                            "user_input": state.get("user_input", "")[:500],
-                            "intent": state.get("intent"),
-                            "timestamp": time.time()
-                        }
-                    })
-                except Exception as ops_err:
-                    app_logger.debug(f"运营记录处理失败: {ops_err}")
-
-            _ops_executor.submit(_log_operations)
-        except Exception as e:
-            app_logger.warning(f"运营记录失败: {e}")
+        # 运营记录用结构化日志落盘：此前此处会调用 operations_agent.process
+        # 触发一次真实 LLM 分析且结果无人使用（prompt 含时间戳致语义缓存必不
+        # 命中），等于每轮咨询双倍消耗 token；AI 运营分析应由批量任务承担
+        app_logger.info(
+            "咨询运营记录 | agent_type={} | intent={} | risk_level={} | "
+            "user_input_preview={!r}",
+            state.get("agent_type"),
+            state.get("intent"),
+            state.get("risk_level", "low"),
+            str(state.get("user_input", ""))[:200],
+        )
 
         state["result"] = result
         return state
