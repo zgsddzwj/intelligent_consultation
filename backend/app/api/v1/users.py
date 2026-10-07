@@ -174,7 +174,7 @@ async def login_user(
     await _check_login_lockout(credentials.username, client_ip)
 
     # 2. 验证用户（密码校验为 CPU 密集操作，移入线程池避免阻塞事件循环）
-    user = user_repo.get_by_username(credentials.username)
+    user = await asyncio.to_thread(user_repo.get_by_username, credentials.username)
     if not user or not await asyncio.to_thread(verify_password, credentials.password, user.hashed_password):
         # 记录失败
         await _record_login_failure(credentials.username, client_ip)
@@ -203,11 +203,11 @@ async def login_user(
 
 
 @router.get("/{user_id}", response_model=UserResponse)
-async def get_user(
+def get_user(
     user_id: int,
     user_repo: UserRepository = Depends(get_user_repository)
 ):
-    """获取用户信息"""
+    """获取用户信息（同步端点，FastAPI 自动放入线程池，避免阻塞事件循环）"""
     user = user_repo.get_by_id_or_raise(user_id)
     
     return UserResponse(

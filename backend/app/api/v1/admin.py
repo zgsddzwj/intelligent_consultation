@@ -103,7 +103,7 @@ class ExportReportRequest(BaseModel):
 # ========== 用户管理 ==========
 
 @router.get("/users", response_model=UserListResponse, summary="用户列表")
-async def get_users(
+def get_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     role: Optional[str] = Query(None, description="按角色筛选"),
@@ -150,7 +150,7 @@ async def get_users(
 
 @router.put("/users/{user_id}", summary="更新用户")
 @transactional()
-async def update_user(
+def update_user(
     user_id: int,
     update: UserUpdateRequest,
     db: Session = Depends(get_db),
@@ -178,7 +178,7 @@ async def update_user(
 
 @router.delete("/users/{user_id}", summary="删除用户")
 @transactional()
-async def delete_user(
+def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
 ):
@@ -194,7 +194,7 @@ async def delete_user(
 
 @router.post("/users/batch", summary="批量操作用户")
 @transactional()
-async def batch_action_users(
+def batch_action_users(
     request: UserBatchActionRequest,
     db: Session = Depends(get_db),
 ):
@@ -221,7 +221,7 @@ async def batch_action_users(
 # ========== 数据管理 ==========
 
 @router.get("/data/stats", response_model=DataStatsResponse, summary="数据统计")
-async def get_data_stats(db: Session = Depends(get_db)):
+def get_data_stats(db: Session = Depends(get_db)):
     """获取各数据表的统计信息（聚合查询：旧实现逐角色/逐状态/逐Agent发N次COUNT）"""
     # 用户统计：单条GROUP BY
     user_rows = db.query(
@@ -295,7 +295,7 @@ async def get_data_stats(db: Session = Depends(get_db)):
 # ========== 安全设置 ==========
 
 @router.get("/security/config", response_model=SecurityConfigResponse, summary="安全配置")
-async def get_security_config():
+def get_security_config():
     """获取当前安全配置（脱敏展示）"""
     from app.common.rbac import ROLE_PERMISSIONS, Permission
 
@@ -330,7 +330,7 @@ async def get_security_config():
 # ========== 系统监控 ==========
 
 @router.get("/system/metrics", response_model=SystemMetricsResponse, summary="系统指标")
-async def get_system_metrics(db: Session = Depends(get_db)):
+def get_system_metrics(db: Session = Depends(get_db)):
     """获取系统运行指标"""
     from app.infrastructure.monitoring import performance_monitor
     from app.services.redis_service import redis_service
@@ -403,7 +403,7 @@ async def get_system_metrics(db: Session = Depends(get_db)):
 # ========== 导出报告 ==========
 
 @router.post("/export", summary="导出系统报告")
-async def export_report(
+def export_report(
     request: ExportReportRequest,
     db: Session = Depends(get_db),
 ):
