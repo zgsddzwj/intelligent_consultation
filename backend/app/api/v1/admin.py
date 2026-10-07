@@ -437,7 +437,18 @@ def export_report(
         ]
 
     if "consultations" in request.sections:
-        consultations = db.query(Consultation).order_by(Consultation.created_at.desc()).all()
+        # 仅取元数据列并限制行数：Consultation 实体含完整对话 messages JSON，
+        # 全量加载会造成百倍内存放大（与 users/knowledge 段的导出策略一致）
+        consultations = _limited_rows(
+            db.query(
+                Consultation.id,
+                Consultation.user_id,
+                Consultation.agent_type,
+                Consultation.status,
+                Consultation.created_at,
+            ).order_by(Consultation.created_at.desc()),
+            "consultations",
+        )
         report_data["consultations"] = [
             {
                 "id": c.id,
