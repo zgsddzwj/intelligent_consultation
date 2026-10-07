@@ -4,6 +4,7 @@
 """
 import hashlib
 import json
+import threading
 from typing import List, Optional, Dict, Any
 from app.config import get_settings
 from app.utils.logger import app_logger
@@ -27,6 +28,11 @@ class Embedder:
     # 最大重试次数
     MAX_RETRIES = 3
 
+    # 类级共享 OpenAI 客户端：嵌入是超热路径（语义缓存检查、向量检索、
+    # 知识上传），逐次新建客户端意味着每次调用都重做 TCP+TLS 握手
+    _client = None
+    _client_lock = threading.Lock()
+
     def __init__(self, model: str = None, dimension: int = 1024, enable_cache: bool = True):
         self.model = model or settings.SILICONFLOW_EMBEDDING_MODEL
         self.dimension = dimension
@@ -41,14 +47,18 @@ class Embedder:
             self._cache = CacheManager()
 
     def _get_client(self):
-        """获取 OpenAI 兼容客户端（懒加载）"""
-        from openai import OpenAI
-        return OpenAI(
-            api_key=settings.SILICONFLOW_API_KEY,
-            base_url=settings.SILICONFLOW_BASE_URL,
-            timeout=60,
-            max_retries=2,
-        )
+        """获取 OpenAI 兼容客户端（进程内单例，跨实例复用连接池）"""
+        if Embedder._client is None:
+            with Embedder._client_lock:
+                if Embedder._client is None:
+                    from openai import OpenAI
+                    Embedder._client = OpenAI(
+                        api_key=settings.SILICONFLOW_API_KEY,
+                        base_url=settings.SILICONFLOW_BASE_URL,
+                        timeout=60,
+                        max_retries=2,
+                    )
+        return Embedder._client
 
     def _make_cache_key(self, text: str) -> str:
         """生成缓存键"""
