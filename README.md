@@ -278,8 +278,9 @@ intelligent_consultation/
 │   │   │   ├── customer_service_*    #   客服 Agent
 │   │   │   ├── operations_agent.py   #   运营分析 Agent
 │   │   │   └── tools/                #   Agent 工具集 (RAG/KG/诊断)
-│   │   ├── api/v1/                   # API 路由 (咨询/Agent/知识/用户/图片)
-│   │   │   └── middleware/           #   中间件 (认证/限流/响应包装/校验)
+│   │   ├── api/                      # API 层 (咨询/Agent/知识/用户/图片)
+│   │   │   ├── v1/                   #   业务路由
+│   │   │   └── middleware/           #   中间件 (认证/限流/压缩/响应包装/校验)
 │   │   ├── common/                   # 公共模块 (异常/加密/追踪/RBAC)
 │   │   ├── database/                 # 数据库 (PostgreSQL 连接池/慢查询监控)
 │   │   ├── infrastructure/           # 基础设施 (缓存/监控/限流/重试/仓储)
@@ -424,6 +425,7 @@ git push origin feat/your-feature
 - [x] 多模态诊断能力增强（图像分类 + 结构化报告 + KG 关联）
 - [x] Kubernetes 资源配置完善（NetworkPolicy + ServiceMonitor + HPA/PDB + ResourceQuota + PriorityClass）
 - [x] 生产就绪加固：认证强制开启、越权访问修复、事件循环去阻塞、测试套件全绿
+- [x] 2026-10 专项优化 6 项：工具重试机制失效修复、移除咨询尾部无效 LLM 调用（token 成本减半）、限流中间件移入线程池并抵御伪造 IP、admin 端点移出事件循环、嵌入客户端连接池复用、导出报告防 OOM
 
 ### 📋 规划中
 - [ ] 移动端 App (React Native / Flutter)
