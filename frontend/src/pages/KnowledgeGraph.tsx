@@ -103,21 +103,30 @@ export default function KnowledgeGraph() {
     staleTime: 5 * 60 * 1000,
   })
 
+  // 请求序号：快速连续切换科室/搜索时，只有最新一次请求的结果允许生效，
+  // 防止先发慢响应后返回覆盖新数据（竞态）
+  const fetchRequestIdRef = useRef(0)
+
   // 获取图谱数据
   const fetchGraphData = useCallback(async (department?: string) => {
+    const requestId = ++fetchRequestIdRef.current
     setLoading(true)
     try {
       const response = await knowledgeApi.getGraphVisualization({
         department: department || undefined,
         depth: 2,
       })
+      if (requestId !== fetchRequestIdRef.current) return
       setGraphData({ nodes: response.nodes || [], links: response.links || [] })
       setNeo4jAvailable(response.neo4j_available !== false)
     } catch (error) {
+      if (requestId !== fetchRequestIdRef.current) return
       message.error('加载知识图谱失败: ' + (error instanceof ApiError ? error.message : '未知错误'))
       setNeo4jAvailable(false)
     } finally {
-      setLoading(false)
+      if (requestId === fetchRequestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [])
 
