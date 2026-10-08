@@ -41,6 +41,10 @@ export default function PatientPortal() {
   const clearMessages = useConsultationStore((state) => state.clearMessages)
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  // 用户是否停留在底部附近：仅此时才自动跟随滚动，
+  // 否则流式期间的每个chunk都会把用户拽回底部，无法回看上文
+  const isNearBottomRef = useRef(true)
   const contentRef = useRef<string>('')  // 用 ref 累加流式内容，避免闭包陈旧值
   const thinkingStepsRef = useRef<Array<{ content: string; ts: number }>>([])  // 累加 thinking 步骤
   const [isStreaming, setIsStreaming] = useState(false)
@@ -62,9 +66,25 @@ export default function PatientPortal() {
   const isOverWarning = inputLength > INPUT_WARNING_THRESHOLD
   const isOverLimit = inputLength > MAX_INPUT_LENGTH
 
-  // 自动滚动到底部
+  // 监听滚动位置，维护"是否接近底部"标记（120px阈值）
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const el = scrollContainerRef.current
+    if (!el) return
+    const onScroll = () => {
+      const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+      isNearBottomRef.current = distance < 120
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+
+  // 自动滚动到底部：仅当用户本就在底部附近时跟随；
+  // 流式期间用 instant 滚动避免高频smooth动画排队掉帧，结束时再用smooth过渡
+  useEffect(() => {
+    if (!isNearBottomRef.current) return
+    messagesEndRef.current?.scrollIntoView({
+      behavior: isStreaming ? 'auto' : 'smooth',
+    })
   }, [messages, isStreaming, hasFirstToken])
 
   const buildChatRequest = useCallback((msg: string): ChatRequest => {
@@ -282,6 +302,7 @@ export default function PatientPortal() {
 >
         {/* 消息列表 */}
         <div
+          ref={scrollContainerRef}
           style={{
             flex: 1,
             overflowY: 'auto',
