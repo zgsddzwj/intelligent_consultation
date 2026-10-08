@@ -40,7 +40,7 @@ class SafetyGuard:
     
     # 医疗敏感词库
     MEDICAL_SENSITIVE_WORDS = {
-        "drug_abuse": ["吸毒", "嗑药", "high", "致幻", "毒品", "冰毒", "海洛因"],
+        "drug_abuse": ["吸毒", "嗑药", "get high", "致幻", "毒品", "冰毒", "海洛因"],  # high 单独作为关键词会在医学语境高频误报(高血压/高血糖/高烧)，改为无歧义短语
         "self_harm": ["自杀", "自残", "结束生命", "不想活", "死亡方式", "怎么死"],
         "illegal_medical": ["代孕", "器官买卖", "非法行医", "黑诊所", "假药"],
         "extreme_content": ["虐杀", "虐待", "暴力", "血腥", "残忍"]
@@ -59,9 +59,11 @@ class SafetyGuard:
         r"忽略.*?(?:指令|提示|规则)",
         r"忘记.*?(?:指令|提示|规则)",
         r"(?:现在|请).*?扮演.*?忽略",
-        r"system\s*:\s*",
-        r"user\s*:\s*",
-        r"assistant\s*:\s*",
+        # 角色标记锚定行首：旧实现任意位置的 "user:" 都算注入，
+        # 正常文本（如"请记录 user: 张三 的病史"）会被误判
+        r"(?im)^\s*system\s*:",
+        r"(?im)^\s*user\s*:",
+        r"(?im)^\s*assistant\s*:",
         r"<\|.*\|>",
         r"\[SYSTEM\]",
         r"\[INSTRUCTION\]"
@@ -82,10 +84,20 @@ class SafetyGuard:
         self.injection_patterns = [re.compile(p, re.IGNORECASE) for p in self.PROMPT_INJECTION_PATTERNS]
     
     def _compile_patterns(self) -> Dict[str, List[re.Pattern]]:
-        """编译敏感词正则"""
+        """编译敏感词正则
+
+        英文关键词使用整词边界匹配：旧实现按子串匹配，
+        "high" 会误伤 "High blood pressure"（高血压）等正常医疗描述
+        """
         patterns = {}
         for category, words in self.MEDICAL_SENSITIVE_WORDS.items():
-            patterns[category] = [re.compile(re.escape(word), re.IGNORECASE) for word in words]
+            compiled = []
+            for word in words:
+                if word.isascii():
+                    compiled.append(re.compile(rf"\b{re.escape(word)}\b", re.IGNORECASE))
+                else:
+                    compiled.append(re.compile(re.escape(word), re.IGNORECASE))
+            patterns[category] = compiled
         return patterns
     
     # ============================================================
