@@ -1,5 +1,6 @@
 """语义缓存系统 - 基于embedding相似度缓存LLM响应"""
 from typing import Dict, List, Any, Optional, Tuple
+import time
 import numpy as np
 import json
 from app.services.redis_service import redis_service
@@ -15,6 +16,8 @@ class SemanticCache:
     """语义缓存 - 基于embedding相似度"""
     
     def __init__(self):
+        # 节流flush时间戳
+        self._last_flush_at = 0.0
         self.embedder = Embedder()
         self.similarity_threshold = settings.LLM_SEMANTIC_CACHE_THRESHOLD
         self.cache_collection_name = "llm_semantic_cache"
@@ -243,12 +246,25 @@ class SemanticCache:
             }]
             
             self.collection.insert(data)
-            self.collection.flush()
+            # Milvus flush是同步重操作（强制段封存），逐条写入都flush会显著拖慢写入；
+            # 节流为最多60秒一次，未flush的数据最长约60秒后才可被检索——对缓存场景可接受
+            self._flush_throttled()
             app_logger.debug(f"语义缓存已存储到Milvus: {query[:50]}...")
             
         except Exception as e:
             app_logger.warning(f"Milvus语义缓存存储失败: {e}")
     
+    def _flush_throttled(self, interval_seconds: float = 60.0):
+        """按时间间隔节流执行 collection.flush()"""
+        now = time.time()
+        if now - self._last_flush_at < interval_seconds:
+            return
+        try:
+            self.collection.flush()
+            self._last_flush_at = now
+        except Exception as e:
+            app_logger.debug(f"语义缓存flush失败（不影响写入）: {e}")
+
     def _set_to_redis(self, query: str, query_embedding: List[float],
                       response: str, metadata: Dict[str, Any], timestamp: int):
         """存储到Redis（降级方案）"""
