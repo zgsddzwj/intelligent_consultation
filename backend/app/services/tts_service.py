@@ -24,6 +24,9 @@ class TTSService:
 
     _instance: Optional["TTSService"] = None
     _storage_dir: Path = None
+    # 过期文件清理节流：默认每小时最多扫一次目录
+    _CLEANUP_INTERVAL_SECONDS = 3600
+    _last_cleanup_at: float = 0.0
 
     def __new__(cls):
         if cls._instance is None:
@@ -40,6 +43,32 @@ class TTSService:
         """生成缓存键"""
         content = f"{text}|{voice}|{rate}|{volume}"
         return f"tts:{hashlib.md5(content.encode()).hexdigest()}"
+
+    def _cleanup_expired_files(self):
+        """删除超过 VOICE_CACHE_TTL 的本地语音文件（同步方法，调用方需放入线程池）
+
+        旧实现音频文件只增不删，长期运行磁盘无界增长。
+        按 mtime 判定过期，与 Redis 缓存 TTL 保持一致；节流防止每次合成都扫目录。
+        """
+        import time
+        now = time.time()
+        if now - self._last_cleanup_at < self._CLEANUP_INTERVAL_SECONDS:
+            return
+        self._last_cleanup_at = now
+        try:
+            cutoff = now - settings.VOICE_CACHE_TTL
+            removed = 0
+            for f in self._storage_dir.iterdir():
+                try:
+                    if f.is_file() and f.stat().st_mtime < cutoff:
+                        f.unlink()
+                        removed += 1
+                except OSError:
+                    continue  # 文件正被播放/权限问题，跳过下次再清
+            if removed:
+                app_logger.info(f"TTS过期语音文件已清理: {removed} 个（TTL={settings.VOICE_CACHE_TTL}s）")
+        except Exception as e:
+            app_logger.debug(f"TTS语音文件清理失败（不影响合成）: {e}")
 
     async def synthesize(
         self,
@@ -96,6 +125,10 @@ class TTSService:
         # 写入 Redis 缓存
         if result.get("audio_url") and redis_service.enabled:
             redis_service.set(cache_key, json.dumps(result, ensure_ascii=False), ttl=settings.VOICE_CACHE_TTL)
+
+        # 顺带清理磁盘过期语音文件（节流后的低频操作，移入线程池不阻塞事件循环）
+        if result.get("audio_url"):
+            await asyncio.to_thread(self._cleanup_expired_files)
 
         return result
 
