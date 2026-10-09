@@ -111,3 +111,6 @@ data/external/
 # 测试数据库文件
 test_*.db
 *.db-journal
+
+# ZCode 会话工作目录
+.zcode/

@@ -1,0 +1,5 @@
+# 数据/评测脚本依赖（独立环境安装，勿混入 backend）
+# 训练框架 LLaMA-Factory 单独安装，见 README 步骤 2
+openai>=1.30.0
+python-dotenv>=1.0.0
+tqdm>=4.66.0

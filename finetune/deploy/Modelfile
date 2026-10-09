@@ -1,0 +1,20 @@
+# ollama 模型定义：智能问诊微调模型
+# 构建方式：把量化后的 GGUF 放在本文件同目录，然后执行
+#   ollama create qwen2.5-7b-medical-sft -f Modelfile
+# 说明：system prompt 由项目后端在每次请求中下发，此处不再固化 SYSTEM
+
+FROM ./qwen2.5-7b-medical-sft-q4_k_m.gguf
+
+TEMPLATE """{{- if .System }}<|im_start|>system
+{{ .System }}<|im_end|>
+{{ end }}{{- range .Messages }}{{- if eq .Role "user" }}<|im_start|>user
+{{ .Content }}<|im_end|>
+{{ end }}{{- if eq .Role "assistant" }}<|im_start|>assistant
+{{ .Content }}<|im_end|>
+{{ end }}{{- end }}<|im_start|>assistant
+"""
+
+PARAMETER temperature 0.7
+PARAMETER stop "<|im_end|>"
+PARAMETER stop "<|im_start|>"
+PARAMETER num_ctx 8192

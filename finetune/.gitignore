@@ -1,0 +1,13 @@
+# 生成的训练数据与产物不入库
+data/*.jsonl
+data/eval/
+data/samples/
+eval/reports/
+saves/
+models/
+__pycache__/
+*.pyc
+# 教师模型密钥不入库
+.env
+# 云端训练打包产物
+ft_cloud.zip

@@ -1,0 +1,13 @@
+# 合并 LoRA 权重为完整模型（部署用）
+# 运行方式（在 finetune/ 目录下）：
+#   llamafactory-cli export configs/merge_export.yaml
+# 产物：models/qwen2.5-7b-medical-sft/（可被 vLLM 加载，或转 GGUF 给 ollama）
+
+model_name_or_path: Qwen/Qwen2.5-7B-Instruct
+adapter_name_or_path: saves/qwen2.5-7b-qlora-sft
+template: qwen
+finetuning_type: lora
+export_dir: models/qwen2.5-7b-medical-sft
+export_size: 4
+export_device: cpu
+export_legacy_format: false

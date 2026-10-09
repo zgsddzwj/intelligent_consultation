@@ -1,0 +1,54 @@
+# Qwen2.5-7B-Instruct QLoRA SFT —— 智能问诊项目混合多任务
+# 运行方式（在 finetune/ 目录下）：
+#   llamafactory-cli train configs/qwen2.5-7b-qlora-sft.yaml
+# 低显存备选：把 model_name_or_path 换成 Qwen/Qwen2.5-3B-Instruct 或 1.5B
+
+### 模型
+model_name_or_path: Qwen/Qwen2.5-7B-Instruct
+trust_remote_code: true
+# 国内网络建议开启 ModelScope 下载（约 15GB）：
+use_modelscope: true
+
+### 方法
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_target: all
+lora_rank: 16
+lora_alpha: 32
+lora_dropout: 0.05
+# QLoRA 4bit（bitsandbytes）；Windows 下若 bnb 异常，注释掉 quantization_bit 改纯 bf16 LoRA（24GB 足够）
+quantization_bit: 4
+quantization_method: bitsandbytes
+
+### 数据
+dataset: medical_sft_mix
+dataset_dir: configs
+template: qwen
+cutoff_len: 2048
+overwrite_cache: true
+preprocessing_num_workers: 8
+# 训练集 2% 作为验证集
+val_size: 0.02
+
+### 输出
+output_dir: saves/qwen2.5-7b-qlora-sft
+logging_steps: 10
+save_steps: 100
+plot_loss: true
+overwrite_output_dir: true
+
+### 训练超参
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 1.0e-4
+num_train_epochs: 3.0
+lr_scheduler_type: cosine
+warmup_ratio: 0.1
+bf16: true
+gradient_checkpointing: true
+
+### 训练中评估
+per_device_eval_batch_size: 2
+eval_strategy: steps
+eval_steps: 100
