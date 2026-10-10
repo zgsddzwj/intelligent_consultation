@@ -235,7 +235,7 @@ uv run python scripts/ml/train_ml_models.py
 cd backend
 uv sync
 cp .env.example .env  # 配置 API Key
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8088
 
 # 前端
 cd frontend
@@ -257,10 +257,10 @@ npm run dev  # http://localhost:3000
 | 前端问诊界面 | http://localhost:3000 |
 | 医生工作台 | http://localhost:3000/doctor |
 | 知识图谱可视化 | http://localhost:3000/knowledge-graph |
-| 后端 API | http://localhost:8000 |
-| API 文档 (Swagger) | http://localhost:8000/docs |
-| 健康检查 | http://localhost:8000/health |
-| Prometheus 指标 | http://localhost:8000/metrics |
+| 后端 API | http://localhost:8088 |
+| API 文档 (Swagger) | http://localhost:8088/docs |
+| 健康检查 | http://localhost:8088/health |
+| Prometheus 指标 | http://localhost:8088/metrics |
 | Neo4j 浏览器 | http://localhost:7474 |
 
 ---

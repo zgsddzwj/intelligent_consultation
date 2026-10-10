@@ -51,7 +51,7 @@ git checkout -b feat/your-feature-name
 # 后端
 cd backend
 uv sync
-uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8088
 
 # 前端
 cd frontend

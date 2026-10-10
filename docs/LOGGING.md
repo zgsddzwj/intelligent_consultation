@@ -195,7 +195,7 @@ chmod 755 backend/logs
 Vite开发服务器日志：
 ```
 5:58:20 PM [vite] http proxy error at /api/v1/image_analysis/analyze:
-Error: connect ETIMEDOUT 127.0.0.1:8000
+Error: connect ETIMEDOUT 127.0.0.1:8088
 ```
 
 ## 🎯 快速查看日志

@@ -52,7 +52,7 @@ data/
 
 ```bash
 # 使用API上传
-curl -X POST http://localhost:8000/api/v1/knowledge/documents \
+curl -X POST http://localhost:8088/api/v1/knowledge/documents \
   -F "file=@document.pdf" \
   -F "source=guidelines"
 ```

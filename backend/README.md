@@ -24,7 +24,7 @@ cp .env.example .env
 python -m app.database.init_db
 
 # 启动服务
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8088
 ```
 
 详细文档请参阅项目根目录的 [README.md](../README.md)。

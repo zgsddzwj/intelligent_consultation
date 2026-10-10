@@ -176,8 +176,8 @@ kubectl get svc -n medical-consultation
 kubectl logs -f -n medical-consultation deployment/backend
 
 # 测试后端健康检查
-kubectl port-forward -n medical-consultation svc/backend-service 8000:8000
-curl http://localhost:8000/health
+kubectl port-forward -n medical-consultation svc/backend-service 8088:8088
+curl http://localhost:8088/health
 ```
 
 ## 扩缩容

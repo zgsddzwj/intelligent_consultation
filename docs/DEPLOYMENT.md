@@ -46,7 +46,7 @@ docker-compose down -v
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| backend | 8000 | FastAPI后端API |
+| backend | 8088 | FastAPI后端API |
 | frontend (可选) | 3000 | React前端 (Nginx) |
 | postgres | 5432 | PostgreSQL数据库 |
 | redis | 6379 | Redis缓存 |
@@ -88,7 +88,7 @@ cd backend
 uv sync
 
 # 启动后端（热重载模式）
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8088 --reload
 ```
 
 ### 3. 启动前端
@@ -225,16 +225,16 @@ uv run python scripts/ml/train_ml_models.py
 
 ```bash
 # 后端健康检查（深度检查，探测数据库/Redis等依赖）
-curl http://localhost:8000/health
+curl http://localhost:8088/health
 
 # 存活检查（轻量，容器HEALTHCHECK/K8s liveness使用）
-curl http://localhost:8000/live
+curl http://localhost:8088/live
 
 # 前端可访问性
 curl http://localhost:3000 -I
 
 # Prometheus指标
-curl http://localhost:8000/metrics
+curl http://localhost:8088/metrics
 ```
 
 ---
@@ -254,8 +254,8 @@ curl http://localhost:8000/metrics
 
 | 监控项 | 地址 |
 |--------|------|
-| Prometheus指标 | http://localhost:8000/metrics |
-| API交互式文档 | http://localhost:8000/docs |
+| Prometheus指标 | http://localhost:8088/metrics |
+| API交互式文档 | http://localhost:8088/docs |
 | Langfuse追踪 | (需配置LANGFUSE环境变量) |
 
 ---
@@ -265,7 +265,7 @@ curl http://localhost:8000/metrics
 ### 端口被占用
 ```bash
 # 查找占用进程
-lsof -i :8000
+lsof -i :8088
 lsof -i :3000
 
 # 终止进程

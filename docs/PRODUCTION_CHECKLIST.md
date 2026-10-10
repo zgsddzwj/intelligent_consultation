@@ -62,8 +62,8 @@ docker compose config --quiet
 docker compose up -d --build
 
 # 4. 健康检查
-curl http://localhost:8000/health
-curl http://localhost:8000/ready
+curl http://localhost:8088/health
+curl http://localhost:8088/ready
 curl -I http://localhost:3000/
 
 # 5. 初始化数据（首次部署，见 docs/DEPLOYMENT.md）

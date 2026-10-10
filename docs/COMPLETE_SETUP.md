@@ -51,7 +51,7 @@ uv run python scripts/setup/init_all.py
 ### 步骤3: 访问系统
 - 问诊界面: http://localhost:3000
 - 知识图谱: http://localhost:3000/knowledge-graph
-- API文档: http://localhost:8000/docs
+- API文档: http://localhost:8088/docs
 
 ## 📋 详细启动流程
 
@@ -162,15 +162,15 @@ uv run python scripts/maintenance/test_system.py
 ### 快速检查
 ```bash
 # 1. 检查API
-curl http://localhost:8000/health
+curl http://localhost:8088/health
 
 # 2. 测试咨询
-curl -X POST http://localhost:8000/api/v1/consultation/chat \
+curl -X POST http://localhost:8088/api/v1/consultation/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "你好"}'
 
 # 3. 检查知识图谱
-curl http://localhost:8000/api/v1/knowledge/graph/departments
+curl http://localhost:8088/api/v1/knowledge/graph/departments
 ```
 
 ### 完整测试

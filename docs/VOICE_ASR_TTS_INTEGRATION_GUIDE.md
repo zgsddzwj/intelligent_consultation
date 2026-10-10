@@ -1265,11 +1265,11 @@ export default defineConfig(({ mode }) => ({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8088',
         changeOrigin: true,
       },
       '/voice_files': {                    // ← 新增：代理音频文件请求
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8088',
         changeOrigin: true,
       },
     },
@@ -1362,7 +1362,7 @@ Web Speech API 兼容性：
 **检查清单：**
 1. 确认后端已安装 `edge-tts`：`pip install edge-tts`
 2. 确认 `TTS_ENABLED=True`（配置文件）
-3. 测试后端接口：`curl -X POST http://localhost:8000/api/v1/speech/tts -H "Content-Type: application/json" -d '{"text":"测试"}'`
+3. 测试后端接口：`curl -X POST http://localhost:8088/api/v1/speech/tts -H "Content-Type: application/json" -d '{"text":"测试"}'`
 4. 确认 `/voice_files` 静态目录已挂载
 5. 确认 Vite 代理配置了 `/voice_files`
 

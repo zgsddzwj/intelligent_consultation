@@ -61,7 +61,7 @@ docker-compose up -d postgres redis neo4j milvus etcd minio
 # 终端2: 启动后端
 cd backend
 uv sync --extra dev
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8088 --reload
 
 # 终端3: 启动前端
 cd frontend
@@ -117,8 +117,8 @@ uv run python scripts/ml/train_ml_models.py --list-models
 | **👨‍⚕️ 医生工作台** | http://localhost:3000/doctor | 医生诊断管理面板 |
 | **🔬 知识图谱** | http://localhost:3000/knowledge-graph | 医疗知识可视化 |
 | **⚙️ 管理后台** | http://localhost:3000/admin | 系统运维管理中心 |
-| **📡 后端API** | http://localhost:8000 | FastAPI RESTful API |
-| **📖 API文档** | http://localhost:8000/docs | Swagger交互式文档 |
+| **📡 后端API** | http://localhost:8088 | FastAPI RESTful API |
+| **📖 API文档** | http://localhost:8088/docs | Swagger交互式文档 |
 | **📊 Neo4j浏览器** | http://localhost:7474 | 图谱数据浏览 (neo4j/neo4j) |
 
 ## 7. 功能使用指南
@@ -153,19 +153,19 @@ uv run python scripts/ml/train_ml_models.py --list-models
 
 ### 健康检查
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8088/health
 ```
 
 ### 测试知识图谱API
 ```bash
-curl -X POST http://localhost:8000/api/v1/knowledge/graph/visualization \
+curl -X POST http://localhost:8088/api/v1/knowledge/graph/visualization \
   -H "Content-Type: application/json" \
   -d '{"department": "心内科", "depth": 2}'
 ```
 
 ### 测试AI对话API
 ```bash
-curl -X POST http://localhost:8000/api/v1/consultation/chat \
+curl -X POST http://localhost:8088/api/v1/consultation/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "头痛怎么办？"}'
 ```
@@ -202,7 +202,7 @@ docker-compose restart milvus etcd minio
 ### 前端页面空白
 ```bash
 # 确认后端API正常运行
-curl http://localhost:8000/health
+curl http://localhost:8088/health
 
 # 检查前端控制台是否有CORS错误
 # 确认前端代理配置正确 (vite.config.ts)
