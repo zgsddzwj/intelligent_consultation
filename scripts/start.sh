@@ -50,7 +50,7 @@ echo ""
 echo "[2/3] 等待服务就绪..."
 MAX_WAIT=120
 ELAPSED=0
-until curl -sf http://localhost:8000/live > /dev/null 2>&1; do
+until curl -sf http://localhost:8088/live > /dev/null 2>&1; do
     if [ "$ELAPSED" -ge "$MAX_WAIT" ]; then
         echo "错误: 后端在 ${MAX_WAIT}s 内未就绪，请检查: docker compose logs backend"
         exit 1
@@ -87,8 +87,8 @@ echo "=========================================="
 echo ""
 echo "访问地址："
 echo "  前端: http://localhost:3000"
-echo "  后端API: http://localhost:8000"
-echo "  API文档: http://localhost:8000/docs"
+echo "  后端API: http://localhost:8088"
+echo "  API文档: http://localhost:8088/docs"
 echo "  Neo4j浏览器: http://localhost:7474"
 echo ""
 echo "查看日志: docker compose logs -f"

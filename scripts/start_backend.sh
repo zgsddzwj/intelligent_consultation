@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../backend"
 
 echo "启动后端服务..."
 echo "依赖管理: uv"
-PORT="${BACKEND_PORT:-8000}"
+PORT="${BACKEND_PORT:-8088}"
 echo "端口: ${PORT}"
 echo ""
 

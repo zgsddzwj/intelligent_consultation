@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from app.utils.logger import app_logger
 
-BASE_URL = "http://localhost:8000"
+BASE_URL = "http://localhost:8088"
 
 
 def test_api_health():

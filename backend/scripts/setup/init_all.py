@@ -102,7 +102,7 @@ def init_all():
         app_logger.info("\n下一步:")
         app_logger.info("  1. 启动服务: docker-compose up -d")
         app_logger.info("  2. 访问前端: http://localhost:3000")
-        app_logger.info("  3. 访问API文档: http://localhost:8000/docs")
+        app_logger.info("  3. 访问API文档: http://localhost:8088/docs")
 
     except Exception as e:
         app_logger.error(f"初始化过程出错: {e}")

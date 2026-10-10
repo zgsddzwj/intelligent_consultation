@@ -17,11 +17,11 @@ export default defineConfig(({ mode }) => ({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8088',
         changeOrigin: true,
       },
       '/voice_files': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8088',
         changeOrigin: true,
       },
     },

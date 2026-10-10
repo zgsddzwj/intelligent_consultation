@@ -38,9 +38,9 @@ docker compose ps 2>/dev/null | grep -E "(postgres|redis|neo4j|milvus|minio)" | 
 echo ""
 echo "[4/4] 启动服务..."
 cd backend
-echo "后端服务将在 http://localhost:8000 启动"
-echo "API文档: http://localhost:8000/docs"
-uv run uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
+echo "后端服务将在 http://localhost:8088 启动"
+echo "API文档: http://localhost:8088/docs"
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8088 --reload &
 BACKEND_PID=$!
 echo "后端服务PID: $BACKEND_PID"
 
@@ -63,8 +63,8 @@ echo "=========================================="
 echo ""
 echo "访问地址："
 echo "  前端: http://localhost:3000"
-echo "  后端API: http://localhost:8000"
-echo "  API文档: http://localhost:8000/docs"
+echo "  后端API: http://localhost:8088"
+echo "  API文档: http://localhost:8088/docs"
 echo ""
 echo "停止服务:"
 echo "  kill $BACKEND_PID $FRONTEND_PID"
