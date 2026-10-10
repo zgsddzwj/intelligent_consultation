@@ -24,7 +24,7 @@ spec:
               service:
                 name: backend-service
                 port:
-                  number: 8000
+                  number: 8088
     - host: app.yourdomain.com
       http:
         paths:

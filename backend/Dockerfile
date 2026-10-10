@@ -55,10 +55,10 @@ COPY --chown=appuser:appuser . .
 
 # 存活检查用 /live（轻量、不探测外部依赖）；深度检查由 compose/k8s 探针与 /health 承担
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/live || exit 1
+    CMD curl -f http://localhost:8088/live || exit 1
 
 # 暴露端口
-EXPOSE 8000
+EXPOSE 8088
 
 # 启动命令
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8088", "--workers", "2"]

@@ -269,7 +269,7 @@ jobs:
       - name: Wait for health endpoints
         run: |
           for i in $(seq 1 40); do
-            if curl -sf http://localhost:8000/live && curl -sf http://localhost:8000/ready; then
+            if curl -sf http://localhost:8088/live && curl -sf http://localhost:8088/ready; then
               echo "Smoke test passed"
               exit 0
             fi

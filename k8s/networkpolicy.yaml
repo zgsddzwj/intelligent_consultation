@@ -15,14 +15,14 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # 允许 frontend -> backend (HTTP 8000)
+    # 允许 frontend -> backend (HTTP 8088)
     - from:
         - podSelector:
             matchLabels:
               app: frontend
       ports:
         - protocol: TCP
-          port: 8000
+          port: 8088
     # 允许 ingress-nginx -> backend (通过 namespace selector)
     - from:
         - namespaceSelector:
@@ -30,7 +30,7 @@ spec:
               kubernetes.io/metadata.name: ingress-nginx
       ports:
         - protocol: TCP
-          port: 8000
+          port: 8088
     # 允许 Prometheus 抓取 metrics
     - from:
         - namespaceSelector:
@@ -38,7 +38,7 @@ spec:
               kubernetes.io/metadata.name: monitoring
       ports:
         - protocol: TCP
-          port: 8000
+          port: 8088
   egress:
     # 允许 backend -> postgres
     - to:
@@ -134,7 +134,7 @@ spec:
               app: backend
       ports:
         - protocol: TCP
-          port: 8000
+          port: 8088
     # 允许 DNS 解析
     - to:
         - namespaceSelector:
