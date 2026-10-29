@@ -19,7 +19,10 @@ lora_alpha: 32
 lora_dropout: 0.05
 # QLoRA 4bit（bitsandbytes）；Windows 下若 bnb 异常，注释掉 quantization_bit 改纯 bf16 LoRA（24GB 足够）
 quantization_bit: 4
-quantization_method: bitsandbytes
+# LlamaFactory v0.9.5+ 的枚举值；不要使用旧版的 bitsandbytes。
+quantization_method: bnb
+quantization_type: nf4
+double_quantization: true
 
 ### 数据
 dataset: medical_sft_mix
@@ -28,6 +31,7 @@ template: qwen
 cutoff_len: 2048
 overwrite_cache: true
 preprocessing_num_workers: 8
+dataloader_num_workers: 4
 # 训练集 2% 作为验证集
 val_size: 0.02
 
@@ -35,8 +39,10 @@ val_size: 0.02
 output_dir: saves/qwen2.5-7b-qlora-sft
 logging_steps: 10
 save_steps: 100
+save_total_limit: 3
 plot_loss: true
-overwrite_output_dir: true
+# 保留 checkpoint，避免中断重跑时静默覆盖训练产物。
+overwrite_output_dir: false
 
 ### 训练超参
 per_device_train_batch_size: 2
@@ -47,8 +53,13 @@ lr_scheduler_type: cosine
 warmup_ratio: 0.1
 bf16: true
 gradient_checkpointing: true
+seed: 42
+data_seed: 42
 
 ### 训练中评估
 per_device_eval_batch_size: 2
 eval_strategy: steps
 eval_steps: 100
+load_best_model_at_end: true
+metric_for_best_model: eval_loss
+greater_is_better: false

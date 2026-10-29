@@ -14,18 +14,18 @@
 - 一致性：若能导入 backend 的 ConsultationPrompts，校验 system prompt 是否与源同步
 """
 import argparse
+import re
 import sys
 from collections import Counter
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Tuple
 
 from common import DATA_DIR, read_jsonl, write_jsonl
 from kg_seed import DISCLAIMER, NER_KEYS, SYSTEM_PROMPTS
 
-TASK_PREFIXES = ("consultation_single", "consultation_multi", "ner", "summary")
 MAX_TOTAL_CHARS = 3600  # cutoff_len 2048 token 的保守汉字估算
-
-VALID_SYSTEMS = {spec["system"] for spec in SYSTEM_PROMPTS.values()} | {"__summary__"}
+SOURCE_HEADER_RE = re.compile(r"\[来源(\d+):[^\]]+\]")
+SOURCE_CITATION_RE = re.compile(r"\[来源(\d+)\]")
 
 
 def check_row(row: Dict) -> List[str]:
@@ -49,14 +49,23 @@ def check_row(row: Dict) -> List[str]:
     task = row.get("task", "")
     first_user = next((c["value"] for c in conv if c.get("from") == "human"), "")
     answers = [c["value"] for c in conv if c.get("from") == "gpt"]
-    if task.startswith("consultation"):
-        # 有上下文（"基于以下"开头）必须带来源标注；无上下文样本（RAG 无结果，
-        # 线上 format_stream_prompt 即此形态）只要求免责声明
-        has_context = "基于以下" in first_user
-        if task == "consultation_single" and has_context and "[来源" not in answers[0]:
-            issues.append("单轮回答缺 [来源] 标注")
-        if task == "consultation_multi" and not any("[来源" in a for a in answers):
-            issues.append("多轮回答全程无 [来源] 标注")
+    if not answers:
+        return issues + ["缺少 gpt 回答"]
+
+    if task.startswith("consultation") or task == "safety":
+        source_ids = {int(source_id) for source_id in SOURCE_HEADER_RE.findall(first_user)}
+        cited_ids = {
+            int(source_id)
+            for answer in answers
+            for source_id in SOURCE_CITATION_RE.findall(answer)
+        }
+        if source_ids and not cited_ids:
+            issues.append("有来源上下文但回答缺 [来源N] 标注")
+        invalid_citations = cited_ids - source_ids
+        if invalid_citations:
+            issues.append(f"引用了上下文中不存在的来源编号: {sorted(invalid_citations)}")
+        if task == "safety" and not any(word in answers[0] for word in ("120", "急诊", "立即")):
+            issues.append("安全样本缺少明确的紧急升级指令")
         if DISCLAIMER not in answers[-1]:
             issues.append("末轮回答缺免责声明")
         if not first_user.strip():
@@ -81,9 +90,9 @@ def check_row(row: Dict) -> List[str]:
     return issues
 
 
-def check_prompt_sync() -> List[str]:
-    """尝试导入 backend 真实 Prompt 模块，比对是否与本仓库副本一致。"""
-    warnings = []
+def check_prompt_sync() -> Tuple[List[str], List[str]]:
+    """比对后端 Prompt；不一致必须阻断合并，无法导入仅给出环境提示。"""
+    errors, warnings = [], []
     try:
         sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
         from app.prompts.consultation import ConsultationPrompts
@@ -95,10 +104,10 @@ def check_prompt_sync() -> List[str]:
         ]
         for key, real, _ in pairs:
             if real.strip() != SYSTEM_PROMPTS[key]["system"].strip():
-                warnings.append(f"SYSTEM_PROMPTS[{key}] 与 backend/app/prompts/consultation.py 不一致，请同步后重新生成数据")
+                errors.append(f"SYSTEM_PROMPTS[{key}] 与 backend/app/prompts/consultation.py 不一致，请同步后重新生成数据")
     except Exception:  # noqa: BLE001 - backend 依赖缺失时跳过
         warnings.append("（提示）无法导入 backend ConsultationPrompts，跳过 prompt 同步检查")
-    return warnings
+    return errors, warnings
 
 
 def main() -> None:
@@ -152,17 +161,25 @@ def main() -> None:
     for task, n in report.most_common():
         print(f"  {task}: {n}")
 
-    for w in check_prompt_sync():
+    prompt_errors, prompt_warnings = check_prompt_sync()
+    for w in prompt_warnings:
         print(f"[同步检查] {w}")
+    for error in prompt_errors:
+        print(f"[同步检查] {error}")
+    if prompt_errors:
+        hard_fail = True
+
+    if hard_fail:
+        if args.merge:
+            print("\n存在结构性问题，已跳过合并，保留原 sft_train.jsonl 不变")
+        print("存在结构性问题，建议检查生成脚本（重复类问题可用 --fix 去重）")
+        return 1
 
     if args.merge:
         out = DATA_DIR / "sft_train.jsonl"
         write_jsonl(out, all_rows)
         print(f"\n已合并 {len(all_rows)} 条 → {out}")
 
-    if hard_fail and not args.fix:
-        print("\n存在结构性问题，建议检查生成脚本（重复类问题可用 --fix 去重）")
-        return 1
     return 0
 
 

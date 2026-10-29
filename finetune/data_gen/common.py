@@ -2,7 +2,7 @@
 import json
 import random
 from pathlib import Path
-from typing import Dict, List, Optional, Optional
+from typing import Dict, List, Optional
 
 from kg_seed import (
     DISEASES,
@@ -156,7 +156,11 @@ def build_kg_context(entities: List[str]) -> str:
             _, desc, scope = record
             parts.append(f"[知识图谱] 科室：{name}（{desc}，诊疗范围：{scope}）")
 
-    return "\n".join(parts)
+    # 训练中的引用编号必须与线上 RAG 上下文协议一致：每个可引用片段都具有
+    # 稳定的 [来源N: 标题] 头，答案中的 [来源N] 才可被验证。
+    return "\n\n".join(
+        f"[来源{i}: 项目知识图谱]\n{part}" for i, part in enumerate(parts, 1)
+    )
 
 
 def build_context(question: str, with_guideline: bool = True) -> str:
@@ -172,7 +176,8 @@ def build_context(question: str, with_guideline: bool = True) -> str:
                 g = guideline_for(disease)
                 if g:
                     source, text = g
-                    parts.append(f"[指南] {source}：\n{text}")
+                    next_source_id = kg.count("[来源") + 1
+                    parts.append(f"[来源{next_source_id}: {source}]\n{text}")
                 break
     return "\n".join(parts)
 

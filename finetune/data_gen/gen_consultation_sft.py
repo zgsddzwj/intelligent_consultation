@@ -23,7 +23,7 @@ from common import (
     merge_jsonl,
     write_jsonl,
 )
-from kg_seed import DISCLAIMER, INTENT_TO_TASK, SYSTEM_PROMPTS
+from kg_seed import DISCLAIMER, SYSTEM_PROMPTS
 from llm_client import LLMClient, extract_json, normalize_output
 
 MULTI_TURN_INSTRUCTION = """你是医疗问诊对话数据构造助手。下面给出一份参考资料、一位患者的首问和该场景应遵循的医生助手人设。请构造一段自然的中文问诊对话，要求：
@@ -70,18 +70,18 @@ MULTI_REPAIR_INSTRUCTION = """请修改下面的问诊对话JSON：在医生回�
 
 
 def build_single_turn_requests(items: List[Dict]) -> List[Dict]:
-    """单轮样本：完全复刻线上调用形态（system + format_*_prompt 的 user）。"""
+    """单轮样本：复刻 /chat/stream 的医疗咨询 Prompt 契约。
+
+    流式接口无论规则意图如何，均使用 MEDICAL_CONSULTATION_SYSTEM 和
+    format_medical_prompt。意图只用于覆盖问句分布，不能改变训练的消息形态。
+    """
     requests = []
+    spec = SYSTEM_PROMPTS["medical"]
     for it in items:
-        task = INTENT_TO_TASK[it["intent"]]
-        spec = SYSTEM_PROMPTS[task]
-        context = it["context"]
-        if context:
-            user = spec["user_with_context"].format(context=context, question=it["question"])
-        else:
-            # 无上下文场景走 stream 模板（对应线上 STREAM_CONSULTATION_NO_CONTEXT）
-            spec = SYSTEM_PROMPTS["stream"]
-            user = spec["user_no_context"].format(question=it["question"])
+        # 线上 format_medical_prompt 在无检索结果时也会保留相同模板，仅 context 为空。
+        user = spec["user_with_context"].format(
+            context=it["context"], question=it["question"]
+        )
         requests.append({
             "system": spec["system"],
             "user": user,
@@ -95,9 +95,8 @@ def build_single_turn_requests(items: List[Dict]) -> List[Dict]:
 
 def build_multi_turn_requests(items: List[Dict]) -> List[Dict]:
     requests = []
+    spec = SYSTEM_PROMPTS["medical"]
     for it in items:
-        task = INTENT_TO_TASK[it["intent"]]
-        spec = SYSTEM_PROMPTS[task]
         context = it["context"] or "（无检索结果，回答需明确说明信息不足）"
         user = MULTI_TURN_INSTRUCTION.format(
             n_turns=3,
@@ -126,6 +125,9 @@ def finalize_single(req: Dict, answer: str) -> Tuple[Optional[Dict], bool]:
     has_context = bool(meta["context"])
     if has_context and "[来源" not in answer:
         return None, True  # 有上下文必须带来源标注，走修复
+    if not has_context and "[来源" in answer:
+        # 空 RAG 上下文不存在可验证的来源编号，不能把猜测的引用写入训练集。
+        return None, False
     if DISCLAIMER not in answer:
         answer = answer.rstrip() + "\n\n" + DISCLAIMER
     row = conversation(
@@ -201,7 +203,9 @@ def main() -> None:
         print(f"断点续跑：已有单轮 {len(done_single)} 条、多轮 {len(done_multi)} 组，自动跳过")
 
     # ---- 单轮：10% 走无上下文场景 ----
-    single_items = [it for it in pool if it["question"] not in done_single][:n_single]
+    # n_* 表示目标总量而不是本次增量；中断后重跑只补齐缺口，避免额外 API 花费。
+    remaining_single = max(0, n_single - len(done_single))
+    single_items = [it for it in pool if it["question"] not in done_single][:remaining_single]
     no_ctx_n = 2 if args.dry_run else max(1, int(n_single * 0.1))
     for i, it in enumerate(single_items):
         it["context"] = "" if i < no_ctx_n else build_context(it["question"])
@@ -211,8 +215,9 @@ def main() -> None:
     prefer = [it for it in pool if it["intent"] in ("diagnosis", "medication", "health_management")]
     candidates = prefer + [it for it in pool if it not in prefer]
     multi_items = []
+    remaining_multi = max(0, n_multi - len(done_multi))
     for it in candidates:
-        if len(multi_items) >= n_multi:
+        if len(multi_items) >= remaining_multi:
             break
         if it["question"] in done_multi:
             continue
@@ -220,8 +225,12 @@ def main() -> None:
         if ctx:
             it["context"] = ctx
             multi_items.append(it)
-    if len(multi_items) < n_multi:
-        print(f"  [警告] 有 KG 上下文的问句不足：{len(multi_items)}/{n_multi}，按实际数量生成")
+    if len(multi_items) < remaining_multi:
+        print(f"  [警告] 有 KG 上下文的问句不足：{len(multi_items)}/{remaining_multi}，按实际数量生成")
+
+    if not single_items and not multi_items:
+        print("目标样本已齐全，无需调用教师模型。")
+        return 0
 
     client = LLMClient(model=args.model, base_url=args.base_url, api_key=args.api_key,
                        max_workers=args.workers)
