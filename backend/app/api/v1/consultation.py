@@ -49,6 +49,7 @@ class ChatRequest(BaseModel):
 
 class SourceItem(BaseModel):
     """单个信息来源"""
+    citation_id: Optional[int] = Field(None, ge=1, description="与回答中 [来源N] 对应的编号")
     title: str = Field(..., description="来源标题")
     url: Optional[str] = Field(None, description="来源链接")
 
@@ -118,14 +119,12 @@ def _build_source_items(
     max_sources: int = 5
 ) -> List[SourceItem]:
     """从 RAG 检索结果构建结构化来源列表"""
-    seen_titles: set = set()
     items: List[SourceItem] = []
 
-    for r in rag_results:
-        title = r.get("source") or r.get("title")
-        if not title or title in seen_titles:
-            continue
-        seen_titles.add(title)
+    # 编号必须和 RAGTool.format_context 中的 [来源N] 保持一一对应。不要按标题
+    # 去重，否则重复来源会造成回答引用的编号在 sources payload 中缺失。
+    for citation_id, r in enumerate(rag_results, 1):
+        title = r.get("source") or r.get("title") or "未知来源"
 
         # 从 metadata 中提取 URL（如果有）
         url = None
@@ -133,11 +132,18 @@ def _build_source_items(
         if isinstance(metadata, dict):
             url = metadata.get("url") or metadata.get("link") or metadata.get("source_url")
 
-        items.append(SourceItem(title=title, url=url))
+        items.append(SourceItem(citation_id=citation_id, title=title, url=url))
         if len(items) >= max_sources:
             break
 
     return items
+
+
+def _append_disclaimer(answer: str) -> str:
+    """为非流式回答补齐一次且仅一次的统一免责声明。"""
+    if not answer or DISCLAIMER in answer:
+        return answer
+    return f"{answer.rstrip()}\n\n{DISCLAIMER}"
 
 
 def _update_consultation_messages(
@@ -241,7 +247,7 @@ async def chat(
 
         # 7. 添加免责声明
         if result.get("answer"):
-            result["answer"] += f"\n\n{DISCLAIMER}"
+            result["answer"] = _append_disclaimer(result["answer"])
 
         # 8. 构建结构化来源
         raw_sources = result.get("sources", [])
@@ -472,10 +478,11 @@ async def chat_stream(
             finally:
                 cancel_event.set()
 
-            # 添加免责声明
-            disclaimer = f"\n\n{DISCLAIMER}"
-            full_answer += disclaimer
-            yield f"data: {json.dumps({'content': disclaimer, 'type': 'message'})}\n\n"
+            # 模型已按契约输出时不重复追加；缺失时由 API 兜底。
+            if DISCLAIMER not in full_answer:
+                disclaimer = f"\n\n{DISCLAIMER}"
+                full_answer += disclaimer
+                yield f"data: {json.dumps({'content': disclaimer, 'type': 'message'})}\n\n"
 
             # 更新咨询记录（同步DB写入移入线程池，同一事务在同一线程内完成）
             if consultation:

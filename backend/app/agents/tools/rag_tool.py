@@ -82,7 +82,12 @@ class RAGTool:
         # 如果使用高级RAG，使用高级RAG的格式化方法
         if self.use_advanced and self.advanced_rag and results.get("intent"):
             try:
-                return self.advanced_rag.format_context(results)
+                # execute() 对外统一使用 results 键，而 AdvancedRAG.format_context()
+                # 使用 documents 键。显式转换以保留正文及 [来源N]，避免高级 RAG
+                # 路径只把查询意图送入模型、丢失全部检索证据。
+                advanced_result = dict(results)
+                advanced_result["documents"] = results.get("results", [])
+                return self.advanced_rag.format_context(advanced_result)
             except Exception as e:
                 app_logger.warning(f"高级RAG格式化失败，使用传统格式化: {e}")
         
