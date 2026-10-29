@@ -27,6 +27,7 @@ def main() -> int:
         *sorted((data_dir / "eval").glob("*.json")),
         *sorted((FINETUNE_DIR / "configs").glob("*.yaml")),
         FINETUNE_DIR / "configs" / "dataset_info.json",
+        FINETUNE_DIR / "requirements.txt",
         *sorted((FINETUNE_DIR / "data_gen").glob("*.py")),
         FINETUNE_DIR / "eval" / "run_eval.py",
     ]
