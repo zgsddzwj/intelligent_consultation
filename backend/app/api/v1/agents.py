@@ -10,16 +10,30 @@ from app.agents.operations_agent import OperationsAgent
 from app.common.exceptions import NotFoundException, ExternalServiceException, ErrorCode
 from app.utils.logger import app_logger
 from app.agents.base import get_all_agents_stats
+import threading
 
 router = APIRouter()
 
-# Agent实例（单例）
-agents = {
-    "doctor": DoctorAgent(),
-    "health_manager": HealthManagerAgent(),
-    "customer_service": CustomerServiceAgent(),
-    "operations": OperationsAgent()
+# Agent实例（懒加载单例）：导入即实例化4个Agent会连带构建整套RAG检索栈，
+# 显著拖慢应用启动与首次导入；改为首次访问时构建，双重检查锁保证并发安全
+_agents: dict = {}
+_AGENTS_LOCK = threading.Lock()
+
+_AGENT_FACTORIES = {
+    "doctor": DoctorAgent,
+    "health_manager": HealthManagerAgent,
+    "customer_service": CustomerServiceAgent,
+    "operations": OperationsAgent,
 }
+
+
+def _get_agents() -> dict:
+    if not _agents:
+        with _AGENTS_LOCK:
+            if not _agents:
+                for agent_id, factory in _AGENT_FACTORIES.items():
+                    _agents[agent_id] = factory()
+    return _agents
 
 
 # ========== 响应模型 ==========
@@ -69,13 +83,14 @@ class ApiResponse(BaseModel):
 
 def _get_agent_or_raise(agent_id: str):
     """获取Agent，不存在则抛出异常"""
-    if agent_id not in agents:
+    agents_map = _get_agents()
+    if agent_id not in agents_map:
         raise NotFoundException(
             message=f"Agent '{agent_id}' 不存在",
             error_code=ErrorCode.DATA_NOT_FOUND,
-            details={"available_agents": list(agents.keys())}
+            details={"available_agents": list(agents_map.keys())}
         )
-    return agents[agent_id]
+    return agents_map[agent_id]
 
 
 # ========== 路由 ==========
@@ -92,7 +107,7 @@ async def get_agents():
             tools=[tool.name for tool in agent.tools],
             tool_count=len(agent.tools)
         )
-        for agent_id, agent in agents.items()
+        for agent_id, agent in _get_agents().items()
     ]
     
     return {
