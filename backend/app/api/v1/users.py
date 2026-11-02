@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from typing import Optional
 from sqlalchemy.orm import Session
-from app.dependencies import get_db, get_user_repository
+from app.dependencies import get_db, get_user_repository, get_current_user
 from app.infrastructure.repositories.user_repository import UserRepository
 from app.models.user import User, UserRole
 from app.utils.security import get_password_hash, verify_password, create_access_token
@@ -205,11 +205,17 @@ async def login_user(
 @router.get("/{user_id}", response_model=UserResponse)
 def get_user(
     user_id: int,
+    current_user: dict = Depends(get_current_user),
     user_repo: UserRepository = Depends(get_user_repository)
 ):
-    """获取用户信息（同步端点，FastAPI 自动放入线程池，避免阻塞事件循环）"""
+    """获取用户信息（仅本人或管理员：邮箱等字段不对其他普通用户暴露，404防枚举）"""
+    if current_user["role"] != "admin" and current_user["user_id"] != user_id:
+        raise NotFoundException(
+            f"用户 {user_id} 不存在",
+            error_code=ErrorCode.DATA_NOT_FOUND
+        )
     user = user_repo.get_by_id_or_raise(user_id)
-    
+
     return UserResponse(
         id=user.id,
         username=user.username,
