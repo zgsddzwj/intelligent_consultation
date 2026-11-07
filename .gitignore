@@ -112,5 +112,9 @@ data/external/
 test_*.db
 *.db-journal
 
+# ML训练模型产物（大体积二进制，用脚本重新生成）
+backend/models/
+models/*.pkl
+
 # ZCode 会话工作目录
 .zcode/
