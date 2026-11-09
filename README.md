@@ -386,6 +386,7 @@ GitHub Actions 全流程自动化 (`.github/workflows/ci.yml`)：
 | [知识图谱指南](docs/KNOWLEDGE_GRAPH_GUIDE.md) | KG 操作与维护 |
 | [优化指南](docs/OPTIMIZATION_GUIDE.md) | 系统性能优化 |
 | [问题排查记录](docs/TROUBLESHOOTING.md) | 典型问题根因分析与解决方案 |
+| [更新日志](CHANGELOG.md) | 各版本变更记录 |
 | [日志指南](docs/LOGGING.md) | 日志查看与排查 |
 | [贡献指南](docs/CONTRIBUTING.md) | 参与项目贡献 |
 
