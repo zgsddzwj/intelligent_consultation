@@ -29,7 +29,6 @@ import {
   ApiOutlined,
 } from '@ant-design/icons'
 import ForceGraph2D from 'react-force-graph-2d'
-import type { ForceGraphMethods } from 'react-force-graph-2d'
 import { useQuery } from '@tanstack/react-query'
 import { ApiError } from '../services/api'
 import { knowledgeApi } from '../services/knowledge'
@@ -94,7 +93,6 @@ export default function KnowledgeGraph() {
   const [loading, setLoading] = useState(false)
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null)
   const [neo4jAvailable, setNeo4jAvailable] = useState(true)
-  const fgRef = useRef<ForceGraphMethods<GraphNode, GraphLink> | undefined>(undefined)
 
   // 获取科室列表
   const { data: departmentsData } = useQuery({
@@ -328,7 +326,6 @@ export default function KnowledgeGraph() {
           {/* 力导向图 */}
           {!loading && graphData.nodes.length > 0 && (
             <ForceGraph2D<GraphNode, GraphLink>
-              ref={fgRef}
               graphData={graphData}
               nodeLabel={(node) => `${node.label}`}
               nodeColor={(node) => getNodeColor(node)}
