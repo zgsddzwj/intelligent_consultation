@@ -264,11 +264,15 @@ class PerformanceMonitor:
             if name not in self.metrics:
                 self.metrics[name] = []
 
-            self.metrics[name].append({
+            metrics_list = self.metrics[name]
+            metrics_list.append({
                 "value": value,
                 "tags": tags or {},
                 "timestamp": time.time()
             })
+            # 容量上限：超限时淘汰最旧的一半，防止长期运行内存无界增长
+            if len(metrics_list) > 500:
+                del metrics_list[: len(metrics_list) - 500]
 
             # 检查阈值告警
             threshold = self.thresholds.get(name)
