@@ -307,9 +307,4 @@ def get_pagination_params(
     }
 
 
-# ========== 异步任务依赖 ==========
 
-async def get_async_task_status(task_id: str):
-    """获取异步任务状态（预留接口）"""
-    # TODO: 集成Celery或RQ
-    return {"task_id": task_id, "status": "pending"}
