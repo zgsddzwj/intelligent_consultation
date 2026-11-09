@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Form, Input, Button, Typography, message, Tabs } from 'antd'
 import {
@@ -10,7 +10,7 @@ import {
   TeamOutlined,
   ExperimentOutlined,
 } from '@ant-design/icons'
-import { authApi, saveAuthToken } from '../services/auth'
+import { authApi, saveAuthToken, isAuthenticated } from '../services/auth'
 import { ApiError } from '../services/api'
 
 const { Title, Text } = Typography
@@ -26,6 +26,13 @@ export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const from = (location.state as { from?: string } | null)?.from || '/'
+
+  // 已登录用户访问登录页时自动跳回目标页，避免重复登录
+  useEffect(() => {
+    if (isAuthenticated()) {
+      navigate(from, { replace: true })
+    }
+  }, [navigate, from])
   const [loading, setLoading] = useState(false)
   const [activeTab, setActiveTab] = useState('login')
 
