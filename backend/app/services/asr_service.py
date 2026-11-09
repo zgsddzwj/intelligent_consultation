@@ -89,7 +89,9 @@ class ASRService:
             if result and len(result) > 0:
                 text = rich_transcription_postprocess(result[0]["text"])
                 app_logger.info(f"ASR 识别结果: {text[:100]}...")
-                return {"text": text, "confidence": 0.95}
+                # 优先使用模型返回的真实置信度，缺失时回退默认值
+                confidence = float(result[0].get("confidence") or 0.95)
+                return {"text": text, "confidence": confidence}
             else:
                 return {"text": "", "confidence": 0.0, "error": "未识别到语音内容"}
 
