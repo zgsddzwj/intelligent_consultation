@@ -41,8 +41,6 @@ class MilvusService:
         self._batch_size = 1000  # 批处理大小
         self._executor = ThreadPoolExecutor(max_workers=4)
         self._lock = threading.RLock()
-        self._search_cache: Dict[str, Tuple[List[Dict], float]] = {}
-        self._cache_ttl = 60  # 缓存TTL（秒）
         self._connect_logged = False  # 是否已输出过连接失败日志（避免刷屏）
         self._last_fail_time = 0  # 上次连接失败时间戳
         self._fail_cache_ttl = 30  # 失败缓存30秒，期间不再重试
