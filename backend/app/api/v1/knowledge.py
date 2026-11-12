@@ -1,6 +1,5 @@
 """知识库API"""
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Response
-from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
@@ -14,7 +13,6 @@ import os
 import asyncio
 import tempfile
 from pathlib import Path
-from io import BytesIO
 
 # 知识库写入/删除/图谱变更仅限管理员与医生角色（防止匿名篡改医疗知识库）
 require_kg_editor = require_roles("admin", "doctor")
