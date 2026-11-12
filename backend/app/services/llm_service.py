@@ -6,10 +6,9 @@ from typing import List, Dict, Optional, Any, AsyncGenerator, Tuple
 import time
 import asyncio
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from app.config import get_settings
 from app.utils.logger import app_logger
-from app.infrastructure.retry import retry, get_circuit_breaker
+from app.infrastructure.retry import retry
 from app.common.exceptions import LLMServiceException, ErrorCode
 from app.services.langfuse_service import langfuse_service
 from app.infrastructure.monitoring import track_llm_request, track_llm_cache_hit
@@ -24,11 +23,7 @@ def _get_semantic_cache():
     return semantic_cache
 
 
-llm_circuit_breaker = get_circuit_breaker("llm_service", failure_threshold=5, recovery_timeout=60)
-
 DEFAULT_REQUEST_TIMEOUT = 30  # 单次请求超时；重试预算=外层retry(2)×client重试(1)×30s
-STREAM_CHUNK_TIMEOUT = 30
-
 
 def _estimate_tokens(text: str) -> int:
     """精确估算token数量"""
@@ -137,7 +132,6 @@ class LLMConnectionPool:
             return
         self._clients = {}
         self._pool_lock = threading.Lock()
-        self._executor = ThreadPoolExecutor(max_workers=10, thread_name_prefix="llm_pool")
         self._initialized = True
 
     def get_client(self, provider: str):
@@ -161,12 +155,6 @@ class LLMConnectionPool:
             )
         return None
 
-    def execute_async(self, func, *args, **kwargs):
-        """在线程池中异步执行"""
-        return self._executor.submit(func, *args, **kwargs)
-
-    def shutdown(self):
-        self._executor.shutdown(wait=True)
 
 
 class LLMService:
