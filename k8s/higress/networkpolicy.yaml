@@ -1,0 +1,57 @@
+# Higress NetworkPolicy
+# 限制只有 medical-consultation 命名空间和同一命名空间可以访问 Higress 网关
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: higress-network-policy
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # 允许同命名空间内通信
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: intelligent-consultation
+    # 允许 medical-consultation 命名空间访问 AI 网关
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: medical-consultation
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 443
+    # 允许 Prometheus 抓取指标
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: monitoring
+      ports:
+        - protocol: TCP
+          port: 15020
+  egress:
+    # 允许 DNS 解析
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # 允许访问外部 LLM Provider API (HTTPS)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+    # 允许同命名空间内通信
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: intelligent-consultation

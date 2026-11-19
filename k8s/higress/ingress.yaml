@@ -1,0 +1,64 @@
+# Higress 控制台 Ingress 配置
+# 用于从集群外部访问 Higress Console 管理界面
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: higress-console-ingress
+  namespace: higress-system
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/auth-type: basic
+    nginx.ingress.kubernetes.io/auth-secret: higress-console-auth
+    nginx.ingress.kubernetes.io/auth-realm: "Higress Console - Authentication Required"
+spec:
+  tls:
+    - hosts:
+        - higress.yourdomain.com
+      secretName: higress-tls
+  rules:
+    - host: higress.yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: higress-console
+                port:
+                  number: 8080
+---
+# AI 网关外部访问 Ingress
+# 允许外部客户端通过 HTTPS 访问 AI 网关接口
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: higress-ai-gateway-ingress
+  namespace: higress-system
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    # 限流保护
+    nginx.ingress.kubernetes.io/limit-connections: "100"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+spec:
+  tls:
+    - hosts:
+        - ai-gateway.yourdomain.com
+      secretName: higress-ai-gateway-tls
+  rules:
+    - host: ai-gateway.yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: higress-gateway
+                port:
+                  number: 80
