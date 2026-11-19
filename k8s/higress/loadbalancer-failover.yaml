@@ -1,0 +1,192 @@
+# Higress 多模型负载均衡与故障转移配置
+# 通过 Higress AI 代理实现多 LLM Provider 负载均衡和自动故障转移
+
+---
+# 负载均衡策略配置
+# 将请求按权重分发到多个 Provider，实现负载均衡
+apiVersion: networking.higress.io/v1
+kind: HigressConfig
+metadata:
+  name: ai-loadbalancer-config
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  wasmPlugins:
+    - name: ai-loadbalancer
+      enabled: true
+      match:
+        - ingress:
+            - higress-ai-chat-route
+      pluginConfig:
+        # 负载均衡策略
+        strategy: "weighted-round-robin"
+        # Provider 池配置
+        providers:
+          # 主力 Provider: SiliconFlow (权重 60%)
+          - name: "siliconflow"
+            weight: 60
+            domain: "api.siliconflow.cn"
+            port: 443
+            path: "/v1/chat/completions"
+            protocol: "https"
+            # 健康检查
+            health_check:
+              interval: "10s"
+              timeout: "5s"
+              unhealthy_threshold: 3
+              healthy_threshold: 2
+            # 熔断配置
+            circuit_breaker:
+              max_connections: 100
+              max_pending_requests: 50
+              max_requests: 80
+              max_retries: 3
+              # 连续错误触发熔断
+              consecutive_errors: 5
+              # 熔断恢复时间
+              trip_duration: "30s"
+
+          # 备用 Provider 1: DeepSeek (权重 25%)
+          # DeepSeek 性价比高，作为主力分担部分流量
+          - name: "deepseek"
+            weight: 25
+            domain: "api.deepseek.com"
+            port: 443
+            path: "/v1/chat/completions"
+            protocol: "https"
+            health_check:
+              interval: "10s"
+              timeout: "5s"
+              unhealthy_threshold: 3
+              healthy_threshold: 2
+            circuit_breaker:
+              max_connections: 50
+              max_pending_requests: 25
+              max_requests: 40
+              max_retries: 2
+              consecutive_errors: 5
+              trip_duration: "30s"
+
+          # 备用 Provider 2: OpenAI (权重 15%)
+          # OpenAI 作为高端备选，处理特殊需求
+          - name: "openai"
+            weight: 15
+            domain: "api.openai.com"
+            port: 443
+            path: "/v1/chat/completions"
+            protocol: "https"
+            health_check:
+              interval: "15s"
+              timeout: "5s"
+              unhealthy_threshold: 3
+              healthy_threshold: 2
+            circuit_breaker:
+              max_connections: 30
+              max_pending_requests: 15
+              max_requests: 25
+              max_retries: 2
+              consecutive_errors: 3
+              trip_duration: "60s"
+
+        # 故障转移配置
+        failover:
+          # 启用自动故障转移
+          enabled: true
+          # 触发故障转移的条件
+          triggers:
+            - "5xx"
+            - "connect-failure"
+            - "refused-stream"
+            - "reset"
+          # 故障转移时最多尝试的 Provider 数
+          max_attempts: 3
+          # 故障转移重试间隔
+          retry_interval: "1s"
+          # 故障转移时是否保持原始请求头
+          preserve_headers: true
+
+        # 降级策略
+        # 所有 Provider 都不可用时的兜底响应
+        fallback:
+          enabled: true
+          # 降级响应 HTTP 状态码
+          status_code: 503
+          # 降级响应体
+          body: |
+            {"error": {"message": "所有 AI 服务暂时不可用，请稍后重试", "type": "ai_gateway_all_providers_unavailable"}}
+
+---
+# 模型路由策略
+# 根据请求中的模型名称路由到不同的 Provider
+apiVersion: networking.higress.io/v1
+kind: HigressConfig
+metadata:
+  name: ai-model-routing-config
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  wasmPlugins:
+    - name: ai-model-router
+      enabled: true
+      match:
+        - ingress:
+            - higress-ai-chat-route
+      pluginConfig:
+        # 模型到 Provider 的路由映射
+        # 不同模型优先路由到对应 Provider
+        model_routing:
+          # DeepSeek 系列模型优先路由到 DeepSeek Provider
+          "deepseek-ai/DeepSeek-V3":
+            preferred_provider: "deepseek"
+            fallback_providers:
+              - "siliconflow"
+          "deepseek-ai/DeepSeek-R1":
+            preferred_provider: "deepseek"
+            fallback_providers:
+              - "siliconflow"
+
+          # Qwen 系列模型路由到 SiliconFlow
+          "Qwen/Qwen2.5-72B-Instruct":
+            preferred_provider: "siliconflow"
+            fallback_providers:
+              - "openai"
+          "Qwen/Qwen2.5-VL-72B-Instruct":
+            preferred_provider: "siliconflow"
+            fallback_providers:
+              - "openai"
+
+          # OpenAI 模型路由到 OpenAI Provider
+          "gpt-4":
+            preferred_provider: "openai"
+            fallback_providers:
+              - "siliconflow"
+          "gpt-4o":
+            preferred_provider: "openai"
+            fallback_providers:
+              - "siliconflow"
+          "gpt-3.5-turbo":
+            preferred_provider: "openai"
+            fallback_providers:
+              - "siliconflow"
+              - "deepseek"
+
+          # 默认模型路由
+          "*":
+            preferred_provider: "siliconflow"
+            fallback_providers:
+              - "deepseek"
+              - "openai"
+
+        # 模型别名映射（统一模型命名）
+        model_aliases:
+          # 用户传入简短名称 -> 实际模型全名
+          "deepseek-v3": "deepseek-ai/DeepSeek-V3"
+          "deepseek-r1": "deepseek-ai/DeepSeek-R1"
+          "qwen-72b": "Qwen/Qwen2.5-72B-Instruct"
+          "qwen-vl": "Qwen/Qwen2.5-VL-72B-Instruct"
+          "gpt4": "gpt-4"
+          "gpt4o": "gpt-4o"
