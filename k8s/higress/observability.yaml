@@ -1,0 +1,254 @@
+# Higress 可观测性配置
+# 包含日志、监控指标和链路追踪配置
+
+---
+# Higress 日志配置 ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: higress-observability-config
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+data:
+  # 日志级别: trace | debug | info | warning | error
+  log.level: "info"
+  # 日志格式: json | text
+  log.format: "json"
+  # 日志输出: stdout | file
+  log.output: "stdout"
+  # 访问日志路径
+  access.log.path: "/dev/stdout"
+  # 访问日志格式
+  access.log.format: |
+    {"start_time":"%START_TIME%","method":"%REQ(:METHOD)%","path":"%REQ(X-ENVOY-ORIGINAL-PATH?:PATH)%","protocol":"%PROTOCOL%","response_code":"%RESPONSE_CODE%","response_flags":"%RESPONSE_FLAGS%","bytes_received":"%BYTES_RECEIVED%","bytes_sent":"%BYTES_SENT%","duration":"%DURATION%","upstream_service":"%UPSTREAM_HOST%","upstream_cluster":"%UPSTREAM_CLUSTER%","upstream_latency":"%UPSTREAM_SERVICE_TIME%","request_id":"%REQ(X-REQUEST-ID)%","api_key":"%REQ(x-higress-api-key)%","model":"%REQ(x-ai-model)%","provider":"%REQ(x-ai-provider)%"}
+
+  # Prometheus 指标暴露
+  metrics.enabled: "true"
+  metrics.port: "15020"
+  metrics.path: "/stats/prometheus"
+
+  # 链路追踪配置
+  tracing.enabled: "true"
+  tracing.provider: "jaeger"
+  tracing.sampling_rate: "0.1"
+  tracing.service_name: "higress-gateway"
+
+  # AI 网关指标采集
+  ai.metrics.enabled: "true"
+  ai.metrics.include_models: "true"
+  ai.metrics.include_tokens: "true"
+  ai.metrics.include_latency: "true"
+  ai.metrics.include_errors: "true"
+
+---
+# Higress ServiceMonitor for Prometheus
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: higress-gateway-monitor
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress-gateway
+    app.kubernetes.io/part-of: intelligent-consultation
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: higress-gateway
+  endpoints:
+    - port: metrics
+      path: /stats/prometheus
+      interval: 15s
+      scrapeTimeout: 10s
+      honorLabels: true
+      metricRelabelings:
+        # 将 Higress 指标添加前缀
+        - sourceLabels: [__name__]
+          regex: 'envoy_.*'
+          targetLabel: __name__
+          replacement: 'higress_${1}'
+        - sourceLabels: [__name__]
+          regex: 'ai_.*'
+          targetLabel: __name__
+          replacement: 'higress_${1}'
+
+---
+# Higress Prometheus 告警规则
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: higress-alerts
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+    release: prometheus
+spec:
+  groups:
+    - name: higress-gateway
+      rules:
+        # 网关 5xx 错误率告警
+        - alert: HigressHighErrorRate
+          expr: |
+            sum(rate(higress_envoy_http_downstream_rq_xx{envoy_http_conn_manager_prefix="public_listener",envoy_response_code_class="5"}[5m]))
+            /
+            sum(rate(higress_envoy_http_downstream_rq_xx{envoy_http_conn_manager_prefix="public_listener"}[5m]))
+            > 0.05
+          for: 5m
+          labels:
+            severity: critical
+            service: higress-gateway
+          annotations:
+            summary: "Higress 网关 5xx 错误率过高"
+            description: "Higress 网关 5xx 错误率超过 5%，当前值: {{ $value | humanizePercentage }}"
+
+        # 网关延迟过高告警
+        - alert: HigressHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(higress_envoy_http_downstream_rq_time_bucket{envoy_http_conn_manager_prefix="public_listener"}[5m]))
+              by (le)
+            ) > 5
+          for: 5m
+          labels:
+            severity: warning
+            service: higress-gateway
+          annotations:
+            summary: "Higress 网关 P95 延迟过高"
+            description: "Higress 网关 P95 延迟超过 5 秒，当前值: {{ $value }}s"
+
+        # AI 请求被限流告警
+        - alert: HigressAIRequestRateLimited
+          expr: |
+            sum(rate(higress_ai_request_total{status="429"}[5m])) > 1
+          for: 2m
+          labels:
+            severity: warning
+            service: higress-ai-gateway
+          annotations:
+            summary: "AI 网关请求被频繁限流"
+            description: "AI 网关在过去 5 分钟内 429 限流请求超过 1 次/秒"
+
+        # 网关 Pod 不可用告警
+        - alert: HigressPodDown
+          expr: |
+            kube_deployment_status_replicas_available{deployment="higress-gateway"} < 2
+          for: 3m
+          labels:
+            severity: critical
+            service: higress-gateway
+          annotations:
+            summary: "Higress 网关可用 Pod 不足"
+            description: "Higress 网关可用 Pod 少于 2 个，可能影响高可用"
+
+        # AI Provider 上游错误告警
+        - alert: HigressAIProviderError
+          expr: |
+            sum(rate(higress_ai_provider_error_total[5m])) > 0.1
+          for: 3m
+          labels:
+            severity: warning
+            service: higress-ai-gateway
+          annotations:
+            summary: "AI Provider 上游错误率过高"
+            description: "AI Provider 上游错误率超过 0.1 次/秒，可能需要检查 Provider 状态"
+
+---
+# Higress Grafana Dashboard ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: higress-grafana-dashboard
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+    grafana_dashboard: "true"
+data:
+  higress-dashboard.json: |
+    {
+      "dashboard": {
+        "title": "Higress AI Gateway Dashboard",
+        "tags": ["higress", "ai-gateway"],
+        "timezone": "browser",
+        "panels": [
+          {
+            "title": "AI 请求 QPS",
+            "type": "graph",
+            "datasource": "Prometheus",
+            "targets": [
+              {
+                "expr": "sum(rate(higress_ai_request_total[1m]))",
+                "legendFormat": "Total QPS"
+              },
+              {
+                "expr": "sum(rate(higress_ai_request_total{status=\"200\"}[1m]))",
+                "legendFormat": "Success QPS"
+              },
+              {
+                "expr": "sum(rate(higress_ai_request_total{status=\"429\"}[1m]))",
+                "legendFormat": "Rate Limited QPS"
+              }
+            ]
+          },
+          {
+            "title": "AI 请求延迟（P50/P95/P99）",
+            "type": "graph",
+            "datasource": "Prometheus",
+            "targets": [
+              {
+                "expr": "histogram_quantile(0.50, sum(rate(higress_ai_request_duration_bucket[5m])) by (le))",
+                "legendFormat": "P50"
+              },
+              {
+                "expr": "histogram_quantile(0.95, sum(rate(higress_ai_request_duration_bucket[5m])) by (le))",
+                "legendFormat": "P95"
+              },
+              {
+                "expr": "histogram_quantile(0.99, sum(rate(higress_ai_request_duration_bucket[5m])) by (le))",
+                "legendFormat": "P99"
+              }
+            ]
+          },
+          {
+            "title": "Token 使用量",
+            "type": "graph",
+            "datasource": "Prometheus",
+            "targets": [
+              {
+                "expr": "sum(rate(higress_ai_tokens_total{type=\"input\"}[5m]))",
+                "legendFormat": "Input Tokens/s"
+              },
+              {
+                "expr": "sum(rate(higress_ai_tokens_total{type=\"output\"}[5m]))",
+                "legendFormat": "Output Tokens/s"
+              }
+            ]
+          },
+          {
+            "title": "Provider 分布",
+            "type": "piechart",
+            "datasource": "Prometheus",
+            "targets": [
+              {
+                "expr": "sum by (provider) (higress_ai_request_total)",
+                "legendFormat": "{{provider}}"
+              }
+            ]
+          },
+          {
+            "title": "模型使用分布",
+            "type": "bargauge",
+            "datasource": "Prometheus",
+            "targets": [
+              {
+                "expr": "sum by (model) (higress_ai_request_total)",
+                "legendFormat": "{{model}}"
+              }
+            ]
+          }
+        ]
+      }
+    }
