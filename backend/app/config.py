@@ -55,6 +55,21 @@ class Settings(BaseSettings):
     SILICONFLOW_MODEL: str = "deepseek-ai/DeepSeek-V3"  # 默认对话模型
     SILICONFLOW_EMBEDDING_MODEL: str = "BAAI/bge-large-zh-v1.5"  # 默认嵌入模型
     SILICONFLOW_VISION_MODEL: str = "Qwen/Qwen2.5-VL-72B-Instruct"  # 默认多模态视觉模型
+
+    # Higress AI 网关配置
+    # 启用后，所有 LLM 请求通过 Higress 网关转发，实现统一管理、认证、限流、监控
+    HIGRESS_ENABLED: bool = False  # 默认关闭，开启后 LLM 请求走 Higress 网关
+    HIGRESS_GATEWAY_URL: str = "http://localhost:8080"  # Higress 网关地址
+    HIGRESS_API_KEY: str = ""  # Higress 网关认证 Key（x-higress-api-key 请求头）
+    # Higress AI 路由路径
+    HIGRESS_CHAT_PATH: str = "/ai/chat/completions"  # 对话接口路径
+    HIGRESS_EMBEDDING_PATH: str = "/ai/embeddings"  # 嵌入接口路径
+    HIGRESS_VISION_PATH: str = "/ai/vision/chat/completions"  # 视觉模型接口路径
+    # Higress 网关超时与重试
+    HIGRESS_TIMEOUT: int = 60  # 网关请求超时（秒）
+    HIGRESS_MAX_RETRIES: int = 2  # 网关请求重试次数
+    # Higress 健康检查
+    HIGRESS_HEALTH_CHECK_INTERVAL: int = 30  # 健康检查间隔（秒）
     
     # Security
     SECRET_KEY: str = ""  # JWT密钥，从.env读取；生产环境必须配置，否则自动生成（每次重启后旧token失效）

@@ -1,6 +1,9 @@
 """LLM服务 - 极致优化版（连接池、批量推理、智能降级、Token精确计费）
 
 统一使用硅基流动（SiliconFlow）作为唯一 LLM Provider，兼容 OpenAI API 格式。
+
+支持通过 Higress AI 网关转发请求（HIGRESS_ENABLED=True 时启用），
+实现统一认证、限流、多模型路由和可观测性。
 """
 from typing import List, Dict, Optional, Any, AsyncGenerator, Tuple
 import time
@@ -13,6 +16,7 @@ from app.common.exceptions import LLMServiceException, ErrorCode
 from app.services.langfuse_service import langfuse_service
 from app.infrastructure.monitoring import track_llm_request, track_llm_cache_hit
 from app.prompts import ConsultationPrompts, AgentPrompts
+from app.services.higress_client import higress_client
 
 settings = get_settings()
 
@@ -147,6 +151,21 @@ class LLMConnectionPool:
     def _create_client(self, provider: str):
         if provider == "siliconflow":
             from openai import OpenAI
+            # Higress 网关模式：通过网关转发请求
+            if higress_client.enabled:
+                gateway_config = higress_client.get_openai_client_config("chat")
+                if gateway_config:
+                    app_logger.info(
+                        f"LLM 连接池使用 Higress 网关: base_url={gateway_config.get('base_url')}"
+                    )
+                    return OpenAI(
+                        api_key=settings.SILICONFLOW_API_KEY,  # 网关透传 Provider Key
+                        base_url=gateway_config["base_url"],
+                        timeout=gateway_config.get("timeout", DEFAULT_REQUEST_TIMEOUT),
+                        max_retries=gateway_config.get("max_retries", 1),
+                        default_headers=gateway_config.get("default_headers"),
+                    )
+            # 直连模式
             return OpenAI(
                 api_key=settings.SILICONFLOW_API_KEY,
                 base_url=settings.SILICONFLOW_BASE_URL,
