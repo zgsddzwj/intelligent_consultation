@@ -275,6 +275,15 @@ async def lifespan(app: FastAPI):
 
     _metrics_task = asyncio.create_task(_system_metrics_loop())
 
+    # 5.5 启动 Higress 网关健康检查（如果启用）
+    if settings.HIGRESS_ENABLED:
+        try:
+            from app.services.higress_health_checker import higress_health_checker
+            higress_health_checker.start_background_check()
+            app_logger.info("✓ Higress 网关健康检查已启动")
+        except Exception as e:
+            app_logger.warning(f"⚠ Higress 健康检查启动失败: {e}")
+
     # 6. 标记就绪（开发环境允许降级启动）
     _startup_state["ready"] = all_required_healthy or settings.ENVIRONMENT != "production"
     startup_duration = time.time() - _startup_state["start_time"]
@@ -284,6 +293,15 @@ async def lifespan(app: FastAPI):
 
     # ===== 关闭阶段 =====
     app_logger.info(f"🛑 {settings.APP_NAME} 正在优雅关闭...")
+
+    # 停止 Higress 健康检查
+    if settings.HIGRESS_ENABLED:
+        try:
+            from app.services.higress_health_checker import higress_health_checker
+            higress_health_checker.stop_background_check()
+        except Exception:
+            pass
+
     if _metrics_task:
         _metrics_task.cancel()
         try:
