@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: higress-system
+  labels:
+    name: higress-system
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation

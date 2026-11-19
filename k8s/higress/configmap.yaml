@@ -1,0 +1,37 @@
+# Higress AI Gateway 配置
+# 这个 ConfigMap 包含 Higress 网关的核心配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: higress-config
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+data:
+  # Higress 网关监听端口
+  gateway.port: "80"
+  gateway.https.port: "443"
+  gateway.admin.port: "15010"
+
+  # Higress 网关配置文件路径
+  higress.config.path: "/etc/higress/config"
+
+  # 日志级别: trace | debug | info | warning | error
+  higress.log.level: "info"
+
+  # 是否启用 Higress 控制台
+  higress.console.enabled: "true"
+  higress.console.port: "8080"
+
+  # 是否启用 Higress 控制台域名
+  higress.console.domain: "higress-console.local"
+
+  # AI 网关功能开关
+  higress.ai.enabled: "true"
+
+  # 默认超时（秒）
+  higress.timeout: "60"
+
+  # 默认重试次数
+  higress.retries: "2"

@@ -1,0 +1,204 @@
+# Higress 网关部署清单
+# 基于 Higress 官方 Helm Chart 简化的 Kubernetes 部署配置
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: higress-gateway
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress-gateway
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: higress-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: higress-gateway
+    spec:
+      serviceAccountName: higress-controller
+      containers:
+        - name: higress-gateway
+          image: higress-registry.cn-hangzhou.cr.aliyuncs.com/higress/gateway:1.4.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+            - name: https
+              containerPort: 443
+              protocol: TCP
+            - name: admin
+              containerPort: 15010
+              protocol: TCP
+          env:
+            - name: HIGRESS_LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: higress-config
+                  key: higress.log.level
+            - name: AI_GATEWAY_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: higress-config
+                  key: higress.ai.enabled
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: admin
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: admin
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: higress-config
+              mountPath: /etc/higress/config
+              readOnly: true
+      volumes:
+        - name: higress-config
+          configMap:
+            name: higress-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: higress-gateway
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress-gateway
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: higress-gateway
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80
+      protocol: TCP
+    - name: https
+      port: 443
+      targetPort: 443
+      protocol: TCP
+    - name: admin
+      port: 15010
+      targetPort: 15010
+      protocol: TCP
+---
+# Higress 控制台 Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: higress-console
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress-console
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: higress-console
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: higress-console
+    spec:
+      containers:
+        - name: higress-console
+          image: higress-registry.cn-hangzhou.cr.aliyuncs.com/higress/console:1.4.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: console
+              containerPort: 8080
+              protocol: TCP
+          env:
+            - name: HIGRESS_CONTROLLER_ADDR
+              value: "higress-gateway.higress-system.svc.cluster.local:15010"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: console
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: console
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: higress-console
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress-console
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: higress-console
+  ports:
+    - name: console
+      port: 8080
+      targetPort: 8080
+      protocol: TCP
+---
+# Higress Controller RBAC
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: higress-controller
+  namespace: higress-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: higress-controller
+rules:
+  - apiGroups: [""]
+    resources: ["services", "endpoints", "secrets", "configmaps"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "ingressclasses"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["higress.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: higress-controller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: higress-controller
+subjects:
+  - kind: ServiceAccount
+    name: higress-controller
+    namespace: higress-system

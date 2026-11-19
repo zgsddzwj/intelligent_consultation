@@ -1,0 +1,44 @@
+# Higress 网关 HPA 配置
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: higress-gateway-hpa
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress-gateway
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: higress-gateway
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+---
+# Pod Disruption Budget - 保证 Higress 网关高可用
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: higress-gateway-pdb
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress-gateway
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: higress-gateway
