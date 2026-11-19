@@ -1,4 +1,7 @@
-"""图片分析API - 增强版（多模态诊断、结构化报告、图像分类）"""
+"""图片分析API - 增强版（多模态诊断、结构化报告、图像分类）
+
+支持通过 Higress AI 网关转发视觉模型请求，实现统一路由、认证和限流。
+"""
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
@@ -8,6 +11,7 @@ from app.config import get_settings
 from app.infrastructure.retry import retry
 from app.common.exceptions import LLMServiceException, ErrorCode
 from app.prompts import ImagePrompts, KnowledgePrompts
+from app.services.higress_client import higress_client
 import asyncio
 import base64
 import json
@@ -25,12 +29,31 @@ _vision_client_lock = threading.Lock()
 
 
 def _get_vision_client():
-    """获取硅基流动视觉模型客户端（线程安全懒加载单例）"""
+    """获取硅基流动视觉模型客户端（线程安全懒加载单例）
+    
+    当 Higress AI 网关启用时，通过网关转发视觉模型请求。
+    """
     global _vision_client
     if _vision_client is None:
         with _vision_client_lock:
             if _vision_client is None:
                 from openai import OpenAI
+                # Higress 网关模式：视觉模型请求走网关
+                if higress_client.enabled:
+                    gateway_config = higress_client.get_openai_client_config("vision")
+                    if gateway_config:
+                        app_logger.info(
+                            f"视觉模型客户端使用 Higress 网关: base_url={gateway_config.get('base_url')}"
+                        )
+                        _vision_client = OpenAI(
+                            api_key=settings.SILICONFLOW_API_KEY,
+                            base_url=gateway_config["base_url"],
+                            timeout=gateway_config.get("timeout", 30),
+                            max_retries=gateway_config.get("max_retries", 2),
+                            default_headers=gateway_config.get("default_headers"),
+                        )
+                        return _vision_client
+                # 直连模式
                 _vision_client = OpenAI(
                     api_key=settings.SILICONFLOW_API_KEY,
                     base_url=settings.SILICONFLOW_BASE_URL,
