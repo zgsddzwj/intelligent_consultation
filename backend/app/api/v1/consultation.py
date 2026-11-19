@@ -1,4 +1,7 @@
-"""咨询API - 增强版（统一响应格式、增强校验、分页支持、OpenAPI优化）"""
+"""咨询API - 增强版（统一响应格式、增强校验、分页支持、OpenAPI优化）
+
+支持通过 Higress AI 网关转发 LLM 请求，实现统一路由、认证和限流。
+"""
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -23,6 +26,7 @@ from app.utils.logger import app_logger
 from app.utils.validators import validate_consultation_input, detect_high_risk_content, sanitize_user_input
 from app.utils.security import DISCLAIMER
 from app.services.llm_service import llm_service
+from app.services.higress_client import higress_client
 from app.prompts import ConsultationPrompts
 from app.config import get_settings
 from app.common.exceptions import (
@@ -35,6 +39,21 @@ from app.common.exceptions import (
 
 settings = get_settings()
 router = APIRouter()
+
+
+# ========== Higress 网关状态接口 ==========
+
+@router.get("/gateway-status", summary="获取 LLM 网关状态", description="返回 Higress AI 网关的连接和健康状态")
+async def get_gateway_status():
+    """获取 LLM 网关状态信息"""
+    return {
+        "higress_enabled": higress_client.enabled,
+        "gateway_url": higress_client.gateway_url,
+        "is_healthy": higress_client.is_healthy,
+        "chat_endpoint": higress_client.chat_url,
+        "embedding_endpoint": higress_client.embedding_url,
+        "vision_endpoint": higress_client.vision_url,
+    }
 
 
 # ========== 请求/响应模型 ==========
@@ -412,6 +431,10 @@ async def chat_stream(
                 app_logger.warning(f"RAG检索失败: {e}")
 
             # === Thinking: 生成回答 ===
+            # 如果启用了 Higress 网关，在思考过程中展示路由信息
+            if higress_client.enabled:
+                gateway_msg = f"通过 Higress AI 网关路由请求..."
+                yield f"data: {json.dumps({'type': 'thinking', 'content': gateway_msg})}\n\n"
             thinking_msg = "正在生成回答..." if rag_context else "基于医学知识生成回答..."
             yield f"data: {json.dumps({'type': 'thinking', 'content': thinking_msg})}\n\n"
 
@@ -425,6 +448,7 @@ async def chat_stream(
             # 流式生成（stream_generate 是同步 generator，用线程消费）
             # cancel_event：生成器被关闭（客户端断开/超时终止）时通知生产线程尽快退出，
             # 不再继续消费完整LLM输出白烧token（旧实现断开后线程照常跑完全程）
+            # 当 Higress 网关启用时，llm_service 内部已自动走网关路由
             cancel_event = threading.Event()
             try:
                 chunk_queue: queue.Queue = queue.Queue()
