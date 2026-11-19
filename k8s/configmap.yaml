@@ -49,6 +49,16 @@ data:
   # LLM配置（硅基流动 SiliconFlow，统一 Provider）
   SILICONFLOW_MODEL: "deepseek-ai/DeepSeek-V3"
   SILICONFLOW_EMBEDDING_MODEL: "BAAI/bge-large-zh-v1.5"
+
+  # Higress AI 网关配置
+  HIGRESS_ENABLED: "true"
+  HIGRESS_GATEWAY_URL: "http://higress-gateway.higress-system.svc.cluster.local:80"
+  HIGRESS_CHAT_PATH: "/ai/chat/completions"
+  HIGRESS_EMBEDDING_PATH: "/ai/embeddings"
+  HIGRESS_VISION_PATH: "/ai/vision/chat/completions"
+  HIGRESS_TIMEOUT: "60"
+  HIGRESS_MAX_RETRIES: "2"
+  HIGRESS_HEALTH_CHECK_INTERVAL: "30"
   
   # 高级RAG配置
   ENABLE_ADVANCED_RAG: "true"
