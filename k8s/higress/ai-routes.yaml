@@ -1,0 +1,189 @@
+# Higress AI Gateway 路由规则配置
+# 定义 LLM Provider 服务声明和路由规则
+# 使用 Higress AI 代理能力统一管理多个 LLM Provider
+
+---
+# SiliconFlow (硅基流动) 服务声明
+# 作为主要 LLM Provider，提供 Chat / Embedding / Vision 能力
+apiVersion: networking.higress.io/v1
+kind: McpBridge
+metadata:
+  name: siliconflow-provider
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+    higress.io/provider: siliconflow
+spec:
+  registry:
+    type: static
+    domain: api.siliconflow.cn
+    services:
+      - name: siliconflow-chat
+        port: 443
+        path: /v1/chat/completions
+      - name: siliconflow-embeddings
+        port: 443
+        path: /v1/embeddings
+  auth:
+    type: api-key
+    api_key_header: "Authorization"
+    api_key_from_secret:
+      name: higress-ai-secrets
+      key: SILICONFLOW_API_KEY
+    api_key_prefix: "Bearer "
+
+---
+# OpenAI 兼容服务声明（备用 Provider）
+apiVersion: networking.higress.io/v1
+kind: McpBridge
+metadata:
+  name: openai-provider
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+    higress.io/provider: openai
+spec:
+  registry:
+    type: static
+    domain: api.openai.com
+    services:
+      - name: openai-chat
+        port: 443
+        path: /v1/chat/completions
+      - name: openai-embeddings
+        port: 443
+        path: /v1/embeddings
+  auth:
+    type: api-key
+    api_key_header: "Authorization"
+    api_key_from_secret:
+      name: higress-ai-secrets
+      key: OPENAI_API_KEY
+    api_key_prefix: "Bearer "
+
+---
+# DeepSeek 服务声明（备用 Provider，高性价比推理）
+apiVersion: networking.higress.io/v1
+kind: McpBridge
+metadata:
+  name: deepseek-provider
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+    higress.io/provider: deepseek
+spec:
+  registry:
+    type: static
+    domain: api.deepseek.com
+    services:
+      - name: deepseek-chat
+        port: 443
+        path: /v1/chat/completions
+  auth:
+    type: api-key
+    api_key_header: "Authorization"
+    api_key_from_secret:
+      name: higress-ai-secrets
+      key: DEEPSEEK_API_KEY
+    api_key_prefix: "Bearer "
+
+---
+# AI 对话路由 - /ai/chat/completions
+# 统一入口，后端通过此路径调用 LLM 对话接口
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: higress-ai-chat-route
+  namespace: higress-system
+  annotations:
+    higress.io/resource-type: "ai-gateway"
+    higress.io/ai-provider: "siliconflow"
+    higress.io/ai-model-mapping: |
+      {
+        "deepseek-ai/DeepSeek-V3": "deepseek-ai/DeepSeek-V3",
+        "deepseek-ai/DeepSeek-R1": "deepseek-ai/DeepSeek-R1",
+        "Qwen/Qwen2.5-72B-Instruct": "Qwen/Qwen2.5-72B-Instruct",
+        "*": "deepseek-ai/DeepSeek-V3"
+      }
+    higress.io/timeout: "60s"
+    higress.io/retries: "2"
+    higress.io/retry-on: "5xx,connect-failure,refused-stream"
+spec:
+  ingressClassName: higress
+  rules:
+    - http:
+        paths:
+          - path: /ai/chat/completions
+            pathType: Prefix
+            backend:
+              service:
+                name: siliconflow-chat
+                port:
+                  number: 443
+
+---
+# AI Embedding 路由 - /ai/embeddings
+# 统一入口，后端通过此路径调用向量嵌入接口
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: higress-ai-embedding-route
+  namespace: higress-system
+  annotations:
+    higress.io/resource-type: "ai-gateway"
+    higress.io/ai-provider: "siliconflow"
+    higress.io/ai-model-mapping: |
+      {
+        "BAAI/bge-large-zh-v1.5": "BAAI/bge-large-zh-v1.5",
+        "BAAI/bge-m3": "BAAI/bge-m3",
+        "*": "BAAI/bge-large-zh-v1.5"
+      }
+    higress.io/timeout: "30s"
+    higress.io/retries: "2"
+spec:
+  ingressClassName: higress
+  rules:
+    - http:
+        paths:
+          - path: /ai/embeddings
+            pathType: Prefix
+            backend:
+              service:
+                name: siliconflow-embeddings
+                port:
+                  number: 443
+
+---
+# AI 视觉模型路由 - /ai/vision/chat/completions
+# 多模态视觉模型统一入口（支持图片理解、诊断报告生成等）
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: higress-ai-vision-route
+  namespace: higress-system
+  annotations:
+    higress.io/resource-type: "ai-gateway"
+    higress.io/ai-provider: "siliconflow"
+    higress.io/ai-model-mapping: |
+      {
+        "Qwen/Qwen2.5-VL-72B-Instruct": "Qwen/Qwen2.5-VL-72B-Instruct",
+        "*": "Qwen/Qwen2.5-VL-72B-Instruct"
+      }
+    higress.io/timeout: "60s"
+    higress.io/retries: "2"
+    higress.io/retry-on: "5xx,connect-failure,refused-stream"
+spec:
+  ingressClassName: higress
+  rules:
+    - http:
+        paths:
+          - path: /ai/vision/chat/completions
+            pathType: Prefix
+            backend:
+              service:
+                name: siliconflow-chat
+                port:
+                  number: 443
