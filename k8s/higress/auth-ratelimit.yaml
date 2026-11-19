@@ -1,0 +1,151 @@
+# Higress 认证与限流策略配置
+# 使用 Higress 的 Wasm 插件实现 API Key 认证和请求限流
+
+---
+# AI 网关 API Key 认证策略
+# 后端调用 Higress AI 网关时需携带 x-higress-api-key 头
+apiVersion: networking.higress.io/v1
+kind: HigressConfig
+metadata:
+  name: ai-auth-config
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  # Wasm 插件配置 - 请求认证
+  wasmPlugins:
+    - name: ai-auth
+      enabled: true
+      # 匹配所有 /ai/ 前缀的请求
+      match:
+        - ingress:
+            - higress-ai-chat-route
+            - higress-ai-embedding-route
+            - higress-ai-vision-route
+      pluginConfig:
+        # 认证类型: api-key
+        auth_type: "api-key"
+        # API Key 从请求头 x-higress-api-key 获取
+        api_key_header: "x-higress-api-key"
+        # 合法的 API Key 列表（生产环境从 Secret 注入）
+        # 开发环境使用固定 key，生产环境通过环境变量覆盖
+        api_keys:
+          - "medical-ai-gateway-dev-key-2026"
+        # 排除的健康检查路径不需要认证
+        exclude_paths:
+          - "/ai/health"
+          - "/ai/ready"
+
+---
+# AI 对话接口限流策略
+# 防止单一来源过度调用 LLM，保护上游 Provider 不被限流
+apiVersion: networking.higress.io/v1
+kind: HigressConfig
+metadata:
+  name: ai-chat-ratelimit-config
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  wasmPlugins:
+    - name: ai-ratelimit
+      enabled: true
+      match:
+        - ingress:
+            - higress-ai-chat-route
+      pluginConfig:
+        # 限流维度: 按 API Key 限流
+        limit_by: "api-key"
+        # 请求头名称
+        api_key_header: "x-higress-api-key"
+        # 限流规则
+        rules:
+          # 普通用户: 60 次/分钟
+          - name: "default-tier"
+            match:
+              api_key: "*"
+            limit:
+              count: 60
+              time_window: "1m"
+          # 高级用户（通过 header 标识）: 200 次/分钟
+          - name: "premium-tier"
+            match:
+              header: "x-tier"
+              value: "premium"
+            limit:
+              count: 200
+              time_window: "1m"
+        # 超出限流返回 429
+        rejected_code: 429
+        rejected_msg: "AI 接口请求频率超限，请稍后重试"
+
+---
+# AI Embedding 接口限流策略
+# Embedding 请求通常批量调用，限流更加宽松
+apiVersion: networking.higress.io/v1
+kind: HigressConfig
+metadata:
+  name: ai-embedding-ratelimit-config
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  wasmPlugins:
+    - name: ai-embedding-ratelimit
+      enabled: true
+      match:
+        - ingress:
+            - higress-ai-embedding-route
+      pluginConfig:
+        limit_by: "api-key"
+        api_key_header: "x-higress-api-key"
+        rules:
+          - name: "default-tier"
+            match:
+              api_key: "*"
+            limit:
+              count: 120
+              time_window: "1m"
+        rejected_code: 429
+        rejected_msg: "Embedding 接口请求频率超限，请稍后重试"
+
+---
+# AI 视觉模型限流策略
+# 视觉模型计算成本高，限流更加严格
+apiVersion: networking.higress.io/v1
+kind: HigressConfig
+metadata:
+  name: ai-vision-ratelimit-config
+  namespace: higress-system
+  labels:
+    app.kubernetes.io/name: higress
+    app.kubernetes.io/part-of: intelligent-consultation
+spec:
+  wasmPlugins:
+    - name: ai-vision-ratelimit
+      enabled: true
+      match:
+        - ingress:
+            - higress-ai-vision-route
+      pluginConfig:
+        limit_by: "api-key"
+        api_key_header: "x-higress-api-key"
+        rules:
+          - name: "default-tier"
+            match:
+              api_key: "*"
+            limit:
+              count: 30
+              time_window: "1m"
+          - name: "premium-tier"
+            match:
+              header: "x-tier"
+              value: "premium"
+            limit:
+              count: 100
+              time_window: "1m"
+        rejected_code: 429
+        rejected_msg: "视觉模型接口请求频率超限，请稍后重试"
