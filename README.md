@@ -157,7 +157,7 @@ graph TB
 | 类别 | 技术 |
 |------|------|
 | **核心框架** | Python 3.11+, FastAPI, Uvicorn |
-| **AI/LLM** | LangChain, LangGraph, 硅基流动 SiliconFlow (Chat/Embedding/Vision 统一接入) |
+| **AI/LLM** | LangChain, LangGraph, 硅基流动 SiliconFlow (Chat/Embedding/Vision 统一接入), Higress AI 网关 (多 Provider 路由/负载均衡/故障转移) |
 | **RAG & 搜索** | Milvus (向量库), BM25, FlagEmbedding (Reranker), Jieba 分词 |
 | **知识图谱** | Neo4j (含 APOC 插件) |
 | **数据存储** | PostgreSQL 15 (业务), Redis 7 (缓存), MinIO (对象存储) |
@@ -191,6 +191,7 @@ graph TB
 |------|------|
 | **容器化** | Docker + Docker Compose |
 | **编排** | Kubernetes (完整 K8s 配置) |
+| **AI 网关** | Higress (多 LLM Provider 路由/认证/限流/可观测性) |
 | **CI/CD** | GitHub Actions (代码质量/测试/性能/构建/发布全流程) |
 | **镜像仓库** | GHCR (GitHub Container Registry) |
 | **安全扫描** | Trivy 漏洞扫描 |
@@ -312,7 +313,10 @@ intelligent_consultation/
 ├── data/                             # 数据目录 (种子/外部/示例数据)
 ├── docs/                             # 详细文档 (架构/指南/规范)
 ├── k8s/                              # Kubernetes 部署配置
+│   └── higress/                      #   Higress AI 网关配置
 ├── scripts/                          # 启动/运维 Shell 脚本
+│   ├── deploy_higress.sh             #   Higress 部署脚本
+│   └── undeploy_higress.sh           #   Higress 卸载脚本
 ├── .github/workflows/                # CI/CD 工作流
 ├── docker-compose.yml                # Docker Compose 编排
 └── README.md                         # 项目说明
@@ -385,6 +389,7 @@ GitHub Actions 全流程自动化 (`.github/workflows/ci.yml`)：
 | [RAG 使用指南](docs/RAG_GUIDE.md) | RAG 系统使用指南 |
 | [知识图谱指南](docs/KNOWLEDGE_GRAPH_GUIDE.md) | KG 操作与维护 |
 | [优化指南](docs/OPTIMIZATION_GUIDE.md) | 系统性能优化 |
+| [Higress 集成指南](docs/HIGRESS_GUIDE.md) | Higress AI 网关配置与使用 |
 | [问题排查记录](docs/TROUBLESHOOTING.md) | 典型问题根因分析与解决方案 |
 | [更新日志](CHANGELOG.md) | 各版本变更记录 |
 | [日志指南](docs/LOGGING.md) | 日志查看与排查 |
@@ -426,6 +431,7 @@ git push origin feat/your-feature
 - [x] 多模态诊断能力增强（图像分类 + 结构化报告 + KG 关联）
 - [x] Kubernetes 资源配置完善（NetworkPolicy + ServiceMonitor + HPA/PDB + ResourceQuota + PriorityClass）
 - [x] 生产就绪加固：认证强制开启、越权访问修复、事件循环去阻塞、测试套件全绿
+- [x] Higress AI 网关集成：多 LLM Provider 统一路由、负载均衡、故障转移、认证限流、可观测性
 - [x] 2026-10 专项优化 6 项：工具重试机制失效修复、移除咨询尾部无效 LLM 调用（token 成本减半）、限流中间件移入线程池并抵御伪造 IP、admin 端点移出事件循环、嵌入客户端连接池复用、导出报告防 OOM
 
 ### 📋 规划中
